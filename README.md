@@ -87,7 +87,7 @@ Remote deployment must use `wss://` with platform certificate validation. The ad
 
 ### Local development exception
 
-For Simulator/emulator work only, the adapter can run on `127.0.0.1` without TLS, and the app accepts a loopback `ws://` address (the Connect screen shows the exact scheme and host before pairing). Android release builds keep cleartext disabled; `adb reverse tcp:7643 tcp:7643` plus a loopback URL is the supported local path.
+For Simulator/emulator work only, the adapter can run on `127.0.0.1` without TLS, and the app accepts a loopback `ws://` address (the Connect screen shows the exact scheme and host before pairing). Android release builds allow cleartext only for `127.0.0.1`/`localhost` via `plugins/withLocalCleartext.js`; `adb reverse tcp:7643 tcp:7643` is the supported local path. Remote hosts still require `wss://`.
 
 ## Development staging (real JCode, isolated)
 
@@ -116,7 +116,17 @@ bash scripts/build-ios-simulator.sh
 - `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip`
 - `.sha256` files next to each artifact
 
-Install commands and exact checksums are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md). Artifacts and native build caches are ignored by Git; attach them to a private draft release if needed.
+```sh
+# Android emulator or device (release build, debug-signed for local install)
+adb install -r artifacts/jcode-mobile-0.1.0-android-release.apk
+
+# iOS Simulator (Release configuration)
+unzip -o artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip -d /tmp/jcode-ios
+xcrun simctl install booted /tmp/jcode-ios/JCodeMobile.app
+xcrun simctl launch booted com.jcodemobile.app
+```
+
+Exact checksums are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md); scenario results are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md). Artifacts and native build caches are ignored by Git and attached to the private draft release.
 
 ## Behavior you can rely on
 
@@ -141,6 +151,7 @@ Install commands and exact checksums are in [`docs/VERIFICATION.md`](docs/VERIFI
 
 ```sh
 npm test          # 33 pure + RNTL tests
+node --test integration/jcode-adapter/test/attach-contract.test.ts  # 2 contract tests
 npm run check     # typecheck + lint + tests
 ```
 
