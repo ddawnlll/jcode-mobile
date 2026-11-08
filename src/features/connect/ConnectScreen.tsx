@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,7 +25,10 @@ export function ConnectScreen() {
   const [label, setLabel] = useState('');
   const [name, setName] = useState(deviceName || 'JCode Mobile');
   const [error, setError] = useState<string | null>(null);
+  const [pairError, setPairError] = useState<{ message: string; code?: string; detail?: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const pulse = useRef(new Animated.Value(0)).current;
   const [scanning, setScanning] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -36,6 +39,38 @@ export function ConnectScreen() {
   const dismissKeyboard = () => Keyboard.dismiss();
 
   const parsed = address.trim() ? parseServerAddress(address) : null;
+
+  useEffect(() => {
+    if (!busy) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [busy, pulse]);
+
+  useEffect(() => {
+    if (!busy) return;
+    setElapsed(0);
+    const timer = setInterval(() => setElapsed((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => {
     const handle = (url: string) => {
@@ -90,14 +125,50 @@ export function ConnectScreen() {
 
   const pair = async () => {
     setError(null);
+    setPairError(null);
     setBusy(true);
-    const result = await controller.pair({ address, code, label, deviceName: name.trim() || 'JCode Mobile' });
+    const started = Date.now();
+    const result = await Promise.race([
+      controller.pair({
+        address,
+        code,
+        label,
+        deviceName: name.trim() || 'JCode Mobile',
+      }),
+      new Promise<{ ok: false; error: string; code: string; detail?: string }>((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              ok: false,
+              code: 'PAIR_TIMEOUT_UI',
+              error: 'Pairing was still waiting after 20s. The server did not complete /pair.',
+              detail: 'No response returned to the app. Check the adapter log and TLS chain.',
+            }),
+          20_000,
+        ),
+      ),
+    ]);
     setBusy(false);
     if (!result.ok) {
-      setError(result.error);
+      setPairError({
+        message: result.error,
+        code: result.code,
+        detail: 'detail' in result ? result.detail : undefined,
+      });
       return;
     }
+    void started;
     navigation.reset({ index: 0, routes: [{ name: 'Sessions' as never }] });
+  };
+
+  const copyPairError = async () => {
+    if (!pairError) return;
+    const text = [pairError.message, pairError.code ? `Code: ${pairError.code}` : null, pairError.detail]
+      .filter(Boolean)
+      .join('\n');
+    await Clipboard.setStringAsync(text).catch(() => undefined);
+    setCopied('pairError');
+    setTimeout(() => setCopied(null), 1200);
   };
 
   const copy = async (id: string, value: string) => {
@@ -247,6 +318,54 @@ export function ConnectScreen() {
             placeholder="JCode Mobile"
             helper="Shown in the server's paired-device list."
           />
+          {busy ? (
+            <View style={[styles.pairing, { backgroundColor: colors.raised }]} accessibilityLiveRegion="polite">
+              <View style={styles.pairingRing}>
+                <Animated.View
+                  style={[
+                    styles.pairingPulse,
+                    {
+                      borderColor: colors.brand,
+                      opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0] }),
+                      transform: [
+                        { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.9] }) },
+                      ],
+                    },
+                  ]}
+                />
+                <ActivityIndicator color={colors.brand} />
+              </View>
+              <View style={{ flex: 1, marginLeft: space.sm }}>
+                <Text variant="small">
+                  Pairing with {parsed?.ok ? parsed.display : address}…
+                </Text>
+                <Text variant="caption" color="muted">
+                  {elapsed}s · POST /pair · up to 12s
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {pairError ? (
+            <View style={[styles.pairError, { borderColor: colors.error }]} accessibilityLiveRegion="assertive">
+              <Text variant="small" color="error">
+                {pairError.message}
+              </Text>
+              {pairError.code ? (
+                <Text variant="code" color="muted" style={{ marginTop: space.xxs }}>
+                  Code: {pairError.code}
+                </Text>
+              ) : null}
+              {pairError.detail ? (
+                <Text variant="caption" color="muted" style={{ marginTop: space.xxs }}>
+                  {pairError.detail}
+                </Text>
+              ) : null}
+              <TextAction
+                label={copied === 'pairError' ? 'Copied details' : 'Copy error details'}
+                onPress={() => void copyPairError()}
+              />
+            </View>
+          ) : null}
           {error ? (
             <Text variant="small" color="error" accessibilityLiveRegion="polite">
               {error}
@@ -363,6 +482,15 @@ const styles = StyleSheet.create({
     borderColor: '#F4F8F5',
     borderRadius: 12,
   },
+  pairing: {
+    borderRadius: radius.control,
+    padding: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pairingRing: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  pairingPulse: { position: 'absolute', width: 28, height: 28, borderRadius: 14, borderWidth: 2 },
+  pairError: { borderWidth: 1, borderRadius: radius.control, padding: space.sm, gap: space.xxs },
   scanHint: { position: 'absolute', bottom: space.sm, alignSelf: 'center' },
   form: { marginTop: space.lg, gap: space.md },
   review: { borderRadius: radius.control, padding: space.sm },

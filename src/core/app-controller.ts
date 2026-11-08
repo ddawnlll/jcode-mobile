@@ -209,16 +209,16 @@ class AppControllerImpl {
     code: string;
     label: string;
     deviceName: string;
-  }): Promise<{ ok: true; profileId: string } | { ok: false; error: string }> {
+  }): Promise<{ ok: true; profileId: string } | { ok: false; error: string; code: string; detail?: string }> {
     const parsed = parseServerAddress(input.address, this.defaultPort());
-    if (!parsed.ok) return { ok: false, error: parsed.error };
+    if (!parsed.ok) return { ok: false, error: parsed.error, code: 'ADDRESS_INVALID' };
     const code = input.code.replace(/\D/g, '');
     if (code.length !== 6) {
-      return { ok: false, error: 'Enter the six-digit pairing code from your server.' };
+      return { ok: false, error: 'Enter the six-digit pairing code from your server.', code: 'CODE_INVALID' };
     }
     const label = input.label.trim() || parsed.display;
     if (input.deviceName.trim().length === 0) {
-      return { ok: false, error: 'Name this phone so you can recognize it later.' };
+      return { ok: false, error: 'Name this phone so you can recognize it later.', code: 'DEVICE_NAME_REQUIRED' };
     }
     const existing = (await listServers()).find(
       (server) =>
@@ -232,29 +232,42 @@ class AppControllerImpl {
       device_id: (await getPref('deviceId')) ?? profileId,
       device_name: input.deviceName.trim(),
     };
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 12_000);
     let response: Response;
     try {
       response = await fetch(`${httpBase(parsed.endpoint)}/pair`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
+        signal: abort.signal,
       });
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      const timedOut = abort.signal.aborted;
       return {
         ok: false,
-        error: `Cannot reach ${parsed.display}. Check the address and that the mobile adapter is running.`,
+        code: timedOut ? 'PAIR_TIMEOUT' : 'PAIR_NETWORK',
+        error: timedOut
+          ? `Pairing timed out after 12s. ${parsed.display} did not answer /pair. Check DNS, port 7643, firewall, and TLS.`
+          : `Cannot reach ${parsed.display}/pair. Check DNS, port 7643, firewall, and that the adapter is running.`,
+        detail,
       };
+    } finally {
+      clearTimeout(timer);
     }
     let payload: { ok?: boolean; token?: string; error?: string };
     try {
       payload = (await response.json()) as typeof payload;
     } catch {
-      payload = { ok: false, error: `The server replied ${response.status}.` };
+      payload = { ok: false, error: `The server replied ${response.status} without JSON.` };
     }
     if (!response.ok || !payload.ok || !payload.token) {
       return {
         ok: false,
-        error: payload.error ?? 'Pairing failed. Generate a new code on your server.',
+        code: `PAIR_HTTP_${response.status}`,
+        error: payload.error ?? `Pairing failed with HTTP ${response.status}.`,
+        detail: `POST ${httpBase(parsed.endpoint)}/pair returned ${response.status}.`,
       };
     }
     const profile: ServerProfileRow = {
@@ -272,7 +285,9 @@ class AppControllerImpl {
     await saveToken(profileId, payload.token);
     await saveServer(profile);
     await setPref(LAST_SERVER, profileId);
-    await this.activateProfile(profile, { restore: false });
+    // Pairing is complete once the token is stored. Connect in the background
+    // so a slow or broken WebSocket cannot leave the Pair button spinning.
+    await this.activateProfile(profile, { restore: false, deferConnect: true });
     return { ok: true, profileId };
   }
 

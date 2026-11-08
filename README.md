@@ -71,7 +71,7 @@ The six-digit code is valid for five minutes. It is exchanged once for a device 
 **Android:** download the APK from [Releases](https://github.com/ddawnlll/jcode-mobile/releases/latest), then:
 
 ```sh
-adb install -r jcode-mobile-0.1.2-android-release.apk
+adb install -r jcode-mobile-0.1.3-android-release.apk
 ```
 
 The APK is a release build, but it is debug-signed for sideloading. It is not a Play Store artifact.
@@ -79,7 +79,7 @@ The APK is a release build, but it is debug-signed for sideloading. It is not a 
 **iOS Simulator:** download the zip, unzip it, and install it into a booted Simulator:
 
 ```sh
-unzip -o jcode-mobile-0.1.2-ios-simulator.app.zip -d /tmp/jcode-ios
+unzip -o jcode-mobile-0.1.3-ios-simulator.app.zip -d /tmp/jcode-ios
 xcrun simctl install booted /tmp/jcode-ios/JCodeMobile.app
 xcrun simctl launch booted com.jcodemobile.app
 ```
@@ -95,6 +95,18 @@ Open the app and enter:
 - **Device name:** anything you will recognize later
 
 Tap **Pair this phone**. The token goes into Keychain or Keystore, never into SQLite, logs, or the URL.
+
+If pairing fails, the app shows the exact code and detail:
+
+| Code | Meaning |
+| --- | --- |
+| `PAIR_NETWORK` | DNS, firewall, port 7643, or adapter not running. The detail includes the native error. |
+| `PAIR_TIMEOUT` | No `/pair` response within 12 s. |
+| `PAIR_HTTP_400` | Usually an invalid or expired code; the server message is shown. |
+| `PAIR_HTTP_401/403` | Reverse proxy or TLS client policy rejected the request. |
+| `PAIR_TIMEOUT_UI` | The app-side 20 s guard fired before any result. |
+
+Pairing completes when the token is stored. The WebSocket connection continues in the background, so a later connection problem appears in Sessions instead of leaving the Pair button spinning.
 
 ### 5. Open a session and send
 
