@@ -20,7 +20,7 @@ export function ConnectScreen() {
   const { colors } = useTheme();
   const deviceName = useAppStore((state) => state.deviceName);
   const profileId = useAppStore((state) => state.profileId);
-  const [address, setAddress] = useState('127.0.0.1:7643');
+  const [address, setAddress] = useState('');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
   const [name, setName] = useState(deviceName || 'JCode Mobile');

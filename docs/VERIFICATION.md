@@ -57,6 +57,7 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | Night conversation | `docs/evidence/native/conversation-night.png` | Night palette, seam, composer |
 | Server details (Night) | `docs/evidence/native/server-night.png` | Appearance, transport, capabilities |
 | Large text | `docs/evidence/native/conversation-large-text.png` | 200% text, reflow |
+| iOS Connect | `docs/evidence/native/ios-connect.png` | Production example address, no loopback default |
 | Android sessions | `docs/evidence/native/android-sessions.png` | Release APK, real staging inventory |
 | Android conversation | `docs/evidence/native/android-conversation.png` | Release APK, native header/composer |
 | Android Work | `docs/evidence/native/android-work.png` | Release APK, deduped tool rows, seam |

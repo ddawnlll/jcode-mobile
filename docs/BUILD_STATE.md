@@ -34,8 +34,8 @@ Updated: 2026-11-08
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `8322e1e475216c41d62a001b8b6b50492b9577f95cbc0fe785f5ea930649ccde` |
-| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `8dd929a4fa1c43d7a07ddffe6147841b85d33f33d54f7b036dc7564d7712ac8f` |
+| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `39e09f14238206315abd8ed9b70b96cf115297db3aa953d1964962f79a933408` |
+| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `7c6baa183834f7d30a0a43e10877538e9a62c9fc86096fd3c93ced03bf8674b1` |
 
 The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
 
