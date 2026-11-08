@@ -54,6 +54,16 @@ node src/main.ts
 
 This binds the adapter to all interfaces with TLS. Restrict the port with a firewall or put it behind a TLS reverse proxy. If you use a proxy or tunnel, bind `JCODE_ADAPTER_HOST=127.0.0.1` instead. Never expose plain `ws://` to the internet.
 
+If JCode's own gateway already occupies port 7643 with plain HTTP, run the mobile adapter on loopback port 7644 and put Caddy (or another TLS proxy) on 443:
+
+```
+dawnll.example.com {
+    reverse_proxy 127.0.0.1:7644
+}
+```
+
+Then enter `dawnll.example.com:443` in the app. `jcode pair` must run as the same user that owns `$JCODE_HOME`, and the adapter service must use that same `JCODE_HOME` and daemon socket.
+
 ### 2. Mint a pairing code
 
 On the server, as the same user that runs the JCode daemon:
