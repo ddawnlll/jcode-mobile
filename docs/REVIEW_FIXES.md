@@ -23,7 +23,7 @@ This release does not change the visual direction. It adds ownership, protocol-e
 | F16 | Mitigated | Retained live tools are capped at 120 rows, output at 8 KiB per row. Work still uses a ScrollView for the bounded list; the 10k stress/device-memory run remains unrun. | `boundTools` |
 | F17 | Fixed | Opening another session detaches the old stream without cancelling work. Reconnect closes/supersedes the prior client; late callbacks are generation-gated. | Source |
 | F18 | Fixed | Code copy uses the full block. Oversized blocks show an explicit 64 KiB preview limit instead of an ineffective expander. Actions meet the 48-unit target. | `CodeBlock.tsx` |
-| F19 | Fixed | `workflow_dispatch` added; Android job is now triggerable manually. | `.github/workflows/check.yml` |
+| F19 | Fixed | `workflow_dispatch` added and Android 36 packages installed explicitly. The manual Android job passed. | CI run `42513971926` (`android-build` success) |
 | F20 | Mitigated | Registry writes use atomic rename and unreadable/adopted errors no longer collapse to an empty writable registry. External JCode writes remain uncoordinated because upstream exposes no shared lock. | `registry.ts` |
 | F21 | Fixed | Remote command now sets `JCODE_ADAPTER_HOST=0.0.0.0` with TLS and firewall/reverse-proxy guidance; loopback remains documented for proxies. | README |
 | F22 | Partial | Reduced motion no longer translates sheets and stack transitions fade. Focus-return prop, 48-unit targets, and input body font added. Trigger wiring and native accessibility verification are not complete. | `BottomSheet`, navigation, controls |
@@ -34,7 +34,8 @@ This release does not change the visual direction. It adds ownership, protocol-e
 - `npm test`: 34 Jest tests.
 - `node --test integration/jcode-adapter/test/*.test.ts`: 7 adapter tests, including ACK semantics, processing promotion, byte/index bounds, and split UTF-8.
 - `npm run typecheck` and `npm run lint`: pass.
-- Native v0.1.1 Android release: launched, attached with continuation confirmation, sent `V011-OK`, received the reply.
+- Native v0.1.1 Android release: launched, cached conversation painted before attach, attached with continuation confirmation, sent `V011-OK`, received the reply.
+- Android native CI: `android-build` passed in run `42513971926`.
 
 ## Remaining known limits
 

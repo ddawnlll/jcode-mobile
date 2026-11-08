@@ -45,7 +45,7 @@ The APK is a release build (embedded Hermes bundle, debug signing for local inst
 
 ```sh
 npx tsc --noEmit            # pass
-npx eslint .                # pass, no warnings
+npx eslint .                # pass
 npm test                    # 34/34 pass
 node --test integration/jcode-adapter/test/*.test.ts   # 7/7 pass
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts  # PASS
@@ -53,6 +53,7 @@ bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts # PAS
 npx expo run:ios --device "iPhone 17 Pro"  # dev build + launch, pass
 bash scripts/build-android-release.sh        # release APK, pass
 bash scripts/build-ios-simulator.sh          # release Simulator .app, pass
+gh workflow run check.yml --ref main         # Android 36 build, pass
 ```
 
 ## Commands that failed and why
