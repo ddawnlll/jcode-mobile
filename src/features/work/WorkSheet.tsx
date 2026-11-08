@@ -93,26 +93,35 @@ export function WorkSheet({
 
   const activities = useMemo<Activity[]>(() => {
     const entries: Activity[] = [];
+    // A tool call can appear both as committed history and as a live row.
+    // Committed history fixes the order; the live row carries richer state.
+    const liveRows = new Map(conversation.tools.map((row) => [row.callId, row]));
+    const placed = new Set<string>();
     for (const message of conversation.messages) {
       if (message.tool_data) {
+        const live = liveRows.get(message.tool_data.id);
         entries.push({
           kind: 'tool',
           key: `ht-${message.index}`,
-          row: {
-            callId: message.tool_data.id,
-            name: message.tool_data.name,
-            input: message.tool_data.input,
-            state: 'done',
-            startedAt: 0,
-            historical: true,
-          },
+          row:
+            live ??
+            {
+              callId: message.tool_data.id,
+              name: message.tool_data.name,
+              input: message.tool_data.input,
+              state: 'done',
+              startedAt: 0,
+              historical: true,
+            },
         });
+        placed.add(message.tool_data.id);
         continue;
       }
       if (message.role !== 'tool') continue;
       entries.push({ kind: 'historyTool', key: `h-${message.index}`, message });
     }
     for (const row of conversation.tools) {
+      if (placed.has(row.callId)) continue;
       entries.push({ kind: 'tool', key: `t-${row.callId}`, row });
     }
     const seamIndex = conversation.seam?.index ?? null;

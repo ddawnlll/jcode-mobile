@@ -534,6 +534,20 @@ class AppControllerImpl {
         },
       }));
       if (this.profile) await upsertSessions(this.profile.id, frame.sessions);
+      const currentConversation = store.get().conversation;
+      const currentSession = frame.sessions.find(
+        (entry) => entry.session_id === currentConversation.sessionId,
+      );
+      const authoritativeTitle = currentSession?.title ?? currentSession?.save_label ?? null;
+      if (authoritativeTitle && authoritativeTitle !== currentConversation.title) {
+        store.setState((current) => ({
+          conversation: {
+            ...current.conversation,
+            title: authoritativeTitle,
+            session: currentSession ?? current.conversation.session,
+          },
+        }));
+      }
     } catch (error) {
       store.setState((current) => ({
         inventory: { ...current.inventory, loading: false, error: errorMessage(error) },
@@ -1263,17 +1277,26 @@ class AppControllerImpl {
         const session = frame.session;
         const previous = store.get().conversation;
         const previousAttachment = previous.attachmentId;
+        const sameSession = session.session_id === previous.sessionId;
         this.lastTurnId = 0;
+        // A reattach keeps the transcript; a different session starts clean so
+        // the previous conversation can never flash under the new title.
+        const base = sameSession
+          ? previous
+          : resetConversation({
+              serverId: this.profile?.id ?? previous.serverId,
+              sessionId: session.session_id,
+            });
         store.setState({
           conversation: {
-            ...previous,
+            ...base,
             // A new attachment identity fences every older event.
             attachmentId: frame.attachment_id,
             sessionId: session.session_id,
             serverId: this.profile?.id ?? previous.serverId,
             session,
-            title: session.title ?? session.save_label ?? (previous.title || 'Session'),
-            workingDir: session.working_dir ?? previous.workingDir,
+            title: session.title ?? session.save_label ?? (sameSession ? previous.title : 'New session'),
+            workingDir: session.working_dir ?? (sameSession ? previous.workingDir : null),
             execution: {
               kind: session.live_state === 'working' ? 'working' : 'unknown',
               label: session.live_state === 'working' ? 'Last seen working' : 'Status unavailable',
@@ -1283,7 +1306,7 @@ class AppControllerImpl {
             lastError: null,
           },
         });
-        if (previousAttachment && previousAttachment !== frame.attachment_id) {
+        if (sameSession && previousAttachment && previousAttachment !== frame.attachment_id) {
           this.markDeliveriesUnconfirmed();
         }
         this.attachedSessionId = session.session_id;
@@ -1616,6 +1639,8 @@ class AppControllerImpl {
             ),
           },
         }));
+        // A finished first turn is when the server titles a new session.
+        if (execution.kind === 'ready') void this.refreshSessions({ force: true });
       }
     }
   }

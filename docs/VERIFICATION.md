@@ -22,8 +22,8 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | Check | Status | Evidence |
 | --- | --- | --- |
 | Authenticated pairing via JCode registry | PASS | `jcode pair` code consumed by adapter `POST /pair`; token only in Keychain/Keystore; contract/continuity tests pair successfully |
-| Revoked/unknown token rejected | PASS | Adapter returns 401 for unknown tokens; `/whoami` distinguishes revocation from a network error (unit path inspected; see limitations for native revoked-device flow) |
-| Inventory, create, attach, history, send, streaming | PASS | Real staging sessions listed in the app; created session, sent turn, received streamed reply `APP-DONE`; Work shows the recorded `bash` tool call |
+| Revoked/unknown token rejected | PASS | Adapter returns 401 and logs `rejected unknown or revoked device token`; native flow below (A15) shows the app drops to `Pair again` rather than claiming offline |
+| Inventory, create, attach, history, send, streaming | PASS | Real staging sessions listed; created sessions from the app (returned id, instruction sent, replies `NEW-SESSION-OK`/`SECOND-OK`); streamed turn `APP-DONE`; Work shows recorded `bash`/`todo` rows without duplicates |
 | A01 force-quit continuation | PASS | `docs/evidence/continuity-2026-11-08T12-30-29-022Z.json`: transport terminated mid-tool; six progress lines and `FINAL-…` written while the phone was absent; same session reattached with exactly one matching user message and assistant `COMPLETE`; continuation flag true |
 | A04 daemon death | PASS | `daemon-death.ts` output: `interruptedAtAttach: true`, recovery directive present, statuses `idle`, `claimedWorking: false` |
 | A02 leave Conversation during a turn | PASS | Native: back to Sessions while `sleep 30` ran; list showed the session in Working; reopening after completion showed the reply, no duplicate history |
@@ -37,12 +37,13 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | A09 retry rollback replacement | NOT_RUN | Implemented; provider retry not forced |
 | A10 server switch while typing | NOT_RUN | Scoped drafts implemented; native test not run |
 | A11 keyboard at 200% text | PASS | Accessibility text size `accessibility-extra-extra-large`; composer, Send, labels reflow and remain reachable; composer placeholder shortened |
-| A12 no fabricated plan/approval/push/file controls | PASS | Plan tab hidden with zero todos; server details says notifications unavailable; no approval UI; file read only appears with the negotiated capability |
-| A13 VoiceOver/TalkBack | PARTIAL | Accessibility tree inspected via agent-device (roles/labels/order); manual screen-reader pass NOT_RUN |
+| A12 no fabricated plan/approval/push/file controls | PASS | With a reported plan, Work > Plan shows `0 of 3 reported steps complete` and three pending steps; hidden when zero todos; no approval UI; notifications reported unavailable |
+| A13 VoiceOver/TalkBack | PARTIAL | Accessibility tree inspected via agent-device (roles/labels/order); manual screen-reader pass NOT_RUN. 200% text verified on Android in Night mode |
 | A15 revoked pairing token | PASS | Removed the Android device from the staging registry, relaunched: selector and banner read `Pair again`, cached sessions stayed readable with `Saved` state; warm pairing deep link re-paired. Capture: `docs/evidence/native/android-revoked.png` |
 | A16 archive/restore | PASS | Android release: long-press → Archive removed the row and showed `Session archived.` + Undo; Undo restored the row and live state. Archived-list toggle and restore action implemented |
 | A17 decision link | N/A | No permissions capability in the verified server surface |
 | A18 Stop targets only this turn | PASS | See A18 above |
+| New session creation | PASS | Android release: absolute server folder + instruction; server-returned id used for attach; reply received; header title updated from the server after the turn (no previous-session bleed) |
 
 ## Visual evidence
 
@@ -51,14 +52,18 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | Sessions (Light) | `docs/evidence/native/sessions-light.png` | Real staging sessions; server selector; search; dock |
 | Conversation (Light) | `docs/evidence/native/conversation-return.png` | Return seam, user bubble, composer |
 | Conversation Working (Light) | `docs/evidence/native/conversation-working.png` | Running bash dock + separate Stop |
-| Work Activity | `docs/evidence/native/work-activity.png` | Real tool rows, seam |
+| Work Activity (iOS) | `docs/evidence/native/conversation-working.png` | Real tool rows, seam |
 | Tool detail | `docs/evidence/native/tool-detail.png` | Parameters, honest result note |
 | Night conversation | `docs/evidence/native/conversation-night.png` | Night palette, seam, composer |
 | Server details (Night) | `docs/evidence/native/server-night.png` | Appearance, transport, capabilities |
 | Large text | `docs/evidence/native/conversation-large-text.png` | 200% text, reflow |
 | Android sessions | `docs/evidence/native/android-sessions.png` | Release APK, real staging inventory |
 | Android conversation | `docs/evidence/native/android-conversation.png` | Release APK, native header/composer |
-| Android Work | `docs/evidence/native/android-work.png` | Release APK, recorded tools |
+| Android Work | `docs/evidence/native/android-work.png` | Release APK, deduped tool rows, seam |
+| Android Plan | `docs/evidence/native/android-plan.png` | Real reported plan, honest completion count |
+| Android new session | `docs/evidence/native/android-new-session.png` | Created from the app, reply rendered |
+| Android revoked | `docs/evidence/native/android-revoked.png` | `Pair again`, cached sessions readable |
+| Android 200% text | `docs/evidence/native/android-large-text.png` | Night mode, shortest placeholder, composer holds |
 | Android offline | `docs/evidence/native/android-offline.png` | Adapter stopped; cached history, Retry, editable draft |
 
 The dev-client floating gear button appears in development captures. It is not part of the app and is absent in the release build.

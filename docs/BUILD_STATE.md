@@ -28,13 +28,14 @@ Updated: 2026-11-08
 - Identity fencing is adapter-normalized: `attachment_id` per attach and a monotonic `turn_id` per attachment.
 - iOS builds need a local compatibility patch for `expo-modules-jsi@58.0.22` (Xcode 26.1 Swift 6.2 sendability). `scripts/patch-expo-modules-jsi.js` runs on postinstall and is idempotent.
 - Local simulator pairing is seeded through a development-only file import (`__DEV__` only, loopback only). Production pairing uses the real `/pair` endpoint with a code from `jcode pair`.
+- The same attachment identity can arrive as history and as a live tool event; Work dedupes by `call_id` and prefers the live row. Attaching a different session resets the transcript and title instead of reusing the previous session's.
 
 ## Release artifacts (freeze build)
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `8a223e69f713a26922a5f9dd08d3dd3e41b0e86dd1f6e44c4cac50d34ded2665` |
-| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `c4acd06f518c36e127d49643b2e08b940d2cff81a978cdb073b0e0b4c6cff4ed` |
+| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `8322e1e475216c41d62a001b8b6b50492b9577f95cbc0fe785f5ea930649ccde` |
+| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `8dd929a4fa1c43d7a07ddffe6147841b85d33f33d54f7b036dc7564d7712ac8f` |
 
 The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
 

@@ -576,8 +576,8 @@ export function ConversationScreen() {
               placeholder={
                 textScale > 1.35
                   ? working
-                    ? 'Instruction'
-                    : 'Message'
+                    ? 'Instruct…'
+                    : 'Write…'
                   : working
                     ? 'A thought, a question, a direction…'
                     : 'Write a message'
