@@ -63,4 +63,4 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL, with `NOT_RUN` and `PARTIAL` for v
 
 - Live VPS (`v7-remote`) unreachable: SSH resets. Live-VPS acceptance remains BLOCKED; isolated local staging used.
 - Physical iOS device and Samsung A34 not attached: physical performance/battery/manual screen-reader checks NOT_RUN.
-- A08/A10 and the manual screen-reader pass remain NOT_RUN; A06, A09, and performance are PARTIAL. A05/A07/A15/A16 are now PASS.
+- The manual screen-reader pass remains NOT_RUN; A06, A09, and performance are PARTIAL. A05/A07/A08/A10/A15/A16 are now PASS.

@@ -33,9 +33,9 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | A05 ambiguous delivery | PASS | `JCODE_ADAPTER_FAULT=drop_after_send` closed the daemon attachment after write. The message stayed visible, then became `Delivery unconfirmed` with explicit `Send again` / `Dismiss record`; it was never auto-resent and remained unconfirmed after restart/reconnect. Captures: `android-unconfirmed.png`, `android-unconfirmed-review.png` |
 | A06 stale terminal fencing | PARTIAL | Adapter-normalized attachment/turn ids and client guards implemented; no deterministic stale-frame replay test |
 | A07 guidance incorporated exactly once | PASS | During a 90 s bash turn, guidance showed `Queued for the next safe point`, then one instruction block and one assistant occurrence (`GUIDANCE-THREE`) after completion. Capture: `android-guidance.png` |
-| A08 reading anchor during a burst | NOT_RUN | Implemented; not measured |
+| A08 reading anchor during a burst | PASS | Second authenticated client sent `BURST-ONE` while the phone was parked at the seam: the viewport did not jump, the seam count moved 10 → 12, and a `New activity` control appeared; the reply did not pull the reader down. Captures: `android-reading-anchor.png` |
 | A09 retry rollback replacement | PARTIAL | Adapter contract test injects `retry_rollback`: emits `text_replace` with empty text and `retrying (1/3)`, no cancel. A real provider retry was not forced natively |
-| A10 server switch while typing | NOT_RUN | Scoped drafts implemented; native test not run |
+| A10 server switch while typing | PASS | Draft `DRAFT-ALPHA` existed on the 7643 profile; after switching to a second adapter on 7644 the same session's composer was empty, and switching back restored `DRAFT-ALPHA`. Captures: `android-draft-scoped.png`, `android-draft-restored.png` |
 | A11 keyboard at 200% text | PASS | Accessibility text size `accessibility-extra-extra-large`; composer, Send, labels reflow and remain reachable; composer placeholder shortened |
 | A12 no fabricated plan/approval/push/file controls | PASS | With a reported plan, Work > Plan shows `0 of 3 reported steps complete` and three pending steps; hidden when zero todos; no approval UI; notifications reported unavailable |
 | A13 VoiceOver/TalkBack | PARTIAL | Accessibility tree inspected via agent-device (roles/labels/order); manual screen-reader pass NOT_RUN. 200% text verified on Android in Night mode |
@@ -68,6 +68,9 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | Android unconfirmed delivery | `docs/evidence/native/android-unconfirmed.png` | No auto-resend; explicit review |
 | Android unconfirmed review | `docs/evidence/native/android-unconfirmed-review.png` | `Send again` or `Dismiss record` |
 | Android guidance | `docs/evidence/native/android-guidance.png` | One queued/injected instruction |
+| Android reading anchor | `docs/evidence/native/android-reading-anchor.png` | Second-client burst; no viewport jump |
+| Android draft scoped | `docs/evidence/native/android-draft-scoped.png` | Same session on second server, no draft |
+| Android draft restored | `docs/evidence/native/android-draft-restored.png` | Draft restored on original profile |
 | Android offline | `docs/evidence/native/android-offline.png` | Adapter stopped; cached history, Retry, editable draft |
 
 The dev-client floating gear button appears in development captures. It is not part of the app and is absent in the release build.
@@ -95,5 +98,5 @@ No performance claim is made from the HTML exhibit or from Simulator memory. And
 - Live VPS: BLOCKED. `v7-remote` resets SSH on its configured port; no alternate authorized endpoint was assumed.
 - Physical iOS device and Samsung A34: NOT_RUN (not attached).
 - Manual VoiceOver/TalkBack passes: NOT_RUN.
-- A08/A10 adversarial native scenarios remain NOT_RUN; A09 has adapter-contract evidence only. A05/A07 have native evidence.
+- A09 has adapter-contract evidence only; A05/A07/A08/A10 have native evidence. Two-adapter A10 test shared one staging device registry, so the inactive profile showed `Pair again` after the test; draft scoping itself was unaffected.
 - The release APK was installed from `artifacts/` and paired through the Connect screen against the loopback adapter (`adb reverse`), with a loopback-scoped Android network security config. Remote hosts still require TLS.
