@@ -14,7 +14,7 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | Adapter contract tests | PASS | `node --test integration/jcode-adapter/test/attach-contract.test.ts` | 2/2 pass; records `continue_on_disconnect: true`, exact target, no cancel/clear/prepare_disconnect on dispose |
 | iOS dev build | PASS | `npx expo run:ios --device "iPhone 17 Pro"` | BUILD SUCCEEDED, launched |
 | iOS Simulator release `.app` | PASS | `bash scripts/build-ios-simulator.sh` | BUILD SUCCEEDED; `main.jsbundle` present; zip 24 MiB |
-| Android release APK | PASS | `bash scripts/build-android-release.sh` | BUILD SUCCESSFUL; installed, paired, archived/undone, revoked/re-paired on the API 36 emulator; SHA-256 in BUILD_STATE |
+| Android release APK | PASS | `bash scripts/build-android-release.sh`; installed, launched, paired, created sessions, archived/undone, revoked/re-paired on the API 36 emulator; SHA-256 in BUILD_STATE |
 | CI workflow | NOT_RUN | `.github/workflows/check.yml` | Added; run result not yet inspected |
 
 ## Real JCode integration
