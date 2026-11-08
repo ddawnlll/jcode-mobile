@@ -1,188 +1,234 @@
-# JCode Mobile
+<p align="center">
+  <img src="docs/media/conversation.png" width="300" alt="JCode Mobile conversation screen with a streamed assistant reply and Work dock" />
+</p>
 
-A native React Native + TypeScript companion for [JCode](https://github.com/1jehuang/jcode) running on your own Linux VPS. The phone reads and directs conversations; the VPS owns agent execution. Closing, locking, or force-quitting the app never stops a remote turn.
+<h1 align="center">JCode Mobile</h1>
 
-> This is an independent companion application, not an official JCode release. The upstream mark and fonts retain their own licenses (see `THIRD_PARTY_NOTICES.md`).
+<p align="center">
+  A native iOS and Android companion for <a href="https://github.com/1jehuang/jcode">JCode</a>.<br/>
+  Your phone reads and directs the conversation. Your VPS runs the agent.
+</p>
 
-## What is real here
+<p align="center">
+  <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?display_name=tag" alt="Latest release" /></a>
+</p>
 
-| Area | State |
-| --- | --- |
-| Native iOS and Android app | Expo SDK 58 / React Native 0.88 / React 19.3 / strict TypeScript, Hermes, new architecture |
-| Backend | A small authenticated adapter (`integration/jcode-adapter/`) over the JCode daemon's raw Unix-socket protocol |
-| Continuation | Every attach sets `continue_on_disconnect: true`; proven with a transport-loss continuity test against a real staging daemon (the same path a force-quit takes) |
-| Daemon death | Reattachment reports the source-backed interruption and recovery directive instead of claiming the turn is still running |
-| Permissions, push, file upload | Not advertised; the UI says so rather than faking controls |
+---
 
-The curated `jcode api-bridge` is reused for inventory, archive/restore, todo state, peek, and bounded file reads. It is deliberately **not** used for session attachment because its create/attach translation omits the continuation flag (verified at `jcode@v0.99.1`, `crates/jcode-harness-api-server/src/translate.rs:603-655`).
+## What it feels like
 
-## Architecture
+| Sessions | Conversation |
+|:---:|:---:|
+| <img src="docs/media/sessions.png" width="300" alt="Sessions list with search, live status, and New session" /> | <img src="docs/media/conversation.png" width="300" alt="Conversation with streamed reply, Work dock, and composer" /> |
+| Find a session by title, folder, or label. | Send a prompt, watch the reply stream in, then inspect the work. |
+
+| Work | Plan |
+|:---:|:---:|
+| <img src="docs/media/work.png" width="300" alt="Session work sheet with bash and todo tool calls" /> | <img src="docs/media/plan.png" width="300" alt="Plan tab with reported steps and completion count" /> |
+| See the exact tool calls the server made. | Read the plan the agent reported, with honest progress. |
+
+<p align="center">
+  <img src="docs/media/connect.png" width="300" alt="Connect screen with server address, pairing code, and device name" /><br/>
+  <sub>Pair once. The phone stays signed in until you forget the server.</sub>
+</p>
+
+## Try it in five minutes
+
+You need a Linux VPS with JCode and Node 22, plus an Android phone or emulator. The iOS build in the release is a Simulator app, not a signed IPA.
+
+### 1. Start the mobile adapter on your server
+
+The adapter speaks WebSocket to the phone and the daemon's Unix socket to JCode. It does not run a second agent.
+
+```sh
+git clone https://github.com/ddawnlll/jcode-mobile.git
+cd jcode-mobile/integration/jcode-adapter
+
+JCODE_ADAPTER_PORT=7643 \
+JCODE_ADAPTER_TLS_CERT=/etc/jcode-mobile/fullchain.pem \
+JCODE_ADAPTER_TLS_KEY=/etc/jcode-mobile/privkey.pem \
+node src/main.ts
+```
+
+Remote access must use TLS. A private tunnel such as Tailscale is fine, but do not expose a plain `ws://` gateway to the internet.
+
+### 2. Mint a pairing code
+
+On the server, in any JCode session:
+
+```text
+/remote pair
+```
+
+Or from a shell:
+
+```sh
+jcode pair
+```
+
+The six-digit code is valid for five minutes. It is exchanged once for a device token.
+
+### 3. Install the app
+
+**Android:** download the APK from [Releases](https://github.com/ddawnlll/jcode-mobile/releases/latest), then:
+
+```sh
+adb install -r jcode-mobile-0.1.0-android-release.apk
+```
+
+The APK is a release build, but it is debug-signed for sideloading. It is not a Play Store artifact.
+
+**iOS Simulator:** download the zip, unzip it, and install it into a booted Simulator:
+
+```sh
+unzip -o jcode-mobile-0.1.0-ios-simulator.app.zip -d /tmp/jcode-ios
+xcrun simctl install booted /tmp/jcode-ios/JCodeMobile.app
+xcrun simctl launch booted com.jcodemobile.app
+```
+
+This is a Simulator `.app`. It will not install on a physical iPhone without Apple signing.
+
+### 4. Pair
+
+Open the app and enter:
+
+- **Server address:** `your-server.example.com:7643`
+- **Pairing code:** the six digits from step 2
+- **Device name:** anything you will recognize later
+
+Tap **Pair this phone**. The token goes into Keychain or Keystore, never into SQLite, logs, or the URL.
+
+### 5. Open a session and send
+
+Tap a session, type a prompt, and send. The reply streams in. The **Work** dock opens the exact tool calls and the plan the server reported.
+
+You can leave the conversation, lock the phone, or force-quit the app. The turn keeps running on the server. When you come back, a return seam shows what changed while you were away.
+
+### 6. Signing out
+
+Open **Server details**:
+
+- **Disconnect this phone** closes the connection but keeps you signed in.
+- **Forget this server** removes the token, drafts, reading positions, and cache from this phone. It is a local logout.
+- **Pair this phone again** rotates the device token.
+
+There is no password login after pairing. The device token does not expire. The app reconnects after restarts, network changes, and server reboots. If the token is revoked on the server, the app shows `Pair again` and keeps cached content readable.
+
+## What stays true
+
+- **Navigation is not cancellation.** Back, swipe, background, socket loss, and force-quit never send cancel or clear. Only the Stop button cancels a turn.
+- **The server owns the work.** Every attach uses `continue_on_disconnect: true` with the exact `target_session_id`.
+- **Sending is honest.** `Sending`, `Sent to server`, `Accepted`, and `Delivery unconfirmed` are distinct. An ambiguous delivery is never auto-resent.
+- **Cache is last-known evidence.** Cached history paints first and is labelled. Only reconciliation claims `Current` or `Ready`.
+- **Daemon death is not phone absence.** The reopened session shows saved history plus the server's interruption and recovery directive.
+- **Capabilities gate controls.** No plan tab without reported todos, no fake approvals, no push toggle, no file browser.
+- **Pair once.** Login persists until you forget the server or the token is revoked.
+
+## Downloads
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| Android | [APK](https://github.com/ddawnlll/jcode-mobile/releases/latest) | Release build, debug-signed, sideload with `adb install -r` |
+| iOS Simulator | [`.app.zip`](https://github.com/ddawnlll/jcode-mobile/releases/latest) | Simulator only, no signed IPA |
+
+Checksums and install commands are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md).
+
+## Build from source
+
+Requirements: Node 22.12+, Xcode for iOS, JDK 17 and Android SDK 36 for Android.
+
+```sh
+npm ci
+npm run check
+
+# iOS dev build
+npx expo run:ios --device "iPhone 17 Pro"
+
+# Android dev build
+npx expo run:android
+
+# Release artifacts
+bash scripts/build-android-release.sh
+bash scripts/build-ios-simulator.sh
+```
+
+`npm ci` applies a small compatibility patch for `expo-modules-jsi@58.0.22`; see [`docs/TOOLCHAIN.md`](docs/TOOLCHAIN.md).
+
+The bundle identifier is provisional (`com.jcodemobile.app`). Change it before producing signed distribution builds.
+
+## How it works
 
 ```mermaid
 flowchart LR
-  P["iOS / Android app"] -->|"WSS + bearer device token"| A["jcode-mobile-adapter"]
-  A -->|"raw continue_on_disconnect subscribe"| D["JCode daemon (Unix socket)"]
+  P["iOS / Android app"] -->|"WSS + bearer token"| A["jcode-mobile-adapter"]
+  A -->|"raw attach, continue_on_disconnect"| D["JCode daemon"]
   A -->|"control reads only"| B["jcode api-bridge"]
   D --> R["Server session runtime"]
   D --> H["Persisted history"]
   B --> H
 ```
 
-The adapter has no agent engine, no second canonical transcript, and no provider calls. Its protocol is the curated envelope (`{v, id, req}` / `{v, reply_to?, ev}`) with additive mobile fields documented in [`docs/ADAPTER_CONTRACT.md`](docs/ADAPTER_CONTRACT.md).
+The adapter has no agent engine, no second canonical transcript, and no provider calls. Its protocol is the curated JCode envelope with additive mobile fields. The full contract is in [`docs/ADAPTER_CONTRACT.md`](docs/ADAPTER_CONTRACT.md).
 
-## Requirements
+## Local staging
 
-- Node 22.12+ (pinned: 22.21.1, see `.nvmrc`), npm 10.9+
-- Full Xcode with an iOS Simulator runtime for iOS builds
-- JDK 17 and Android SDK 36 for Android builds
-- A JCode daemon on the server you want to use
-- The mobile adapter running on that server
-
-## Install and run locally
+Run real JCode locally without touching production:
 
 ```sh
-npm ci
-npm run typecheck
-npm run lint
-npm test
+bash scripts/staging-up.sh
+bash scripts/staging-adapter.sh
 
-# iOS dev build in a Simulator
-npx expo run:ios --device "iPhone 17 Pro"
-
-# Android dev build (emulator or attached device)
-npx expo run:android
+# In another terminal, if using an Android emulator:
+adb reverse tcp:7643 tcp:7643
 ```
 
-`npm ci` runs a postinstall compatibility patch for `expo-modules-jsi@58.0.22`; see [`docs/TOOLCHAIN.md`](docs/TOOLCHAIN.md).
+Then pair with `ws://127.0.0.1:7643` and a code from `jcode pair`. Android release builds allow cleartext only for loopback. iOS release builds keep local networking disabled, so use the iOS dev build for loopback testing.
 
-## Server setup
-
-1. Build or install the adapter on the server (Node 22+, same host as the daemon):
-
-   ```sh
-   cd integration/jcode-adapter
-   JCODE_ADAPTER_PORT=7643 \
-   JCODE_ADAPTER_TLS_CERT=/etc/jcode-mobile/fullchain.pem \
-   JCODE_ADAPTER_TLS_KEY=/etc/jcode-mobile/privkey.pem \
-   node src/main.ts
-   ```
-
-   The adapter reads the daemon socket from `JCODE_SOCKET` (default `$JCODE_RUNTIME_DIR/jcode.sock`) and the device registry from `$JCODE_HOME/devices.json`. It will start a private `jcode api-bridge` if one is not already running on `JCODE_API_SOCKET`.
-
-2. In a JCode session on that server, mint a pairing code:
-
-   ```
-   /remote pair
-   ```
-
-   or from a shell: `jcode pair`. The code is valid for five minutes and is written into the same device registry the adapter reads.
-
-3. Open the app, enter `studio.example.net:7643` (TLS is the default), the six-digit code, a device name, and pair. The app stores a 64-hex bearer token in Keychain/Keystore only.
-
-4. The adapter advertises `mobile_continuation` only because it actually sets the wire flag. If a server does not advertise it, the app stays read-only and says “This server needs mobile continuation support.”
-
-### TLS
-
-Remote deployment must use `wss://` with platform certificate validation. The adapter refuses to bind a non-loopback interface without a certificate unless `JCODE_ADAPTER_ALLOW_INSECURE_BIND=1` is explicitly set for an isolated development machine. A private tunnel (for example Tailscale) is a deployment option, not an in-app VPN.
-
-### Local development exception
-
-For Simulator/emulator work only, the adapter can run on `127.0.0.1` without TLS, and the app accepts a loopback `ws://` address (the Connect screen shows the exact scheme and host before pairing). Android release builds allow cleartext only for `127.0.0.1`/`localhost` via `plugins/withLocalCleartext.js`; `adb reverse tcp:7643 tcp:7643` is the supported local path. Remote hosts still require `wss://`.
-
-## Development staging (real JCode, isolated)
+Continuity and daemon-death proofs:
 
 ```sh
-bash scripts/staging-up.sh        # private JCODE_HOME + runtime dir
-bash scripts/staging-adapter.sh   # adapter on 127.0.0.1:7643
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts
 bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts
 node --test integration/jcode-adapter/test/attach-contract.test.ts
 ```
 
-`staging-up.sh` copies `config.toml` and a local-only credential snapshot into the staging home. It never starts, stops, or attaches to the production daemon. Delete `$JCODE_SCRATCH_DIR/jcode-mobile-staging` to remove the snapshot.
+## Verification
 
-The continuity test starts a deterministic six-step shell tool, terminates the phone transport, proves the tool finished while the phone was absent, then reattaches and reconciles the same session. The daemon-death test kills only the staging daemon, restarts it, and proves the reopened session reports a source-backed interruption.
+| Area | State |
+| --- | --- |
+| Native Android release flows | Verified against real JCode 0.99.1 staging |
+| iOS dev build flows | Verified against staging |
+| iOS release artifact | Installs and launches; needs a TLS endpoint for full pairing |
+| Continuity / daemon death | Pass |
+| Adversarial delivery, guidance, reading anchor, server switch | Pass |
+| Retry rollback | Adapter contract pass; no forced provider retry |
+| Physical devices and human screen-reader pass | Not run |
+| Live VPS gate | Blocked: no reachable SSH endpoint |
 
-## Artifacts
+Full PASS/BLOCKED/NOT_RUN matrix: [`docs/VERIFICATION.md`](docs/VERIFICATION.md).
 
-Built locally with embedded JS (no Metro dependency):
+## Security and privacy
 
-```sh
-bash scripts/build-android-release.sh
-bash scripts/build-ios-simulator.sh
-```
+- Bearer tokens live in Keychain or Keystore only.
+- Remote adapters require TLS. Loopback cleartext is an explicit development exception.
+- Transcript cache is SQLite, bounded, and scoped per server and session.
+- App-switcher previews are hidden by default.
+- Diagnostics do not include tokens, pairing codes, or transcript text.
 
-- `artifacts/jcode-mobile-0.1.0-android-release.apk`
-- `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip`
-- `.sha256` files next to each artifact
+## Repository map
 
-```sh
-# Android emulator or device (release build, debug-signed for local install)
-adb install -r artifacts/jcode-mobile-0.1.0-android-release.apk
-
-# iOS Simulator (Release configuration)
-unzip -o artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip -d /tmp/jcode-ios
-xcrun simctl install booted /tmp/jcode-ios/JCodeMobile.app
-xcrun simctl launch booted com.jcodemobile.app
-```
-
-Exact checksums are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md); scenario results are in [`docs/VERIFICATION.md`](docs/VERIFICATION.md). Artifacts and native build caches are ignored by Git and attached to the private draft release.
-
-## Behavior you can rely on
-
-- **Navigation is not cancellation.** Unmount, Android Back, iOS edge-back, background, socket loss, and force-quit never send `cancel`/`clear`/`rewind`.
-- **Return to the same session.** A missing target shows recovery, never a replacement session.
-- **Cache is last-known evidence.** Cached history paints first and is labelled; only reconciliation claims Current/Ready.
-- **Sending is honest.** `Draft saved → Sending… → Sent to server → Accepted`; a lost connection after write becomes “Delivery unconfirmed” and is never auto-resent. The adapter's delivery ledger can resolve it to Accepted when the daemon actually acked it.
-- **Guidance is not Stop.** Instructions during a turn use soft interrupts with caller ids; “Added to this turn” appears only after the matching injection event.
-- **Daemon death is not phone absence.** The reopened session shows saved history and the server's interruption/recovery directive.
-- **Capabilities gate controls.** No plan tab without reported todos, no approvals, no push toggle, no file browser.
-
-## Data and privacy
-
-- Bearer tokens: Keychain/Keystore (`expo-secure-store`, `WHEN_UNLOCKED_THIS_DEVICE_ONLY`), never SQLite, URLs, logs, or screenshots.
-- Transcript cache: SQLite, bounded to 32 MiB of text, 500 rows per session, LRU-evicting inactive sessions while protecting drafts and unresolved sends.
-- Drafts: debounced 250 ms, force-written on navigation; scoped by server and session.
-- App-switcher snapshots: hidden by default when the app is inactive.
-- Clearing local data: server details → “Clear local transcript cache” keeps drafts, bookmarks, and unresolved sends; “Forget server” removes the token and all local rows after a specific confirmation. It does not revoke the token on the server.
-- Diagnostics never include tokens, pairing codes, or transcript text.
-
-## Testing
-
-```sh
-npm test          # 33 pure + RNTL tests
-node --test integration/jcode-adapter/test/attach-contract.test.ts  # 3 contract tests
-npm run check     # typecheck + lint + tests
-```
-
-Native evidence, accessibility checks, performance numbers, and remaining limitations are recorded in [`docs/VERIFICATION.md`](docs/VERIFICATION.md). Design decisions and implementation adjustments are in [`docs/DESIGN_DECISIONS.md`](docs/DESIGN_DECISIONS.md).
-
-## Repository layout
-
-```
-src/design/          locked tokens, fonts, theme, controls, icons, sheet
-src/core/protocol/   validated frames, capabilities, identity fencing
-src/core/connection/ WebSocket transport, endpoint parsing, backoff
-src/core/persistence/SecureStore credentials, SQLite migrations, caches
-src/core/session/    seam derivation, grouping, formatters
-src/core/state/      zustand store and controller-facing state
-src/core/            app-controller (connection, inventory, conversation)
+```text
+src/design/          locked tokens, theme, typography, controls, icons
+src/core/            protocol, transport, controller, persistence, selectors, state
 src/features/        sessions, conversation, work, connect, new session, server
 src/shell/           app root and native stack
-integration/jcode-adapter/  authenticated adapter + contract/continuity tests
-scripts/             staging, builds, toolchain, dev helpers
-docs/                contract, toolchain, build state, verification, decisions
-design/reference/    unchanged handoff (docs, fonts, captures, licenses)
+integration/         authenticated JCode adapter and contract tests
+scripts/             staging, builds, toolchain helpers
+docs/                contract, verification, build state, design decisions
+docs/media/          README screenshots
 ```
 
-## Changing the app identity
+## Credits
 
-`app.config.ts` uses the provisional identifier `com.jcodemobile.app` and scheme `jcodemobile`. Change `ios.bundleIdentifier`, `android.package`, `scheme`, `name`, and `slug` before distribution, then run `npx expo prebuild --clean`. No Apple team or organization details are invented here.
-
-## Known limitations
-
-- The live VPS was unreachable from this environment; all real-JCode evidence comes from an isolated local staging daemon with the same installed JCode `0.99.1` and provider route. See the live-VPS gate in `docs/VERIFICATION.md`.
-- No physical iPhone or Samsung A34 was attached, so physical-device performance, battery, and manual VoiceOver/TalkBack checks are NOT_RUN.
-- Tool results are bounded in the adapter (64 KiB) and the UI previews 24 lines/8 KiB. A larger window requires an explicit request that is not yet implemented.
-- Unattached-session inventory does not expose authoritative per-session turn state in the daemon API at this version; the app therefore shows Working only for sessions it has actually observed live.
-- Push notifications, structured permission approvals, and arbitrary file upload are not implemented because the verified server surface does not support them.
+This is an independent companion, not an official JCode release. The JCode mark, Bricolage Grotesque, Hanken Grotesk, IBM Plex Mono, and Lucide icons keep their own licenses. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
