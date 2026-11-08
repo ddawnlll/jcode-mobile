@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-labelledby="title desc">
+<title id="title">JCode Mobile keyboard layout contract</title><desc id="desc">Two annotated logical 390 by 844 layouts show how the composer stays above the native keyboard. The expanded identity collapses while the transcript yields space. The keyboard includes its own bottom system inset.</desc>
+<rect width="1080" height="1080" fill="#F3F6F5"/>
+<style>text{font-family:sans-serif;fill:#173B3A}.caption{font-size:14px;fill:#536B65}.label{font-size:18px;font-weight:600}.size{font-size:13px;fill:#536B65}</style>
+<text x="64" y="56" font-size="30" font-weight="600">The composer stays with your thumb.</text>
+<text class="caption" x="64" y="88">Logical layout examples. Use actual platform insets, not these example keyboard/safe-area heights.</text>
+<text class="label" x="64" y="132">Keyboard closed</text>
+<rect x="64" y="154" width="390" height="844" rx="12" fill="#FFFFFF" stroke="#D5E0DB"/>
+<rect x="65" y="155" width="388" height="53" fill="#E8EFEC"/>
+<text class="label" x="82" y="186.0">System status / safe top</text>
+<text class="size" x="480" y="186.0">54</text>
+<rect x="65" y="209" width="388" height="55" fill="#FFFFFF"/>
+<text class="label" x="82" y="241.0">Navigation</text>
+<text class="size" x="480" y="241.0">56</text>
+<rect x="65" y="265" width="388" height="99" fill="#FFFFFF"/>
+<text class="label" x="82" y="319.0">Expanded session identity</text>
+<text class="size" x="480" y="319.0">100</text>
+<rect x="65" y="365" width="388" height="441" fill="#F3F6F5"/>
+<text class="label" x="82" y="590.0">Conversation, scrollable</text>
+<text class="size" x="480" y="590.0">442</text>
+<rect x="65" y="807" width="388" height="47" fill="#E8EFEC"/>
+<text class="label" x="82" y="835.0">Work dock</text>
+<text class="size" x="480" y="835.0">48</text>
+<rect x="65" y="855" width="388" height="109" fill="#FFFFFF"/>
+<text class="label" x="82" y="914.0">Composer and delivery state</text>
+<text class="size" x="480" y="914.0">110</text>
+<rect x="65" y="965" width="388" height="33" fill="#E8EFEC"/>
+<text class="label" x="82" y="986.0">Bottom safe area</text>
+<text class="size" x="480" y="986.0">34</text>
+<text class="caption" x="64" y="1029">390 × 844 logical units</text>
+<text class="label" x="590" y="132">Keyboard open</text>
+<rect x="590" y="154" width="390" height="844" rx="12" fill="#FFFFFF" stroke="#D5E0DB"/>
+<rect x="591" y="155" width="388" height="53" fill="#E8EFEC"/>
+<text class="label" x="608" y="186.0">System status / safe top</text>
+<text class="size" x="1006" y="186.0">54</text>
+<rect x="591" y="209" width="388" height="55" fill="#FFFFFF"/>
+<text class="label" x="608" y="241.0">Navigation</text>
+<text class="size" x="1006" y="241.0">56</text>
+<rect x="591" y="265" width="388" height="261" fill="#F3F6F5"/>
+<text class="label" x="608" y="400.0">Conversation, scrollable</text>
+<text class="size" x="1006" y="400.0">262</text>
+<rect x="591" y="527" width="388" height="47" fill="#E8EFEC"/>
+<text class="label" x="608" y="555.0">Work dock</text>
+<text class="size" x="1006" y="555.0">48</text>
+<rect x="591" y="575" width="388" height="109" fill="#FFFFFF"/>
+<text class="label" x="608" y="634.0">Composer and delivery state</text>
+<text class="size" x="1006" y="634.0">110</text>
+<rect x="591" y="685" width="388" height="313" fill="#FFE4D8"/>
+<text class="label" x="608" y="846.0">Native keyboard / IME</text>
+<text class="size" x="1006" y="846.0">314</text>
+<text class="caption" x="590" y="1029">390 × 844 logical units</text>
+<text class="caption" x="64" y="1063">Collapse identity first. Preserve draft and Send. Do not count the IME’s bottom inset twice.</text>
+</svg>

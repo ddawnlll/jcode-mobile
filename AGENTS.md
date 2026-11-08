@@ -1,41 +1,42 @@
-This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
+# JCode Mobile — agent notes
 
-## Expo has changed — do not trust your training data
+Native React Native + TypeScript companion for JCode on a remote Linux VPS. The phone is a client; the daemon owns execution.
 
-Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
+## Non-negotiable rules
 
-1. Read the major version of the `expo` package in `package.json`.
-2. Fetch the matching versioned docs: `https://docs.expo.dev/versions/v<major>.0.0/`
-3. For anything else, fetch https://docs.expo.dev/llms.txt — an index of all Expo docs with corrections to common LLM misconceptions. Follow its links to the specific page you need; never answer from memory.
+1. Never map navigation, unmount, background, socket close, or app kill to Cancel/Clear/Rewind. Only the explicit Stop control targets the current turn, and it sends `cancel` for that session only.
+2. Every session attachment to the daemon must carry `continue_on_disconnect: true`. Continuation is set during attach, never in a final goodbye frame.
+3. Reopening restores the exact server + session. A missing target shows an honest recovery state; never create a replacement session implicitly.
+4. Cached content paints first and is labelled as saved-on-this-phone. Only an authoritative history/runtime reconciliation may claim Current/Ready.
+5. Sending states are distinct: Draft saved → Sending → Sent to server (bridge ACK) → Accepted (agent). Lost after write = Delivery unconfirmed; never auto-resend.
+6. Fence stale output with `attachment_id` + `turn_id` + `session_id`. A slow response cannot overwrite newer live state.
+7. Daemon death is not phone absence. Show saved history and a source-backed interruption state.
+8. Unknown capability/status stays unknown. No invented percentages, approvals, push toggles, file browsers, or progress.
+9. Design tokens come from `src/design/tokens.ts` only. Fonts are bundled locally. Keep the return seam, 48-unit targets, 20/24 gutters, 12/24 radii, no app drop shadows.
+10. Server/session scope every draft, bookmark, cache, pending send, and reading position.
 
 ## Commands
 
-Use `bunx` instead of `npx` if the project uses bun (`bun.lock` present).
-
-```bash
-npx expo install <package>  # ALWAYS use instead of npm/yarn/pnpm/bun add — resolves SDK-compatible versions
-npx expo start              # start the dev server
-npx expo lint               # lint
-npx tsc --noEmit            # typecheck
-npx expo-doctor             # diagnose dependency and config issues
-npx expo install --fix      # fix incompatible package versions
+```sh
+npm run typecheck      # tsc --noEmit
+npm run lint           # eslint
+npm test               # jest (pure + RNTL)
+npm run ios            # expo run:ios (native dev build)
+npm run android        # expo run:android
+npm run adapter        # integration/jcode-adapter (Node SSE/WS)
+npm run adapter:test   # adapter contract tests against a real daemon
 ```
 
-Run lint and typecheck before declaring any task done.
+## Layout
 
-## Navigation & Routing
+- `src/design/` semantic tokens, fonts, theme, controls, icons
+- `src/core/protocol/` validated frames, capabilities, normalization, identity fencing
+- `src/core/connection/` transport, attachment lifecycle, reconnect, delivery correlation
+- `src/core/persistence/` SecureStore credentials, SQLite migrations, scoped caches
+- `src/core/state/` selector store and session controller (survives screen unmounts)
+- `src/features/` sessions, conversation, work, connect, new-session, server
+- `integration/jcode-adapter/` small authenticated mobile adapter over the daemon socket
+- `design/reference/` unchanged handoff; `docs/` evidence and decisions
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
-
-## Building with EAS
-
-Use EAS to build, sign, and submit the app in the cloud (`eas build`, `eas submit`) and to ship over-the-air updates (`eas update`) — no local Xcode or Android Studio required. Run EAS CLI as `bunx eas-cli <command>` in Bun projects, or `npx eas-cli@latest <command>` otherwise; substitute that for bare `eas` in docs examples.
-Docs: https://docs.expo.dev/eas/index.md
-
-## Rules
-
-- If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
-- Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
-- Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+Read `TASKS.md`, `docs/BUILD_STATE.md`, `docs/VERIFICATION.md` before resuming.
+Do not restart the production JCode daemon. Staging runs with an isolated `JCODE_HOME`/socket.

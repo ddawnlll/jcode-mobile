@@ -39,3 +39,13 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# project-local npm cache (avoid touching a shared, permission-restricted cache)
+.npm-cache/
+
+# local staging state, build artifacts, and device captures
+.staging/
+artifacts/
+docs/evidence/device/
+*.apk
+*.app.zip

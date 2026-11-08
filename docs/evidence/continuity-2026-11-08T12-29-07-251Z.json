@@ -1,0 +1,59 @@
+{
+  "recordedAt": "2026-11-08T12:29:07.251Z",
+  "adapter": "http://127.0.0.1:7643",
+  "sessionId": "session_hatchling_1794140869890_d40ec11d38f47626",
+  "attachmentId": "att_da45d02f35303bad",
+  "reattachmentId": "att_304aef0d0bb23118",
+  "continuationFlag": true,
+  "capabilities": [
+    "mobile_continuation",
+    "bounded_history",
+    "identity_fencing",
+    "delivery_receipts",
+    "soft_interrupt_ids",
+    "todo_state",
+    "file_read",
+    "archive_restore",
+    "models"
+  ],
+  "clientMessageId": "cont-1794140869914",
+  "acceptedAt": "message_accepted",
+  "tool": {
+    "start": "bash",
+    "callId": "call_juKnPPfjiyynKEMCjI7IeOSf",
+    "input": {
+      "accept_large_output": null,
+      "command": "for i in 1 2 3 4 5 6; do echo \"step-$i $(date +%s)\" >> progress.log; sleep 4; done; echo \"FINAL-$(date +%s)\" >> final.log",
+      "intent": "Run the exact requested command and wait for completion",
+      "justification": null,
+      "notify": false,
+      "run_in_background": false,
+      "stall_wake_seconds": null,
+      "timeout": 60000,
+      "wake": false
+    }
+  },
+  "disconnectedAt": "2026-11-08T12:27:55.283Z",
+  "progressLines": [
+    "step-1 1794140875",
+    "step-2 1794140879",
+    "step-3 1794140883",
+    "step-4 1794140887",
+    "step-5 1794140891",
+    "step-6 1794140895"
+  ],
+  "final": {
+    "at": "2026-11-08T12:28:19.541Z",
+    "content": "FINAL-1794140899"
+  },
+  "continuedWhilePhoneAbsent": true,
+  "history": {
+    "total": 2,
+    "baseIndex": 0,
+    "userMessagesMatchingInstruction": 1,
+    "assistantTail": ""
+  },
+  "sessionCountBefore": 3,
+  "sessionCountAfter": 4,
+  "reconciledStatus": "idle"
+}
