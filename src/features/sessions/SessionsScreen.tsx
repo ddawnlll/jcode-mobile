@@ -104,10 +104,11 @@ export function SessionsScreen() {
     [filtered],
   );
 
-  const openSession = async (session: SessionInfo) => {
-    await Haptics.selectionAsync().catch(() => undefined);
-    await controller.openSession(session);
+  const openSession = (session: SessionInfo) => {
+    // Show the cached route immediately; attachment reconciles inside it.
     navigation.navigate('Conversation', { sessionId: session.session_id });
+    void Haptics.selectionAsync().catch(() => undefined);
+    void controller.openSession(session);
   };
 
   const onRefresh = async () => {

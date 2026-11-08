@@ -33,7 +33,7 @@ export const CodeBlock = memo(function CodeBlock({
 
   const copy = async () => {
     try {
-      await Clipboard.setStringAsync(trimmed);
+      await Clipboard.setStringAsync(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1200);
     } catch {
@@ -87,7 +87,7 @@ export const CodeBlock = memo(function CodeBlock({
           Still being written…
         </Text>
       ) : null}
-      {hiddenLines > 0 || omitted > 0 ? (
+      {hiddenLines > 0 ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Show the rest of this code block"
@@ -95,9 +95,14 @@ export const CodeBlock = memo(function CodeBlock({
           style={styles.smallAction}
         >
           <Text variant="caption" color="brand">
-            {hiddenLines > 0 ? `Show ${hiddenLines} more lines` : `Show ${omitted} more characters`}
+            Show {hiddenLines} more lines
           </Text>
         </Pressable>
+      ) : null}
+      {omitted > 0 ? (
+        <Text variant="caption" color="muted" style={{ marginTop: space.xs }}>
+          Preview limited to 64 KiB. Copy copies the full block.
+        </Text>
       ) : null}
     </View>
   );
@@ -117,7 +122,7 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   smallAction: {
-    minHeight: 32,
+    minHeight: target,
     minWidth: target / 2,
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,6 +1,7 @@
 name: check
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -19,7 +20,7 @@ jobs:
       - run: npm run lint
       - run: npm test
       - name: Adapter contract tests
-        run: node --test integration/jcode-adapter/test/attach-contract.test.ts
+        run: node --test integration/jcode-adapter/test/*.test.ts
 
   android-build:
     # Manual: native Android builds are expensive and need the SDK.

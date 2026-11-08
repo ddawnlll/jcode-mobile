@@ -1,4 +1,5 @@
 import { connect, type Socket } from 'node:net';
+import { StringDecoder } from 'node:string_decoder';
 
 export type RawHandler = (event: Record<string, unknown>) => void;
 
@@ -9,6 +10,8 @@ export class RawDaemonConnection {
   private readonly socketPath: string;
   private socket: Socket | null = null;
   private buffer = '';
+  private bufferedBytes = 0;
+  private readonly decoder = new StringDecoder('utf8');
   private handler: RawHandler | null = null;
   private closed = false;
   private onCloseCallback: (() => void) | null = null;
@@ -52,8 +55,9 @@ export class RawDaemonConnection {
   }
 
   private consume(chunk: Buffer): void {
-    this.buffer += chunk.toString('utf8');
-    if (this.buffer.length > MAX_LINE_BYTES) {
+    this.buffer += this.decoder.write(chunk);
+    this.bufferedBytes += chunk.byteLength;
+    if (this.bufferedBytes > MAX_LINE_BYTES) {
       this.close();
       return;
     }
@@ -62,6 +66,7 @@ export class RawDaemonConnection {
       if (newline === -1) break;
       const line = this.buffer.slice(0, newline);
       this.buffer = this.buffer.slice(newline + 1);
+      this.bufferedBytes = Math.max(0, this.bufferedBytes - Buffer.byteLength(line, 'utf8') - 1);
       if (!line.trim()) continue;
       let event: Record<string, unknown>;
       try {

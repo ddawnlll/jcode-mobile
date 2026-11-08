@@ -19,6 +19,7 @@ export interface AdapterConfig {
   maxFrameBytes: number;
   maxHistoryMessages: number;
   historyWindow: number;
+  maxHistoryBytes: number;
   logLevel: 'debug' | 'info' | 'warn';
   /** Test-only fault injection; disabled unless explicitly set. */
   faultAfterSend: boolean;
@@ -57,6 +58,7 @@ export function loadConfig(): AdapterConfig {
     maxFrameBytes: numberFrom(process.env.JCODE_ADAPTER_MAX_FRAME, 4 * 1024 * 1024),
     maxHistoryMessages: numberFrom(process.env.JCODE_ADAPTER_MAX_HISTORY, 5000),
     historyWindow: numberFrom(process.env.JCODE_ADAPTER_HISTORY_WINDOW, 60),
+    maxHistoryBytes: numberFrom(process.env.JCODE_ADAPTER_HISTORY_BYTES, 3 * 1024 * 1024),
     logLevel: (process.env.JCODE_ADAPTER_LOG as AdapterConfig['logLevel']) ?? 'info',
     faultAfterSend: process.env.JCODE_ADAPTER_FAULT === 'drop_after_send',
   };

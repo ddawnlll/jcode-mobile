@@ -45,13 +45,14 @@ The adapter speaks WebSocket to the phone and the daemon's Unix socket to JCode.
 git clone https://github.com/ddawnlll/jcode-mobile.git
 cd jcode-mobile/integration/jcode-adapter
 
+JCODE_ADAPTER_HOST=0.0.0.0 \
 JCODE_ADAPTER_PORT=7643 \
 JCODE_ADAPTER_TLS_CERT=/etc/jcode-mobile/fullchain.pem \
 JCODE_ADAPTER_TLS_KEY=/etc/jcode-mobile/privkey.pem \
 node src/main.ts
 ```
 
-Remote access must use TLS. A private tunnel such as Tailscale is fine, but do not expose a plain `ws://` gateway to the internet.
+This binds the adapter to all interfaces with TLS. Restrict the port with a firewall or put it behind a TLS reverse proxy. If you use a proxy or tunnel, bind `JCODE_ADAPTER_HOST=127.0.0.1` instead. Never expose plain `ws://` to the internet.
 
 ### 2. Mint a pairing code
 
@@ -74,7 +75,7 @@ The six-digit code is valid for five minutes. It is exchanged once for a device 
 **Android:** download the APK from [Releases](https://github.com/ddawnlll/jcode-mobile/releases/latest), then:
 
 ```sh
-adb install -r jcode-mobile-0.1.0-android-release.apk
+adb install -r jcode-mobile-0.1.1-android-release.apk
 ```
 
 The APK is a release build, but it is debug-signed for sideloading. It is not a Play Store artifact.
@@ -82,7 +83,7 @@ The APK is a release build, but it is debug-signed for sideloading. It is not a 
 **iOS Simulator:** download the zip, unzip it, and install it into a booted Simulator:
 
 ```sh
-unzip -o jcode-mobile-0.1.0-ios-simulator.app.zip -d /tmp/jcode-ios
+unzip -o jcode-mobile-0.1.1-ios-simulator.app.zip -d /tmp/jcode-ios
 xcrun simctl install booted /tmp/jcode-ios/JCodeMobile.app
 xcrun simctl launch booted com.jcodemobile.app
 ```
@@ -132,7 +133,7 @@ There is no password login after pairing. The device token does not expire. The 
 | Android | [APK](https://github.com/ddawnlll/jcode-mobile/releases/latest) | Release build, debug-signed, sideload with `adb install -r` |
 | iOS Simulator | [`.app.zip`](https://github.com/ddawnlll/jcode-mobile/releases/latest) | Simulator only, no signed IPA |
 
-Checksums and install commands are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md).
+Checksums and install commands are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md). Correctness fixes in this release: [`docs/REVIEW_FIXES.md`](docs/REVIEW_FIXES.md).
 
 ## Build from source
 
@@ -190,7 +191,7 @@ Continuity and daemon-death proofs:
 ```sh
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts
 bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts
-node --test integration/jcode-adapter/test/attach-contract.test.ts
+node --test integration/jcode-adapter/test/*.test.ts
 ```
 
 ## Verification

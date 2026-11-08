@@ -7,6 +7,7 @@ import { createServer as createHttpServer } from 'node:http';
 import type { IncomingMessage, ServerResponse, Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { AdapterConfig } from './config.ts';
@@ -19,6 +20,7 @@ import { newId, nowMs, readJson, writeJsonAtomic } from './util.ts';
 interface ClientState {
   id: string;
   deviceId: string;
+  token: string;
   socket: WebSocket;
   attachments: Map<string, Attachment>;
   greeted: boolean;
@@ -61,6 +63,7 @@ export class MobileAdapter {
   private readonly inventory = new Map<string, Record<string, unknown>>();
   private readonly ledger = new Map<string, Map<string, number>>();
   private readonly createCache = new Map<string, { sessionId: string; at: number; promise?: Promise<string> }>();
+  private readonly createCachePath: string;
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
   private ledgerTimer: NodeJS.Timeout | null = null;
@@ -70,10 +73,11 @@ export class MobileAdapter {
     this.config = config;
     this.registry = new DeviceRegistry(config);
     this.bridge = new ControlBridge(config);
+    this.createCachePath = join(config.stateDir, 'create-cache.json');
   }
 
   async start(): Promise<{ host: string; port: number }> {
-    await this.loadLedger();
+    await Promise.all([this.loadLedger(), this.loadCreateCache()]);
     const handler = (request: IncomingMessage, response: ServerResponse) => {
       this.handleHttp(request, response).catch((error: Error) => {
         log(this.config, 'warn', `http handler failed: ${error.message}`);
@@ -145,6 +149,7 @@ export class MobileAdapter {
       const client: ClientState = {
         id: newId('cli'),
         deviceId: device.id,
+        token: match[1],
         socket: ws,
         attachments: new Map(),
         greeted: false,
@@ -222,6 +227,17 @@ export class MobileAdapter {
       this.error(client, id, 'invalid_request', 'hello must be the first frame.');
       return;
     }
+    if (req !== 'hello' && req !== 'ping') {
+      // Revalidate the exact credential on every request. A socket opened
+      // before a revoke or re-pair must lose mutation authority immediately.
+      const current = await this.registry.validateTokenAsync(client.token);
+      if (!current) {
+        this.error(client, id, 'unauthorized', 'This device token is no longer authorized.');
+        client.socket.close(4401, 'unauthorized');
+        this.onClientClose(client);
+        return;
+      }
+    }
 
     switch (req) {
       case 'hello': {
@@ -235,7 +251,7 @@ export class MobileAdapter {
         this.reply(client, id, {
           ev: 'hello_ok',
           version: 1,
-          server: 'jcode-mobile-adapter/0.1.0',
+          server: 'jcode-mobile-adapter/0.1.1',
           capabilities: ADAPTER_CAPABILITIES,
         });
         return;
@@ -253,7 +269,7 @@ export class MobileAdapter {
         daemonVersion = this.observedDaemonVersion() ?? daemonVersion;
         this.reply(client, id, {
           ev: 'server_info',
-          server: 'jcode-mobile-adapter/0.1.0',
+          server: 'jcode-mobile-adapter/0.1.1',
           daemon_version: daemonVersion,
           continuation: true,
           capabilities: ADAPTER_CAPABILITIES,
@@ -608,6 +624,7 @@ export class MobileAdapter {
           const sessionId = typeof session?.session_id === 'string' ? session.session_id : '';
           if (sessionId) {
             this.createCache.set(requestKey, { sessionId, at: nowMs() });
+            void this.persistCreateCache();
             this.inventory.set(sessionId, session ?? { session_id: sessionId });
             client.attachments.set(sessionId, placeholder);
             resolveCreated(sessionId);
@@ -632,9 +649,35 @@ export class MobileAdapter {
     } catch (error) {
       placeholder.dispose();
       this.createCache.delete(requestKey);
+      void this.persistCreateCache();
       rejectCreated!(error as Error);
       this.error(client, id, 'daemon_unavailable', (error as Error).message);
     }
+  }
+
+  private async loadCreateCache(): Promise<void> {
+    const stored = await readJson<Record<string, { sessionId?: string; at?: number }>>(
+      this.createCachePath,
+      {},
+    );
+    const cutoff = nowMs() - CREATE_CACHE_TTL_MS;
+    for (const [key, value] of Object.entries(stored)) {
+      if (!value || typeof value.sessionId !== 'string' || typeof value.at !== 'number') continue;
+      if (value.at < cutoff) continue;
+      this.createCache.set(key, { sessionId: value.sessionId, at: value.at });
+    }
+  }
+
+  private async persistCreateCache(): Promise<void> {
+    const serializable: Record<string, { sessionId: string; at: number }> = {};
+    const cutoff = nowMs() - CREATE_CACHE_TTL_MS;
+    for (const [key, value] of this.createCache) {
+      if (!value.sessionId || value.at < cutoff) continue;
+      serializable[key] = { sessionId: value.sessionId, at: value.at };
+    }
+    await writeJsonAtomic(this.createCachePath, serializable).catch((error: Error) => {
+      log(this.config, 'warn', `create cache write failed: ${error.message}`);
+    });
   }
 
   private acceptedIds(sessionId: string): string[] {

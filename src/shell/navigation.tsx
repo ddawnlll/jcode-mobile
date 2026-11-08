@@ -19,14 +19,14 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   const profileId = useAppStore((state) => state.profileId);
-  const { colors } = useTheme();
+  const { colors, reduceMotion } = useTheme();
   return (
     <Stack.Navigator
       initialRouteName={profileId ? 'Sessions' : 'Connect'}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: colors.bg },
-        animation: 'slide_from_right',
+        animation: reduceMotion ? 'fade' : 'slide_from_right',
         gestureEnabled: true,
         fullScreenGestureEnabled: true,
       }}
@@ -37,7 +37,7 @@ export function RootNavigator() {
       <Stack.Screen
         name="ServerDetails"
         component={ServerDetailsScreen}
-        options={{ animation: 'slide_from_bottom' }}
+        options={{ animation: reduceMotion ? 'fade' : 'slide_from_bottom' }}
       />
     </Stack.Navigator>
   );

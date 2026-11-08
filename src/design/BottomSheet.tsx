@@ -30,6 +30,8 @@ export interface BottomSheetProps {
   onClose: () => void;
   /** Focus moves here when the sheet opens. */
   headingRef?: SheetHeadingRef;
+  /** Optional element that opened the sheet; focus returns here on close. */
+  returnFocusRef?: React.RefObject<React.ComponentRef<typeof View> | null>;
   children: React.ReactNode;
   /** Full height is used at large text sizes automatically. */
   initialFraction?: number;
@@ -48,6 +50,7 @@ export function BottomSheet({
   visible,
   onClose,
   headingRef,
+  returnFocusRef,
   children,
   initialFraction = geometry.sheetInitialFraction,
   testID,
@@ -67,24 +70,47 @@ export function BottomSheet({
       Keyboard.dismiss();
       setMounted(true);
       closing.current = false;
-      translateY.value = sheetHeight;
-      translateY.value = withTiming(0, {
-        duration: reduceMotion ? motion.reduced : motion.sheet,
-        easing: Easing.bezier(...motion.easeOut),
-      });
-      scrim.value = withTiming(1, { duration: reduceMotion ? motion.reduced : motion.sheet });
+      if (reduceMotion) {
+        // No traveling sheet under reduced motion: place it and crossfade.
+        translateY.value = 0;
+        scrim.value = withTiming(1, { duration: motion.reduced });
+      } else {
+        translateY.value = sheetHeight;
+        translateY.value = withTiming(0, {
+          duration: motion.sheet,
+          easing: Easing.bezier(...motion.easeOut),
+        });
+        scrim.value = withTiming(1, { duration: motion.sheet });
+      }
     } else if (mounted && !closing.current) {
       closing.current = true;
-      scrim.value = withTiming(0, { duration: reduceMotion ? motion.reduced : motion.disclosure });
-      translateY.value = withTiming(
-        sheetHeight,
-        { duration: reduceMotion ? motion.reduced : motion.disclosure },
-        (finished) => {
+      if (reduceMotion) {
+        translateY.value = 0;
+        scrim.value = withTiming(0, { duration: motion.reduced }, (finished) => {
           if (finished) runOnJS(setMounted)(false);
-        },
-      );
+        });
+      } else {
+        scrim.value = withTiming(0, { duration: motion.disclosure });
+        translateY.value = withTiming(
+          sheetHeight,
+          { duration: motion.disclosure },
+          (finished) => {
+            if (finished) runOnJS(setMounted)(false);
+          },
+        );
+      }
     }
   }, [visible, sheetHeight, reduceMotion, mounted, translateY, scrim]);
+
+  useEffect(() => {
+    if (visible) return;
+    const timer = setTimeout(() => {
+      const handle =
+        returnFocusRef?.current ? findNodeHandle(returnFocusRef.current) : null;
+      if (handle) AccessibilityInfo.setAccessibilityFocus(handle);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [visible, returnFocusRef]);
 
   useEffect(() => {
     if (!visible) return;
@@ -115,6 +141,10 @@ export function BottomSheet({
     .onEnd((event) => {
       const shouldDismiss = event.translationY > sheetHeight * 0.25 || event.velocityY > 900;
       if (shouldDismiss) {
+        if (reduceMotion) {
+          runOnJS(requestClose)();
+          return;
+        }
         translateY.value = withTiming(
           sheetHeight,
           { duration: reduceMotion ? motion.reduced : motion.disclosure },

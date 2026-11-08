@@ -20,6 +20,7 @@ cd ..
 
 mkdir -p artifacts
 APK="android/app/build/outputs/apk/release/app-release.apk"
-cp "$APK" artifacts/jcode-mobile-0.1.0-android-release.apk
-shasum -a 256 artifacts/jcode-mobile-0.1.0-android-release.apk | tee artifacts/jcode-mobile-0.1.0-android-release.apk.sha256
-ls -lh artifacts/jcode-mobile-0.1.0-android-release.apk
+VERSION="$(node -p "require('./package.json').version")"
+cp "$APK" "artifacts/jcode-mobile-$VERSION-android-release.apk"
+shasum -a 256 "artifacts/jcode-mobile-$VERSION-android-release.apk" | tee "artifacts/jcode-mobile-$VERSION-android-release.apk.sha256"
+ls -lh "artifacts/jcode-mobile-$VERSION-android-release.apk"

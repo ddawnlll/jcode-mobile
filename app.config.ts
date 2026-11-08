@@ -10,7 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'JCode Mobile',
   slug: 'jcode-mobile',
-  version: '0.1.0',
+  version: '0.1.1',
   orientation: 'portrait',
   scheme: 'jcodemobile',
   userInterfaceStyle: 'automatic',

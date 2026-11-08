@@ -90,3 +90,31 @@ describe('decodeFrame', () => {
     }
   });
 });
+
+
+describe('history recovery fields', () => {
+  it('retains daemon interruption and recovery evidence', () => {
+    const result = decodeFrame(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        ev: 'history',
+        session_id: 's1',
+        attachment_id: 'att_1',
+        messages: [],
+        base_index: 0,
+        total_messages: 0,
+        interrupted_at_attach: true,
+        recovery: {
+          continuation_message: 'Continue from the last completed step.',
+          reconnect_notice: 'The daemon restarted.',
+        },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok && result.frame.ev === 'history') {
+      expect(result.frame.interrupted_at_attach).toBe(true);
+      expect(result.frame.recovery?.continuation_message).toContain('Continue');
+      expect(result.frame.recovery?.reconnect_notice).toContain('restarted');
+    }
+  });
+});

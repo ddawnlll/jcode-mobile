@@ -74,7 +74,19 @@ function decodeSession(value: unknown): SessionInfo | null {
   };
 }
 
-export function decodeHistoryMessage(value: unknown, fallbackIndex: number): HistoryMessage | null {
+export function decodeRecovery(value: unknown): { continuation_message: string; reconnect_notice?: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const continuation = str(record.continuation_message);
+  if (!continuation) return undefined;
+  const notice = str(record.reconnect_notice);
+  return {
+    continuation_message: continuation.slice(0, 8192),
+    ...(notice ? { reconnect_notice: notice.slice(0, 2048) } : null),
+  };
+}
+
+function decodeHistoryMessage(value: unknown, fallbackIndex: number): HistoryMessage | null {
   const record = asRecord(value);
   if (!record) return null;
   const role = str(record.role);
@@ -241,6 +253,9 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           total_messages: total,
           tail_fingerprint: str(record.tail_fingerprint) ?? '',
           accepted_client_ids: stringArray(record.accepted_client_ids),
+          interrupted_at_attach: bool(record.interrupted_at_attach) ?? false,
+          ...(typeof record.has_older === 'boolean' ? { has_older: record.has_older } : null),
+          ...(decodeRecovery(record.recovery) ? { recovery: decodeRecovery(record.recovery) } : null),
           ...base,
         },
       };

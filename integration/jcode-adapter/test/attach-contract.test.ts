@@ -13,7 +13,7 @@ import test from 'node:test';
 import { Attachment } from '../src/attachment.ts';
 import type { AdapterConfig } from '../src/config.ts';
 
-function configFor(socketPath: string, stateDir: string): AdapterConfig {
+function configFor(socketPath: string, stateDir: string, overrides: Partial<AdapterConfig> = {}): AdapterConfig {
   return {
     host: '127.0.0.1',
     port: 0,
@@ -28,8 +28,10 @@ function configFor(socketPath: string, stateDir: string): AdapterConfig {
     maxFrameBytes: 1024 * 1024,
     maxHistoryMessages: 100,
     historyWindow: 10,
+    maxHistoryBytes: 3 * 1024 * 1024,
     logLevel: 'warn',
     faultAfterSend: false,
+    ...overrides,
   };
 }
 
@@ -207,6 +209,114 @@ test('retry rollback clears provisional text and reports the retry phase', async
     assert.match(String(phase!.phase), /retrying \(1\/3\)/);
     const types = frames().map((frame) => frame.type);
     assert.ok(!types.includes('cancel'), 'retry must not cancel the turn');
+    attachment.dispose();
+  });
+});
+
+
+test('ACK alone does not claim acceptance, and a later rejection is correlated', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_ack_1',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_ack_1', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_ack_1', messages: [] });
+    await started;
+
+    attachment.sendMessage('hello', 'cm_1');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const messageFrame = frames().find((frame) => frame.type === 'message');
+    assert.ok(messageFrame);
+    const messageId = messageFrame!.id as number;
+
+    send({ type: 'ack', id: messageId });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(
+      !emitted.some((frame) => frame.ev === 'message_accepted'),
+      'raw ACK must not be emitted as acceptance',
+    );
+
+    send({ type: 'error', id: messageId, message: 'Already processing a message' });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const rejected = emitted.find((frame) => frame.ev === 'send_rejected');
+    assert.ok(rejected, 'rejection after ACK is correlated to the send');
+    assert.equal(rejected!.client_message_id, 'cm_1');
+    attachment.dispose();
+  });
+});
+
+test('processing state promotes an ACKed message to accepted', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const accepted: string[] = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_ack_2',
+      onAccepted: (id) => accepted.push(id),
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_ack_2', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_ack_2', messages: [] });
+    await started;
+
+    attachment.sendMessage('hello', 'cm_2');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const messageFrame = frames().find((frame) => frame.type === 'message');
+    assert.ok(messageFrame);
+    send({ type: 'ack', id: messageFrame!.id });
+    send({ type: 'state', id: 9, session_id: 'session_ack_2', is_processing: true });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    assert.deepEqual(accepted, ['cm_2']);
+    const acceptedFrame = emitted.find((frame) => frame.ev === 'message_accepted');
+    assert.ok(acceptedFrame);
+    assert.equal(acceptedFrame!.client_message_id, 'cm_2');
+    attachment.dispose();
+  });
+});
+
+test('history uses absolute indexes once and respects the outbound byte budget', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir, {
+        maxHistoryMessages: 3,
+        historyWindow: 2,
+        maxHistoryBytes: 4096,
+      }),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_hist_1',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_hist_1', is_processing: false, message_count: 5 });
+    send({
+      type: 'history',
+      id: 3,
+      session_id: 'session_hist_1',
+      messages: Array.from({ length: 5 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: 'x'.repeat(600),
+      })),
+    });
+    await started;
+    const history = emitted.find((frame) => frame.ev === 'history');
+    assert.ok(history);
+    assert.equal(history!.base_index, 3);
+    assert.equal(history!.total_messages, 5);
+    const messages = history!.messages as Array<{ index: number; content: string }>;
+    assert.deepEqual(messages.map((message) => message.index), [3, 4]);
+    assert.ok(JSON.stringify(messages).length < 4096);
     attachment.dispose();
   });
 });

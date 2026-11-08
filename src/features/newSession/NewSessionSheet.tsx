@@ -5,7 +5,7 @@ import { BottomSheet } from '../../design/BottomSheet';
 import { Button, Divider, Field, TextAction } from '../../design/controls';
 import { ChevronRightIcon, FolderIcon } from '../../design/icons';
 import { useTheme } from '../../design/theme';
-import { space } from '../../design/tokens';
+import { space, target } from '../../design/tokens';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
 import { useAppStore } from '../../core/state/store';
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   },
   recent: { gap: space.xxs },
   recentRow: {
-    minHeight: 44,
+    minHeight: target,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs,

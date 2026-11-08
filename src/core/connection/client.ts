@@ -24,6 +24,7 @@ interface PendingRequest {
   resolve: (frame: ServerEvent & { reply_to?: number }) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  suppressEvent?: boolean;
 }
 
 export function httpBase(endpoint: ServerEndpoint): string {
@@ -94,7 +95,7 @@ export class MobileClient {
 
       socket.onopen = () => {
         this.setState('open');
-        this.request({ req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.0' })
+        this.request({ req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.1' })
           .then((frame) => {
             if (settled) return;
             if (frame.ev !== 'hello_ok') {
@@ -127,6 +128,7 @@ export class MobileClient {
             this.pending.delete(frame.reply_to);
             clearTimeout(pending.timer);
             pending.resolve(frame);
+            if (pending.suppressEvent) return;
           }
         }
         this.events.onEvent(frame);
@@ -178,6 +180,7 @@ export class MobileClient {
   request(
     request: Record<string, unknown>,
     timeoutMs = 15_000,
+    options: { suppressEvent?: boolean } = {},
   ): Promise<ServerEvent & { reply_to?: number }> {
     if (!this.socket || this.state !== 'open') {
       return Promise.reject(new Error('The connection is not open.'));
@@ -188,7 +191,7 @@ export class MobileClient {
         this.pending.delete(id);
         reject(new Error('The server did not answer in time.'));
       }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, suppressEvent: options.suppressEvent });
       try {
         this.socket!.send(encodeFrame(id, request));
       } catch (error) {

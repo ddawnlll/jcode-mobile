@@ -8,7 +8,7 @@ Updated: 2026-11-08
 | --- | --- |
 | Branch | `main` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.1.0 |
+| App version | 0.1.1 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -36,8 +36,8 @@ Updated: 2026-11-08
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `035e3e22760b256190defce1296f970c3496616fa47afce0334bb32139fc3269` |
-| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `13e0b77caef980a461aff9188a909a85504470b0317e3804870b761113d67600` |
+| `artifacts/jcode-mobile-0.1.1-ios-simulator.app.zip` | 24 MiB | `7ee0afd5b15cab79148dffe713965fe74df71a9cb2f77aab245d2d69858ea968` |
+| `artifacts/jcode-mobile-0.1.1-android-release.apk` | 60 MiB | `0e1e97092788d399949a8bebe21913f8f63ba72dc21563b76b61c5895d7714e9` |
 
 The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
 
@@ -46,8 +46,8 @@ The APK is a release build (embedded Hermes bundle, debug signing for local inst
 ```sh
 npx tsc --noEmit            # pass
 npx eslint .                # pass, no warnings
-npm test                    # 33/33 pass
-node --test integration/jcode-adapter/test/attach-contract.test.ts   # 3/3 pass
+npm test                    # 34/34 pass
+node --test integration/jcode-adapter/test/*.test.ts   # 7/7 pass
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts  # PASS
 bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts # PASS
 npx expo run:ios --device "iPhone 17 Pro"  # dev build + launch, pass

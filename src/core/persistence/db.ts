@@ -106,6 +106,7 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
         client_message_id TEXT NOT NULL,
         content TEXT NOT NULL,
         state TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'message',
         error TEXT,
         created_at INTEGER NOT NULL,
         PRIMARY KEY (server_id, session_id, client_message_id)
@@ -116,6 +117,11 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
       );
       PRAGMA user_version = 1;
     `);
+  }
+  try {
+    await db.execAsync("ALTER TABLE pending_sends ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'");
+  } catch {
+    // Existing database already has the column.
   }
   database = db;
   return db;
@@ -131,7 +137,7 @@ export async function openDatabaseForTests(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE messages (server_id TEXT NOT NULL, session_id TEXT NOT NULL, idx INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, stats_json TEXT, bytes INTEGER NOT NULL, cached_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id, idx));
     CREATE TABLE drafts (server_id TEXT NOT NULL, session_id TEXT NOT NULL, content TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id));
     CREATE TABLE bookmarks (server_id TEXT NOT NULL, session_id TEXT NOT NULL, message_index INTEGER NOT NULL, fingerprint TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id));
-    CREATE TABLE pending_sends (server_id TEXT NOT NULL, session_id TEXT NOT NULL, client_message_id TEXT NOT NULL, content TEXT NOT NULL, state TEXT NOT NULL, error TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id, client_message_id));
+    CREATE TABLE pending_sends (server_id TEXT NOT NULL, session_id TEXT NOT NULL, client_message_id TEXT NOT NULL, content TEXT NOT NULL, state TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'message', error TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id, client_message_id));
     CREATE TABLE prefs (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
   `);
   database = db;
@@ -459,6 +465,7 @@ export interface PendingSendRow {
   client_message_id: string;
   content: string;
   state: string;
+  kind?: 'message' | 'guidance';
   error: string | null;
   created_at: number;
 }
@@ -469,15 +476,16 @@ export async function savePendingSend(
   row: PendingSendRow,
 ): Promise<void> {
   await db().runAsync(
-    `INSERT INTO pending_sends (server_id, session_id, client_message_id, content, state, error, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO pending_sends (server_id, session_id, client_message_id, content, state, kind, error, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(server_id, session_id, client_message_id) DO UPDATE SET
-       state = excluded.state, error = excluded.error`,
+       state = excluded.state, kind = excluded.kind, error = excluded.error`,
     serverId,
     sessionId,
     row.client_message_id,
     row.content,
     row.state,
+    row.kind ?? 'message',
     row.error,
     row.created_at,
   );
@@ -485,7 +493,7 @@ export async function savePendingSend(
 
 export async function listPendingSends(serverId: string, sessionId: string): Promise<PendingSendRow[]> {
   return db().getAllAsync<PendingSendRow>(
-    'SELECT client_message_id, content, state, error, created_at FROM pending_sends WHERE server_id = ? AND session_id = ? ORDER BY created_at ASC',
+    'SELECT client_message_id, content, state, kind, error, created_at FROM pending_sends WHERE server_id = ? AND session_id = ? ORDER BY created_at ASC',
     serverId,
     sessionId,
   );

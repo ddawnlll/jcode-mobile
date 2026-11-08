@@ -1,4 +1,6 @@
-# Verification record
+# Verification
+
+> v0.1.1 is a corrective release for the independent review of `a632a6a`. The finding-by-finding response is in [`REVIEW_FIXES.md`](REVIEW_FIXES.md). Native evidence below was collected on v0.1.0/0.1.1 staging and remains representative; new regression tests run in CI.
 
 Updated: 2026-11-08. Evidence is only recorded from commands that actually ran and outputs that exist.
 
@@ -10,8 +12,8 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | --- | --- | --- | --- |
 | TypeScript strict | PASS | `npx tsc --noEmit` | exit 0, no diagnostics |
 | ESLint | PASS | `npx eslint .` | exit 0, 2 style warnings (unused pattern; no errors) |
-| Unit + RNTL tests | PASS | `npm test` | 5 suites, 33 tests passed |
-| Adapter contract tests | PASS | `node --test integration/jcode-adapter/test/attach-contract.test.ts` | 3/3 pass; continuation flag, exact target, no destructive dispose frames, and retry rollback clears provisional text |
+| Unit + RNTL tests | PASS | `npm test` | 5 suites, 34 tests passed |
+| Adapter contract tests | PASS | `node --test integration/jcode-adapter/test/*.test.ts` | 7/7 pass; ACK/ingestion, continuation, indexes/bytes, split UTF-8, retry rollback |
 | iOS dev build | PASS | `npx expo run:ios --device "iPhone 17 Pro"` | BUILD SUCCEEDED, launched |
 | iOS Simulator release `.app` | PASS | `bash scripts/build-ios-simulator.sh` | BUILD SUCCEEDED; `main.jsbundle` present; zip 24 MiB |
 | Android release APK | PASS | `bash scripts/build-android-release.sh`; installed, launched, paired, created sessions, archived/undone, revoked/re-paired on the API 36 emulator; SHA-256 in BUILD_STATE |

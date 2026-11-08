@@ -29,6 +29,9 @@ export interface AttachmentOptions {
 interface PendingMessage {
   clientMessageId: string;
   sentAt: number;
+  /** The daemon has received the frame; it has not necessarily ingested it. */
+  status: 'pending' | 'acked';
+  turnId?: number;
 }
 
 interface ToolState {
@@ -39,6 +42,7 @@ interface ToolState {
 
 const MAX_TOOL_INPUT_BYTES = 256 * 1024;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
+const MAX_HISTORY_MESSAGE_BYTES = 256 * 1024;
 const MAX_RECOVERY_MESSAGE_BYTES = 8 * 1024;
 const BOOTSTRAP_QUEUE_LIMIT = 2000;
 
@@ -48,6 +52,7 @@ export class Attachment {
   private readonly options: AttachmentOptions;
   private readonly connection: RawDaemonConnection;
   private readonly pending = new Map<number, PendingMessage>();
+  private readonly turnByRequest = new Map<number, number>();
   private readonly tools = new Map<string, ToolState>();
   private nextLegacyId = 1;
   private history: Array<{ index: number; role: string; content: string; response_stats?: unknown }> = [];
@@ -214,22 +219,41 @@ export class Attachment {
   private emitHistory(): void {
     if (!this.ready) return;
     const window = this.options.config.historyWindow;
-    const total = this.historyTotal;
     const baseIndex = Math.max(0, this.history.length - window);
-    const slice = this.history.slice(baseIndex);
+    const bounded = this.boundHistory(this.history.slice(baseIndex), this.historyOffset + baseIndex);
     const interrupted = this.lastHistoryFlags.interrupted;
     const recovery = this.lastHistoryFlags.recovery;
     this.emit({
       ev: 'history',
       ...this.identity(),
-      messages: slice,
-      base_index: this.historyOffset + baseIndex,
-      total_messages: total + this.historyOffset,
+      messages: bounded.messages,
+      base_index: bounded.baseIndex,
+      total_messages: this.historyTotal,
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
       ...(interrupted ? { interrupted_at_attach: true } : null),
       ...(recovery ? { recovery } : null),
     });
+  }
+
+  /** Enforce an outgoing UTF-8 budget, independent of message count. */
+  private boundHistory(
+    messages: Array<{ index: number; role: string; content: string; response_stats?: unknown }>,
+    baseIndex: number,
+  ): { messages: typeof messages; baseIndex: number } {
+    const budget = this.options.config.maxHistoryBytes;
+    let bytes = 0;
+    let start = messages.length;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = { ...messages[index] };
+      const limited = truncate(message.content, MAX_HISTORY_MESSAGE_BYTES);
+      message.content = limited.truncated ? `${limited.text}\n[truncated by adapter]` : limited.text;
+      const size = Buffer.byteLength(JSON.stringify(message), 'utf8') + 1;
+      if (start < messages.length && bytes + size > budget) break;
+      bytes += size;
+      start = index;
+    }
+    return { messages: messages.slice(start), baseIndex: baseIndex + start };
   }
 
   private lastHistoryFlags: {
@@ -274,6 +298,7 @@ export class Attachment {
         if (sessionId) this.sessionId = sessionId;
         const processing = event.is_processing === true;
         this.status = processing ? 'working' : 'ready';
+        if (processing && this.ready) this.promoteAcked();
         if (event.id === this.pendingStateId) this.markReady();
         else if (this.ready) this.emitStatus();
         return;
@@ -292,17 +317,15 @@ export class Attachment {
         const id = typeof event.id === 'number' ? event.id : -1;
         const pending = this.pending.get(id);
         if (!pending) return;
-        this.pending.delete(id);
-        if (this.stoppedThisTurn) this.finishTurn();
-        const accepted = {
-          ev: 'message_accepted',
-          ...this.identity(),
-          client_message_id: pending.clientMessageId,
-          turn_id: this.turnId,
-        };
-        this.options.onAccepted?.(pending.clientMessageId);
-        if (this.ready && this.historyReceived) this.options.emit(accepted);
-        else this.queue(accepted);
+        // The pinned daemon writes ACK before dispatching the message and can
+        // reject it afterwards. ACK is transport receipt, not ingestion.
+        pending.status = 'acked';
+        pending.turnId = pending.turnId ?? this.turnId;
+        this.turnByRequest.set(id, pending.turnId);
+        if (this.turnByRequest.size > 200) {
+          const oldest = this.turnByRequest.keys().next().value;
+          if (typeof oldest === 'number') this.turnByRequest.delete(oldest);
+        }
         this.status = 'working';
         this.stoppedThisTurn = false;
         this.emitStatus();
@@ -390,6 +413,7 @@ export class Attachment {
         const callId = typeof event.id === 'string' ? event.id : '';
         const name = typeof event.name === 'string' ? event.name : 'tool';
         if (!callId) return;
+        this.promoteAcked();
         this.tools.set(callId, { name, input: '', startedAt: Date.now() });
         this.currentToolCallId = callId;
         this.push({ ev: 'tool_start', ...this.identity(), turn_id: this.turnId, call_id: callId, name });
@@ -482,15 +506,18 @@ export class Attachment {
         return;
       }
       case 'done': {
+        const id = typeof event.id === 'number' ? event.id : -1;
+        const turnId = this.turnByRequest.get(id) ?? this.turnId;
         this.status = 'ready';
         if (this.stoppedThisTurn) {
           // `done` is the terminal confirmation of the stopped turn, not a
           // successful completion. Keep Stopped visible and close the turn.
-          this.finishTurn();
+          this.finishTurn(turnId);
           return;
         }
-        this.push({ ev: 'turn_done', ...this.identity(), turn_id: this.turnId });
-        this.finishTurn();
+        this.promoteAcked();
+        this.push({ ev: 'turn_done', ...this.identity(), turn_id: turnId });
+        this.finishTurn(turnId);
         this.requestHistory();
         return;
       }
@@ -597,16 +624,38 @@ export class Attachment {
     this.stoppedFallback.unref?.();
   }
 
-  private finishTurn(): void {
+  private finishTurn(completedTurnId?: number): void {
     if (this.stoppedFallback) {
       clearTimeout(this.stoppedFallback);
       this.stoppedFallback = null;
     }
-    this.turnId += 1;
+    const completed = completedTurnId ?? this.turnId;
+    if (completed >= this.turnId) this.turnId = completed + 1;
     this.stoppedThisTurn = false;
     this.tools.clear();
     this.currentToolCallId = null;
     this.emitStatus();
+  }
+
+  /**
+   * Promote acked messages only after the daemon shows processing. This is the
+   * first correlated evidence that the prompt was ingested, not just received.
+   */
+  private promoteAcked(): void {
+    for (const [requestId, pending] of [...this.pending]) {
+      if (pending.status !== 'acked') continue;
+      this.pending.delete(requestId);
+      const turnId = pending.turnId ?? this.turnId;
+      const accepted = {
+        ev: 'message_accepted',
+        ...this.identity(),
+        client_message_id: pending.clientMessageId,
+        turn_id: turnId,
+      };
+      this.options.onAccepted?.(pending.clientMessageId);
+      if (this.ready && this.historyReceived) this.options.emit(accepted);
+      else this.queue(accepted);
+    }
   }
 
   private onHistory(event: Record<string, unknown>): void {
@@ -654,11 +703,9 @@ export class Attachment {
     const total = parsed.length;
     const keep = Math.min(total, this.options.config.maxHistoryMessages);
     this.historyOffset = total - keep;
-    this.history = parsed.slice(this.historyOffset).map((message) => ({
-      ...message,
-      index: message.index + this.historyOffset,
-    }));
-    this.historyTotal = keep;
+    // Parsed indexes are already absolute. Do not add the offset twice.
+    this.history = parsed.slice(this.historyOffset);
+    this.historyTotal = total;
     this.lastHistoryFlags = {
       interrupted: event.was_interrupted === true,
       recovery: parseRecovery(event.reload_recovery),
@@ -686,23 +733,25 @@ export class Attachment {
     const start = Math.max(0, this.historyOffset);
     const endAbsolute = Math.min(beforeIndex, this.historyOffset + this.history.length);
     const startAbsolute = Math.max(start, endAbsolute - limit);
-    const slice = this.history.slice(startAbsolute - this.historyOffset, endAbsolute - this.historyOffset);
+    const page = this.history.slice(startAbsolute - this.historyOffset, endAbsolute - this.historyOffset);
+    const bounded = this.boundHistory(page, startAbsolute);
     return {
       ev: 'history',
       session_id: this.sessionId,
       attachment_id: this.attachmentId,
-      messages: slice,
-      base_index: startAbsolute,
-      total_messages: this.historyOffset + this.history.length,
+      messages: bounded.messages,
+      base_index: bounded.baseIndex,
+      total_messages: this.historyTotal,
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
+      has_older: bounded.baseIndex > 0,
     };
   }
 
   sendMessage(content: string, clientMessageId: string): { accepted: boolean } {
     if (!this.connection.isOpen) return { accepted: false };
     const id = this.nextId();
-    this.pending.set(id, { clientMessageId, sentAt: Date.now() });
+    this.pending.set(id, { clientMessageId, sentAt: Date.now(), status: 'pending' });
     this.connection.send({ type: 'message', id, content });
     if (this.options.config.faultAfterSend) {
       // Deterministic A05 harness: drop the attachment after the prompt is

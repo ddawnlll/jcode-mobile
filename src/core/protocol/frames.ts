@@ -159,6 +159,7 @@ export type ServerEvent =
       accepted_client_ids: string[];
       /** True when the persisted session was interrupted mid-generation. */
       interrupted_at_attach?: boolean;
+      has_older?: boolean;
       /** Server-owned recovery intent, when the daemon reports one. */
       recovery?: { continuation_message: string; reconnect_notice?: string };
     }

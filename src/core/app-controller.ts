@@ -67,7 +67,7 @@ class AppControllerImpl {
   private reconnectAttempt = 0;
   private inventoryTimer: ReturnType<typeof setInterval> | null = null;
   private streamTimer: ReturnType<typeof setTimeout> | null = null;
-  private streamBuffer = '';
+  private streamText = '';
   private draftTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingDraft: string | null = null;
   private lastTurnId = 0;
@@ -79,6 +79,10 @@ class AppControllerImpl {
   private firstVisit = false;
   private creating: Promise<string> | null = null;
   private connectPromise: Promise<void> | null = null;
+  private clientGeneration = 0;
+  private expectedAttachSessionId: string | null = null;
+  private openSequence = 0;
+  private continuationConfirmed = false;
   private lastSessionRefresh = 0;
   private serverInfoObserved = false;
 
@@ -108,7 +112,7 @@ class AppControllerImpl {
       const lastServerId = await getPref(LAST_SERVER);
       const profile = servers.find((server) => server.id === lastServerId) ?? servers[0] ?? null;
       if (profile) {
-        await this.activateProfile(profile, { restore: true });
+        await this.activateProfile(profile, { restore: true, deferConnect: true });
       } else {
         store.setState({ bootstrap: 'ready' });
       }
@@ -276,7 +280,7 @@ class AppControllerImpl {
     return 7643;
   }
 
-  async activateProfile(profile: ServerProfileRow, options: { restore: boolean }): Promise<void> {
+  async activateProfile(profile: ServerProfileRow, options: { restore: boolean; deferConnect?: boolean }): Promise<void> {
     this.clearReconnect();
     this.client?.close();
     this.client = null;
@@ -307,7 +311,11 @@ class AppControllerImpl {
       this.setConnectionState('pair_again', 'This phone is no longer authorized.');
       return;
     }
-    await this.connectNow({ immediate: true });
+    if (options.deferConnect) {
+      void this.connectNow({ immediate: true });
+    } else {
+      await this.connectNow({ immediate: true });
+    }
     if (options.restore) {
       const lastSession = await getPref(LAST_SESSION);
       if (lastSession && cached.some((session) => session.session_id === lastSession)) {
@@ -331,6 +339,10 @@ class AppControllerImpl {
     }
     this.clearReconnect();
     this.attachedSessionId = null;
+    this.expectedAttachSessionId = null;
+    this.continuationConfirmed = false;
+    const generation = ++this.clientGeneration;
+    this.client?.close();
     const hadContent = store.get().conversation.messages.length > 0;
     this.setConnectionState(hadContent ? 'reconnecting' : 'connecting');
     this.connectPromise = (async () => {
@@ -339,8 +351,12 @@ class AppControllerImpl {
           { host: this.profile!.host, port: this.profile!.port, tls: this.profile!.tls === 1 },
           this.token!,
           {
-            onEvent: (frame) => this.onFrame(frame),
+            onEvent: (frame) => {
+              if (generation !== this.clientGeneration) return;
+              this.onFrame(frame);
+            },
             onState: (state) => {
+              if (generation !== this.clientGeneration) return;
               if (state === 'closed' && this.client === client) {
                 this.client = null;
                 this.onTransportClosed();
@@ -350,6 +366,10 @@ class AppControllerImpl {
         );
         this.client = client;
         await client.connect();
+        if (generation !== this.clientGeneration || this.client !== client) {
+          client.close();
+          return;
+        }
         this.reconnectAttempt = 0;
         const hello = client.hello;
         const capabilities = hello && hello.ev === 'hello_ok' ? hello.capabilities : [];
@@ -384,6 +404,7 @@ class AppControllerImpl {
         }
         void this.refreshServerInfo();
       } catch (error) {
+        if (generation !== this.clientGeneration) return;
         this.client = null;
         await this.classifyFailure(errorMessage(error));
       } finally {
@@ -397,9 +418,17 @@ class AppControllerImpl {
     const endpoint = this.endpoint();
     if (endpoint && this.token) {
       try {
-        const response = await fetch(`${httpBase(endpoint)}/whoami`, {
-          headers: { authorization: `Bearer ${this.token}` },
-        });
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4_000);
+        let response: Response;
+        try {
+          response = await fetch(`${httpBase(endpoint)}/whoami`, {
+            headers: { authorization: `Bearer ${this.token}` },
+            signal: controller.signal,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
         if (response.status === 401) {
           this.setConnectionState('pair_again', 'This phone is no longer authorized.');
           return;
@@ -514,12 +543,16 @@ class AppControllerImpl {
     const state = store.get();
     const limit = state.inventory.limit;
     const includeArchived = options.includeArchived ?? state.inventory.includeArchived;
+    const client = this.client;
+    const generation = this.clientGeneration;
+    const profileId = this.profile?.id;
     store.setState((current) => ({ inventory: { ...current.inventory, loading: true, error: null } }));
     try {
-      const frame = await this.client.request(
+      const frame = await client.request(
         { req: 'list_sessions', limit, include_archived: includeArchived },
         20_000,
       );
+      if (generation !== this.clientGeneration || this.profile?.id !== profileId) return;
       if (frame.ev !== 'sessions') throw new Error('Unexpected inventory reply.');
       this.lastSessionRefresh = Date.now();
       store.setState((current) => ({
@@ -661,8 +694,11 @@ class AppControllerImpl {
       return { ok: false, error: 'Open the session before renaming it.' };
     }
     if (sessionId !== this.attachedSessionId) return { ok: false, error: 'Open the session before renaming it.' };
+    const client = this.client;
+    const generation = this.clientGeneration;
     try {
-      const frame = await this.client.request({ req: 'rename_session', session_id: sessionId, title }, 10_000);
+      const frame = await client.request({ req: 'rename_session', session_id: sessionId, title }, 10_000);
+      if (generation !== this.clientGeneration) return { ok: false, error: 'The server changed.' };
       if (frame.ev !== 'ok') throw new Error(frame.ev === 'error' ? frame.message : 'Rename failed.');
       return { ok: true };
     } catch (error) {
@@ -675,8 +711,14 @@ class AppControllerImpl {
   async openSession(session: SessionInfo): Promise<void> {
     if (!this.profile) return;
     const serverId = this.profile.id;
+    const sequence = ++this.openSequence;
+    const previousSession = store.get().conversation.sessionId;
+    if (previousSession && previousSession !== session.session_id && this.client?.isOpen) {
+      // Detach the old stream without cancelling its remote turn.
+      this.client.sendFireAndForget({ req: 'detach_session', session_id: previousSession });
+    }
     this.flushDraft();
-    this.streamBuffer = '';
+    this.streamText = '';
     if (this.streamTimer) clearTimeout(this.streamTimer);
     this.streamTimer = null;
     this.attachedSessionId = null;
@@ -686,8 +728,10 @@ class AppControllerImpl {
 
     const cached = await loadCachedMessages(serverId, session.session_id, 120);
     const bookmark = await getBookmark(serverId, session.session_id);
+    if (sequence !== this.openSequence || this.profile?.id !== serverId) return;
     this.firstVisit = bookmark === null;
     const pending = await listPendingSends(serverId, session.session_id);
+    if (sequence !== this.openSequence || this.profile?.id !== serverId) return;
     const delivery: DeliveryRecord[] = pending.map((row) => ({
       clientMessageId: row.client_message_id,
       content: row.content,
@@ -698,9 +742,14 @@ class AppControllerImpl {
             ? 'rejected'
             : row.state === 'unconfirmed'
               ? 'unconfirmed'
-              : 'unconfirmed',
+              : row.state === 'queued'
+                ? 'queued'
+                : row.state === 'added'
+                  ? 'added'
+                  : 'unconfirmed',
       error: row.error ?? undefined,
       createdAt: row.created_at,
+      guidance: row.kind === 'guidance',
     }));
     store.setState({
       conversation: resetConversation({
@@ -731,15 +780,20 @@ class AppControllerImpl {
         },
       }),
     });
-    await this.attachSession(session.session_id);
+    // Render the cached conversation now; attach reconciles in the background.
+    void this.attachSession(session.session_id);
   }
 
   async attachSession(sessionId: string): Promise<void> {
-    if (!this.client?.isOpen) return;
+    const client = this.client;
+    if (!client?.isOpen) return;
     if (this.attachedSessionId === sessionId) return;
+    const generation = this.clientGeneration;
     this.attachedSessionId = sessionId;
+    this.expectedAttachSessionId = sessionId;
     try {
-      const frame = await this.client.request({ req: 'attach_session', session_id: sessionId }, 20_000);
+      const frame = await client.request({ req: 'attach_session', session_id: sessionId }, 20_000);
+      if (generation !== this.clientGeneration || this.client !== client) return;
       if (frame.ev === 'error') {
         this.attachedSessionId = null;
         store.setState((state) => ({
@@ -747,6 +801,7 @@ class AppControllerImpl {
         }));
       }
     } catch (error) {
+      if (generation !== this.clientGeneration || this.client !== client) return;
       this.attachedSessionId = null;
       store.setState((state) => ({
         conversation: { ...state.conversation, lastError: errorMessage(error) },
@@ -828,6 +883,9 @@ class AppControllerImpl {
     if (state.connection.state !== 'current' && state.connection.state !== 'reconciling') {
       return { ok: false, reason: 'Reconnect to send.' };
     }
+    if (!this.continuationConfirmed || !state.connection.capabilities.includes('mobile_continuation')) {
+      return { ok: false, reason: 'This server does not support safe continuation.' };
+    }
     if (state.conversation.execution.kind === 'working') return { ok: true };
     if (this.unresolvedSend()) return { ok: false, reason: 'Waiting for the server to accept your last message.' };
     const unconfirmed = state.conversation.delivery.find((record) => record.state === 'unconfirmed');
@@ -846,6 +904,14 @@ class AppControllerImpl {
     const gate = this.canSend();
     if (!gate.ok) return { ok: false, error: gate.reason };
 
+    const profileId = this.profile.id;
+    const sessionId = conversation.sessionId;
+    const client = this.client;
+    const generation = this.clientGeneration;
+    const owns = () =>
+      generation === this.clientGeneration &&
+      this.profile?.id === profileId &&
+      store.get().conversation.sessionId === sessionId;
     const clientMessageId = newClientId('msg');
     const record: DeliveryRecord = {
       clientMessageId,
@@ -854,27 +920,37 @@ class AppControllerImpl {
       createdAt: Date.now(),
     };
     this.addDelivery(record);
-    await setDraft(this.profile.id, conversation.sessionId, '');
-    await savePendingSend(this.profile.id, conversation.sessionId, {
+    await setDraft(profileId, sessionId, '');
+    await savePendingSend(profileId, sessionId, {
       client_message_id: clientMessageId,
       content: trimmed,
       state: 'sending',
       error: null,
       created_at: record.createdAt,
     });
+    if (!owns() || this.client !== client) {
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientMessageId,
+        content: trimmed,
+        state: 'unconfirmed',
+        error: 'The server changed before this message was sent.',
+        created_at: record.createdAt,
+      });
+      return { ok: false, error: 'The server changed before this message was sent.' };
+    }
     try {
-      const frame = await this.client.request(
+      const frame = await client.request(
         {
           req: 'send_message',
-          session_id: conversation.sessionId,
+          session_id: sessionId,
           content: trimmed,
           client_message_id: clientMessageId,
         },
         15_000,
       );
       if (frame.ev === 'error') {
-        this.updateDelivery(clientMessageId, { state: 'rejected', error: frame.message });
-        await savePendingSend(this.profile.id, conversation.sessionId, {
+        if (owns()) this.updateDelivery(clientMessageId, { state: 'rejected', error: frame.message });
+        await savePendingSend(profileId, sessionId, {
           client_message_id: clientMessageId,
           content: trimmed,
           state: 'rejected',
@@ -883,8 +959,8 @@ class AppControllerImpl {
         });
         return { ok: false, error: frame.message };
       }
-      this.updateDelivery(clientMessageId, { state: 'sent_to_server' });
-      await savePendingSend(this.profile.id, conversation.sessionId, {
+      if (owns()) this.updateDelivery(clientMessageId, { state: 'sent_to_server' });
+      await savePendingSend(profileId, sessionId, {
         client_message_id: clientMessageId,
         content: trimmed,
         state: 'sent_to_server',
@@ -894,11 +970,13 @@ class AppControllerImpl {
       return { ok: true };
     } catch {
       // The frame may or may not have reached the server: never auto-resend.
-      this.updateDelivery(clientMessageId, {
-        state: 'unconfirmed',
-        error: 'Delivery unconfirmed. Check the conversation before sending again.',
-      });
-      await savePendingSend(this.profile.id, conversation.sessionId, {
+      if (owns()) {
+        this.updateDelivery(clientMessageId, {
+          state: 'unconfirmed',
+          error: 'Delivery unconfirmed. Check the conversation before sending again.',
+        });
+      }
+      await savePendingSend(profileId, sessionId, {
         client_message_id: clientMessageId,
         content: trimmed,
         state: 'unconfirmed',
@@ -914,29 +992,83 @@ class AppControllerImpl {
     if (!this.profile || !conversation.sessionId || !this.client?.isOpen) {
       return { ok: false, error: 'Reconnect to add an instruction.' };
     }
+    if (
+      !this.continuationConfirmed ||
+      !store.get().connection.capabilities.includes('mobile_continuation')
+    ) {
+      return { ok: false, error: 'This server does not support safe continuation.' };
+    }
+    const profileId = this.profile.id;
+    const sessionId = conversation.sessionId;
+    const client = this.client;
+    const generation = this.clientGeneration;
+    const owns = () =>
+      generation === this.clientGeneration &&
+      this.profile?.id === profileId &&
+      store.get().conversation.sessionId === sessionId;
     const clientId = newClientId('guid');
+    const createdAt = Date.now();
     this.addDelivery({
       clientMessageId: clientId,
       content,
       state: 'sending',
-      createdAt: Date.now(),
+      createdAt,
       guidance: true,
     });
-    await setDraft(this.profile.id, conversation.sessionId, '');
+    await setDraft(profileId, sessionId, '');
+    await savePendingSend(profileId, sessionId, {
+      client_message_id: clientId,
+      content,
+      state: 'sending',
+      kind: 'guidance',
+      error: null,
+      created_at: createdAt,
+    });
+    if (!owns() || this.client !== client) {
+      return { ok: false, error: 'The server changed before this instruction was sent.' };
+    }
     try {
-      const frame = await this.client.request(
-        { req: 'soft_interrupt', session_id: conversation.sessionId, content, client_id: clientId },
+      const frame = await client.request(
+        { req: 'soft_interrupt', session_id: sessionId, content, client_id: clientId },
         10_000,
       );
       if (frame.ev === 'error') {
-        this.updateDelivery(clientId, { state: 'rejected', error: frame.message });
+        if (owns()) this.updateDelivery(clientId, { state: 'rejected', error: frame.message });
+        await savePendingSend(profileId, sessionId, {
+          client_message_id: clientId,
+          content,
+          state: 'rejected',
+          kind: 'guidance',
+          error: frame.message,
+          created_at: createdAt,
+        });
         return { ok: false, error: frame.message };
       }
-      this.updateDelivery(clientId, { state: 'queued' });
+      if (owns()) this.updateDelivery(clientId, { state: 'queued' });
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientId,
+        content,
+        state: 'queued',
+        kind: 'guidance',
+        error: null,
+        created_at: createdAt,
+      });
       return { ok: true };
     } catch (error) {
-      this.updateDelivery(clientId, { state: 'rejected', error: errorMessage(error) });
-      return { ok: false, error: errorMessage(error) };
+      // The instruction may have been queued before the socket died. Never
+      // label this a rejection and never auto-resend it.
+      if (owns()) {
+        this.updateDelivery(clientId, { state: 'unconfirmed', error: 'Instruction delivery unconfirmed.' });
+      }
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientId,
+        content,
+        state: 'unconfirmed',
+        kind: 'guidance',
+        error: 'Instruction delivery unconfirmed.',
+        created_at: createdAt,
+      });
+      return { ok: false, error: 'Instruction delivery unconfirmed.' };
     }
   }
 
@@ -1018,6 +1150,9 @@ class AppControllerImpl {
       return { ok: false, error: 'Reconnect to stop this turn.' };
     }
     const previous = conversation.execution;
+    const client = this.client;
+    const generation = this.clientGeneration;
+    const sessionId = conversation.sessionId;
     store.setState((state) => ({
       conversation: {
         ...state.conversation,
@@ -1025,16 +1160,15 @@ class AppControllerImpl {
       },
     }));
     try {
-      const frame = await this.client.request(
-        { req: 'cancel', session_id: conversation.sessionId },
-        10_000,
-      );
+      const frame = await client.request({ req: 'cancel', session_id: sessionId }, 10_000);
       if (frame.ev === 'error') throw new Error(frame.message);
       return { ok: true };
     } catch (error) {
-      store.setState((state) => ({
-        conversation: { ...state.conversation, execution: previous },
-      }));
+      if (generation === this.clientGeneration) {
+        store.setState((state) => ({
+          conversation: { ...state.conversation, execution: previous },
+        }));
+      }
       return { ok: false, error: errorMessage(error) };
     }
   }
@@ -1043,13 +1177,14 @@ class AppControllerImpl {
 
   async loadPlan(): Promise<void> {
     const conversation = store.get().conversation;
-    if (!conversation.sessionId || !this.client?.isOpen) return;
+    const client = this.client;
+    const sessionId = conversation.sessionId;
+    if (!sessionId || !client?.isOpen) return;
+    const generation = this.clientGeneration;
     store.setState((state) => ({ conversation: { ...state.conversation, planLoading: true } }));
     try {
-      const frame = await this.client.request(
-        { req: 'get_todo_state', session_id: conversation.sessionId },
-        10_000,
-      );
+      const frame = await client.request({ req: 'get_todo_state', session_id: sessionId }, 10_000);
+      if (generation !== this.clientGeneration || store.get().conversation.sessionId !== sessionId) return;
       if (frame.ev === 'todo_state') {
         store.setState((state) => ({
           conversation: {
@@ -1060,9 +1195,11 @@ class AppControllerImpl {
         }));
       }
     } catch {
-      store.setState((state) => ({
-        conversation: { ...state.conversation, planLoading: false },
-      }));
+      if (generation === this.clientGeneration) {
+        store.setState((state) => ({
+          conversation: { ...state.conversation, planLoading: false },
+        }));
+      }
     }
   }
 
@@ -1076,8 +1213,15 @@ class AppControllerImpl {
     if (this.creating) {
       return { ok: false, error: 'A session is already starting.' };
     }
-    const requestKey = newClientId('create');
-    this.creating = this.client
+    const profileId = this.profile?.id;
+    if (!profileId) return { ok: false, error: 'No server is selected.' };
+    const createKey = `pendingCreate:${profileId}:${workingDir.trim()}`;
+    const existingKey = await getPref(createKey);
+    const requestKey = existingKey || newClientId('create');
+    if (!existingKey) await setPref(createKey, requestKey);
+    const client = this.client;
+    const generation = this.clientGeneration;
+    this.creating = client
       .request({ req: 'create_session', working_dir: workingDir.trim(), client_request_id: requestKey }, 30_000)
       .then((frame) => {
         if (frame.ev !== 'attached') throw new Error(frame.ev === 'error' ? frame.message : 'The server did not return a session.');
@@ -1088,6 +1232,10 @@ class AppControllerImpl {
       });
     try {
       const sessionId = await this.creating;
+      if (generation !== this.clientGeneration || this.client !== client || this.profile?.id !== profileId) {
+        return { ok: false, error: 'The server changed while this session was starting.' };
+      }
+      await setPref(createKey, '');
       this.attachedSessionId = sessionId;
       if (this.profile) {
         await setPref(LAST_SESSION, sessionId);
@@ -1276,6 +1424,15 @@ class AppControllerImpl {
       case 'attached': {
         const session = frame.session;
         const previous = store.get().conversation;
+        if (
+          this.expectedAttachSessionId &&
+          session.session_id !== this.expectedAttachSessionId &&
+          session.session_id !== previous.sessionId
+        ) {
+          return;
+        }
+        this.expectedAttachSessionId = null;
+        this.continuationConfirmed = frame.continuation === true;
         const previousAttachment = previous.attachmentId;
         const sameSession = session.session_id === previous.sessionId;
         this.lastTurnId = 0;
@@ -1322,9 +1479,9 @@ class AppControllerImpl {
         if (!belongs(frame.attachment_id)) return;
         if (frame.turn_id < this.lastTurnId) return;
         this.lastTurnId = frame.turn_id;
-        this.streamBuffer += frame.text;
-        if (this.streamBuffer.length > 512 * 1024) {
-          this.streamBuffer = this.streamBuffer.slice(-256 * 1024);
+        this.streamText += frame.text;
+        if (this.streamText.length > 512 * 1024) {
+          this.streamText = this.streamText.slice(-256 * 1024);
         }
         this.setWorking(frame.turn_id, undefined);
         this.scheduleStreamFlush();
@@ -1332,14 +1489,15 @@ class AppControllerImpl {
       }
       case 'text_replace': {
         if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        this.streamBuffer = frame.text;
-        this.scheduleStreamFlush();
+        this.streamText = frame.text;
+        if (!frame.text) this.flushStream(true);
+        else this.scheduleStreamFlush();
         return;
       }
       case 'text_suffix_replace': {
         if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        if (this.streamBuffer.endsWith(frame.old_text)) {
-          this.streamBuffer = `${this.streamBuffer.slice(0, -frame.old_text.length)}${frame.new_text}`;
+        if (this.streamText.endsWith(frame.old_text)) {
+          this.streamText = `${this.streamText.slice(0, -frame.old_text.length)}${frame.new_text}`;
         }
         this.scheduleStreamFlush();
         return;
@@ -1393,7 +1551,10 @@ class AppControllerImpl {
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
-            tools: [...state.conversation.tools.filter((tool) => tool.callId !== frame.call_id), row],
+            tools: this.boundTools([
+              ...state.conversation.tools.filter((tool) => tool.callId !== frame.call_id),
+              row,
+            ]),
           },
         }));
         this.setWorking(frame.turn_id, frame.name);
@@ -1405,11 +1566,11 @@ class AppControllerImpl {
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
-            tools: state.conversation.tools.map((tool) =>
+            tools: this.boundTools(state.conversation.tools.map((tool) =>
               tool.callId === frame.call_id
                 ? { ...tool, input: frame.input ?? tool.input, name: frame.name, state: 'running' }
                 : tool,
-            ),
+            )),
           },
         }));
         this.setWorking(frame.turn_id, frame.name);
@@ -1420,19 +1581,19 @@ class AppControllerImpl {
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
-            tools: state.conversation.tools.map((tool) =>
+            tools: this.boundTools(state.conversation.tools.map((tool) =>
               tool.callId === frame.call_id
                 ? {
                     ...tool,
                     name: frame.name,
-                    output: frame.output,
+                    output: frame.output?.slice(0, 8 * 1024),
                     error: frame.error ?? null,
                     truncated: frame.truncated,
                     state: frame.error ? 'failed' : 'done',
                     completedAt: Date.now(),
                   }
                 : tool,
-            ),
+            )),
           },
         }));
         // A tool finishing is not the task finishing.
@@ -1441,6 +1602,7 @@ class AppControllerImpl {
       }
       case 'turn_done': {
         if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
+        this.flushStream(true);
         this.commitProvisional();
         this.setExecution({
           kind: 'ready',
@@ -1457,7 +1619,7 @@ class AppControllerImpl {
       }
       case 'turn_stopped': {
         if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        this.flushStream();
+        this.flushStream(true);
         this.commitProvisional();
         this.setExecution({
           kind: 'stopped',
@@ -1527,6 +1689,11 @@ class AppControllerImpl {
             .conversation.delivery.find((entry) => entry.clientMessageId === clientId);
           if (record && record.state === 'queued') {
             this.updateDelivery(clientId, { state: 'added' });
+            const profile = this.profile;
+            const sessionId = store.get().conversation.sessionId;
+            if (profile && sessionId) {
+              void deletePendingSend(profile.id, sessionId, clientId);
+            }
           }
         }
         return;
@@ -1599,6 +1766,14 @@ class AppControllerImpl {
     }
   }
 
+  private boundTools(tools: ToolRow[]): ToolRow[] {
+    const recent = tools.slice(-120);
+    return recent.map((tool) => ({
+      ...tool,
+      output: tool.output?.slice(0, 8 * 1024),
+    }));
+  }
+
   private setWorking(turnId: number, toolName: string | undefined): void {
     this.setExecution({
       kind: 'working',
@@ -1653,12 +1828,11 @@ class AppControllerImpl {
     }, budgets.streamCoalesceMs);
   }
 
-  private flushStream(): void {
+  private flushStream(force = false): void {
     if (this.streamTimer) clearTimeout(this.streamTimer);
     this.streamTimer = null;
-    if (!this.streamBuffer) return;
-    const text = this.streamBuffer;
-    this.streamBuffer = '';
+    if (!this.streamText && !force) return;
+    const text = this.streamText;
     store.setState((state) => {
       const conversation = state.conversation;
       const shouldNotify =
@@ -1677,6 +1851,7 @@ class AppControllerImpl {
   private commitProvisional(): void {
     const conversation = store.get().conversation;
     if (!conversation.provisionalText.trim()) {
+      this.streamText = '';
       store.setState((state) => ({ conversation: { ...state.conversation, provisionalText: '' } }));
       return;
     }
@@ -1695,6 +1870,7 @@ class AppControllerImpl {
         hasOlder: state.conversation.hasOlder || state.conversation.baseIndex > 0,
       },
     }));
+    this.streamText = '';
   }
 
   private async applyHistory(frame: Extract<ServerEvent, { ev: 'history' }>): Promise<void> {
@@ -1703,38 +1879,31 @@ class AppControllerImpl {
     if (!this.profile || !conversation.sessionId) return;
     const serverId = this.profile.id;
     const sessionId = conversation.sessionId;
+    const generation = this.clientGeneration;
 
     const bookmark = await getBookmark(serverId, sessionId);
+    if (
+      generation !== this.clientGeneration ||
+      this.profile?.id !== serverId ||
+      store.get().conversation.sessionId !== sessionId
+    ) {
+      return;
+    }
     const firstVisit = bookmark === null && this.firstVisit;
     const seam = deriveSeam(frame.messages, frame.total_messages, frame.base_index, bookmark, firstVisit);
     if (firstVisit) this.firstVisit = false;
 
-    // Reconcile delivery state before replacing the transcript.
-    let delivery = conversation.delivery;
+    // Acceptance must come from the adapter's correlated ledger, never from
+    // equal text elsewhere in the window.
     const accepted = new Set(frame.accepted_client_ids);
-    delivery = delivery.map((record) => {
-      if (accepted.has(record.clientMessageId) && record.state !== 'accepted') {
-        return { ...record, state: 'accepted' as const, error: undefined };
-      }
-      if (record.state === 'sending' || record.state === 'sent_to_server' || record.state === 'unconfirmed') {
-        const matches = frame.messages.filter((message) => message.content === record.content);
-        const index = frame.messages.findIndex((message) => message.content === record.content);
-        if (matches.length === 1) {
-          return { ...record, state: 'accepted' as const, messageIndex: index, error: undefined };
-        }
-      }
-      return record;
-    });
-    // Drop accepted records whose message is now committed (avoid a duplicate).
-    delivery = delivery.filter(
-      (record) =>
-        !(record.state === 'accepted' && frame.messages.some((message) => message.content === record.content)),
+    const delivery = conversation.delivery.map((record) =>
+      accepted.has(record.clientMessageId) && record.state !== 'accepted'
+        ? { ...record, state: 'accepted' as const, error: undefined }
+        : record,
     );
-    if (this.profile) {
-      for (const record of delivery) {
-        if (record.state === 'accepted') {
-          void deletePendingSend(serverId, sessionId, record.clientMessageId);
-        }
+    for (const record of delivery) {
+      if (record.state === 'accepted') {
+        void deletePendingSend(serverId, sessionId, record.clientMessageId);
       }
     }
 
@@ -1787,23 +1956,29 @@ class AppControllerImpl {
 
   async loadOlder(): Promise<void> {
     const conversation = store.get().conversation;
-    if (!this.client?.isOpen || !conversation.sessionId) return;
+    const sessionId = conversation.sessionId;
+    const client = this.client;
+    const profileId = this.profile?.id;
+    if (!client?.isOpen || !sessionId) return;
     if (conversation.loadingOlder || !conversation.hasOlder) return;
     store.setState((state) => ({
       conversation: { ...state.conversation, loadingOlder: true },
     }));
     try {
-      const frame = await this.client.request(
+      const frame = await client.request(
         {
           req: 'get_history_before',
-          session_id: conversation.sessionId,
+          session_id: sessionId,
           before_index: conversation.baseIndex,
           limit: 40,
         },
         15_000,
+        { suppressEvent: true },
       );
       if (frame.ev !== 'history') throw new Error('Unexpected history reply.');
+      if (this.profile?.id !== profileId || this.client !== client) return;
       store.setState((state) => {
+        if (state.conversation.sessionId !== sessionId) return state;
         const existing = state.conversation.messages;
         const merged = [...frame.messages, ...existing].filter(
           (message, index, list) => list.findIndex((entry) => entry.index === message.index) === index,
@@ -1814,7 +1989,7 @@ class AppControllerImpl {
             ...state.conversation,
             messages: merged,
             baseIndex: frame.base_index,
-            hasOlder: frame.base_index > 0,
+            hasOlder: frame.has_older ?? (frame.messages.length > 0 && frame.base_index > 0),
             loadingOlder: false,
           },
         };

@@ -366,6 +366,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: Platform.OS === 'ios' ? 12 : 8,
     fontSize: 16,
+    fontFamily: 'HankenGrotesk-Regular',
     includeFontPadding: false,
   },
   notice: {

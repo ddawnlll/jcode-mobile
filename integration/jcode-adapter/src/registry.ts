@@ -5,7 +5,7 @@
  * the issued 64-hex token, exactly like the gateway.
  */
 import { randomBytes } from 'node:crypto';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 import type { AdapterConfig } from './config.ts';
@@ -47,23 +47,24 @@ export class DeviceRegistry {
   }
 
   private async load(): Promise<RegistryFile> {
+    let raw: string;
     try {
-      const raw = await readFile(this.config.devicesPath, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<RegistryFile>;
-      return {
-        devices: Array.isArray(parsed.devices) ? parsed.devices : [],
-        pending_codes: Array.isArray(parsed.pending_codes) ? parsed.pending_codes : [],
-      };
-    } catch {
-      return { ...EMPTY, devices: [] };
+      raw = await readFile(this.config.devicesPath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { ...EMPTY, devices: [] };
+      throw error;
     }
+    const parsed = JSON.parse(raw) as Partial<RegistryFile>;
+    return {
+      devices: Array.isArray(parsed.devices) ? parsed.devices : [],
+      pending_codes: Array.isArray(parsed.pending_codes) ? parsed.pending_codes : [],
+    };
   }
 
   private async save(registry: RegistryFile): Promise<void> {
-    await mkdir(dirname(this.config.devicesPath), { recursive: true, mode: 0o700 });
-    await writeFile(this.config.devicesPath, `${JSON.stringify(registry, null, 2)}\n`, {
-      mode: 0o600,
-    });
+    // Atomic replace prevents readers from seeing a truncated registry while a
+    // pairing, revocation, or last-seen write is in flight.
+    await writeJsonAtomic(this.config.devicesPath, registry, 0o600);
   }
 
   /** Serializes mutations so concurrent pair attempts cannot lose a device. */
@@ -86,9 +87,16 @@ export class DeviceRegistry {
 
   async validateTokenAsync(token: string): Promise<PairedDevice | null> {
     if (!/^[0-9a-f]{64}$/.test(token)) return null;
-    const registry = await this.load();
-    const hash = `sha256:${sha256Hex(token)}`;
-    return registry.devices.find((device) => device.token_hash === hash) ?? null;
+    try {
+      const registry = await this.load();
+      const hash = `sha256:${sha256Hex(token)}`;
+      return registry.devices.find((device) => device.token_hash === hash) ?? null;
+    } catch (error) {
+      log(this.config, 'warn', 'device registry unreadable during validation', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+      return null;
+    }
   }
 
   async touch(deviceId: string): Promise<void> {

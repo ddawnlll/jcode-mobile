@@ -23,7 +23,8 @@ if [ ! -d "$APP" ]; then
   echo "Release .app not found at $APP" >&2
   exit 1
 fi
-rm -f artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip
-ditto -c -k --norsrc --keepParent "$APP" artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip
-shasum -a 256 artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip | tee artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip.sha256
-ls -lh artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip
+VERSION="$(node -p "require('./package.json').version")"
+rm -f "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip"
+ditto -c -k --norsrc --keepParent "$APP" "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip"
+shasum -a 256 "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip" | tee "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip.sha256"
+ls -lh "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip"

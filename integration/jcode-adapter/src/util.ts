@@ -56,7 +56,10 @@ export async function readJson<T>(path: string, fallback: T): Promise<T> {
 export function truncate(value: string, maxBytes: number): { text: string; truncated: boolean } {
   const buffer = Buffer.from(value, 'utf8');
   if (buffer.byteLength <= maxBytes) return { text: value, truncated: false };
-  return { text: buffer.subarray(0, maxBytes).toString('utf8'), truncated: true };
+  let text = buffer.subarray(0, maxBytes).toString('utf8');
+  // Do not leave a replacement character where a multibyte glyph was split.
+  while (text.endsWith('\uFFFD')) text = text.slice(0, -1);
+  return { text, truncated: true };
 }
 
 export function sleep(ms: number): Promise<void> {
