@@ -53,6 +53,10 @@ export interface HistoryMessage {
   index: number;
   role: 'user' | 'assistant' | 'tool' | string;
   content: string;
+  /** Tool names called by this assistant turn, when the daemon reports them. */
+  tool_calls?: string[];
+  /** One structured tool call recorded with this assistant message. */
+  tool_data?: { id: string; name: string; input?: unknown; intent?: string };
   /** Present when the daemon reports a completed stored turn. */
   response_stats?: {
     duration_secs?: number;

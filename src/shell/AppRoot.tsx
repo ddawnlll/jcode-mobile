@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, Linking, StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
+import type { RootStackParamList } from './navigation';
 
 import { ThemeProvider, useTheme } from '../design/theme';
 import { Text } from '../design/typography';
@@ -40,16 +41,20 @@ export default function AppRoot() {
     }
   }, [fontsLoaded, fontError, bootstrapped]);
 
-  if ((!fontsLoaded && !fontError) || !bootstrapped) {
-    return <BootstrapSurface />;
-  }
+  const ready = (fontsLoaded || fontError) && bootstrapped;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ThemeProvider preference={appearance}>
-          <ThemedApp />
-        </ThemeProvider>
+        {ready ? (
+          <ThemeProvider preference={appearance}>
+            <ThemedApp />
+          </ThemeProvider>
+        ) : (
+          <ThemeProvider preference="light">
+            <BootstrapSurface />
+          </ThemeProvider>
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -57,7 +62,27 @@ export default function AppRoot() {
 
 function ThemedApp() {
   const { scheme, colors } = useTheme();
-  const navigationRef = useNavigationContainerRef();
+  const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  const setPendingPairLink = useAppStore((state) => state.actions.setPendingPairLink);
+  const pendingPairLink = useAppStore((state) => state.pendingPairLink);
+
+  useEffect(() => {
+    const handle = (url: string) => {
+      if (!url.startsWith('jcode://pair') && !url.startsWith('jcodemobile://pair')) return;
+      setPendingPairLink(url);
+      if (navigationRef.isReady()) navigationRef.navigate('Connect');
+    };
+    void Linking.getInitialURL().then((url) => {
+      if (url) handle(url);
+    });
+    const subscription = Linking.addEventListener('url', (event) => handle(event.url));
+    return () => subscription.remove();
+  }, [navigationRef, setPendingPairLink]);
+
+  useEffect(() => {
+    if (pendingPairLink && navigationRef.isReady()) navigationRef.navigate('Connect');
+  }, [pendingPairLink, navigationRef]);
+
   return (
     <>
       <StatusBar style={scheme === 'night' ? 'light' : 'dark'} />

@@ -21,6 +21,22 @@ export interface ServerProfileRow {
 
 let database: SQLite.SQLiteDatabase | null = null;
 
+/**
+ * SQLite has no nested transactions and expo-sqlite's async transactions are
+ * not mutually exclusive. Serialize transaction-writers so a session refresh
+ * and a transcript cache cannot overlap.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(work: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(work, work);
+  writeChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (database) return database;
   const db = await SQLite.openDatabaseAsync(DB_NAME);
@@ -155,12 +171,14 @@ export async function saveServer(profile: ServerProfileRow): Promise<void> {
 }
 
 export async function deleteServer(profileId: string): Promise<void> {
-  await db().withTransactionAsync(async () => {
-    for (const table of ['sessions', 'messages', 'drafts', 'bookmarks', 'pending_sends']) {
-      await db().runAsync(`DELETE FROM ${table} WHERE server_id = ?`, profileId);
-    }
-    await db().runAsync('DELETE FROM servers WHERE id = ?', profileId);
-  });
+  await serialized(() =>
+    db().withTransactionAsync(async () => {
+      for (const table of ['sessions', 'messages', 'drafts', 'bookmarks', 'pending_sends']) {
+        await db().runAsync(`DELETE FROM ${table} WHERE server_id = ?`, profileId);
+      }
+      await db().runAsync('DELETE FROM servers WHERE id = ?', profileId);
+    }),
+  );
 }
 
 /* ---------------------------------------------------------------- sessions */
@@ -196,8 +214,9 @@ export async function loadCachedSessions(serverId: string): Promise<SessionInfo[
 export async function upsertSessions(serverId: string, sessions: SessionInfo[]): Promise<void> {
   if (!sessions.length) return;
   const now = Date.now();
-  await db().withTransactionAsync(async () => {
-    for (const session of sessions) {
+  await serialized(() =>
+    db().withTransactionAsync(async () => {
+      for (const session of sessions) {
       await db().runAsync(
         `INSERT INTO sessions (server_id, session_id, title, working_dir, status, live_state, saved, save_label, archived, updated_at_ms, transcript_bytes, last_synced_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -217,10 +236,11 @@ export async function upsertSessions(serverId: string, sessions: SessionInfo[]):
         session.archived ? 1 : 0,
         session.updated_at_ms ?? null,
         session.transcript_bytes ?? null,
-        now,
-      );
-    }
-  });
+          now,
+        );
+      }
+    }),
+  );
 }
 
 export async function updateSessionLiveState(
@@ -280,38 +300,40 @@ export async function upsertMessages(
 ): Promise<void> {
   if (!messages.length) return;
   const now = Date.now();
-  await db().withTransactionAsync(async () => {
-    for (const message of messages) {
+  await serialized(async () => {
+    await db().withTransactionAsync(async () => {
+      for (const message of messages) {
       const bytes = roughBytes(message.content);
+        await db().runAsync(
+          `INSERT INTO messages (server_id, session_id, idx, role, content, stats_json, bytes, cached_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(server_id, session_id, idx) DO UPDATE SET
+             role = excluded.role, content = excluded.content, stats_json = excluded.stats_json,
+             bytes = excluded.bytes, cached_at = excluded.cached_at`,
+          serverId,
+          sessionId,
+          message.index,
+          message.role,
+          message.content,
+          message.response_stats ? JSON.stringify(message.response_stats) : null,
+          bytes,
+          now,
+        );
+      }
+      // Per-session bound: keep only the most recent rows.
       await db().runAsync(
-        `INSERT INTO messages (server_id, session_id, idx, role, content, stats_json, bytes, cached_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(server_id, session_id, idx) DO UPDATE SET
-           role = excluded.role, content = excluded.content, stats_json = excluded.stats_json,
-           bytes = excluded.bytes, cached_at = excluded.cached_at`,
+        `DELETE FROM messages WHERE server_id = ? AND session_id = ? AND idx NOT IN (
+           SELECT idx FROM messages WHERE server_id = ? AND session_id = ? ORDER BY idx DESC LIMIT ?
+         )`,
         serverId,
         sessionId,
-        message.index,
-        message.role,
-        message.content,
-        message.response_stats ? JSON.stringify(message.response_stats) : null,
-        bytes,
-        now,
+        serverId,
+        sessionId,
+        MESSAGE_ROW_LIMIT,
       );
-    }
-    // Per-session bound: keep only the most recent rows.
-    await db().runAsync(
-      `DELETE FROM messages WHERE server_id = ? AND session_id = ? AND idx NOT IN (
-         SELECT idx FROM messages WHERE server_id = ? AND session_id = ? ORDER BY idx DESC LIMIT ?
-       )`,
-      serverId,
-      sessionId,
-      serverId,
-      sessionId,
-      MESSAGE_ROW_LIMIT,
-    );
+    });
+    await trimGlobalCache(serverId, sessionId);
   });
-  await trimGlobalCache(serverId, sessionId);
 }
 
 async function trimGlobalCache(protectedServerId: string, protectedSessionId: string): Promise<void> {
@@ -357,10 +379,12 @@ export async function clearCachedConversation(serverId: string, sessionId: strin
 }
 
 export async function clearServerCache(serverId: string): Promise<void> {
-  await db().withTransactionAsync(async () => {
-    await db().runAsync('DELETE FROM messages WHERE server_id = ?', serverId);
-    await db().runAsync('DELETE FROM sessions WHERE server_id = ?', serverId);
-  });
+  await serialized(() =>
+    db().withTransactionAsync(async () => {
+      await db().runAsync('DELETE FROM messages WHERE server_id = ?', serverId);
+      await db().runAsync('DELETE FROM sessions WHERE server_id = ?', serverId);
+    }),
+  );
 }
 
 export async function cacheStats(): Promise<{ bytes: number; sessions: number }> {

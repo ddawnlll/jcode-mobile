@@ -272,7 +272,7 @@ export function JCodeMark({
   return (
     <Image
       accessibilityIgnoresInvertColors
-      source={require('../../assets/mark/jcode-mark.svg.png')}
+      source={require('../../assets/mark/jcode-mark.png')}
       style={[{ width: size, height: size, tintColor: color ?? colors.ink }, style]}
       resizeMode="contain"
     />

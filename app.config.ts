@@ -40,6 +40,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
   },
   plugins: [
+    './plugins/withLocalCleartext',
     'expo-secure-store',
     'expo-sqlite',
     'expo-font',

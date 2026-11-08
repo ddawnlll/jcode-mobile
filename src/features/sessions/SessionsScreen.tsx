@@ -12,7 +12,7 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import type { RootStackParamList } from '../../app/navigation';
+import type { RootStackParamList } from '../../shell/navigation';
 import { BottomSheet } from '../../design/BottomSheet';
 import { Button, Divider, Field, IconButton, Row, TextAction } from '../../design/controls';
 import { ChevronDownIcon, ChevronRightIcon, JCodeMark, LinkIcon, SearchIcon, CloseIcon } from '../../design/icons';
@@ -36,6 +36,8 @@ export function SessionsScreen() {
   const error = useAppStore((state) => state.inventory.error);
   const partial = useAppStore((state) => state.inventory.partial);
   const fetchedAt = useAppStore((state) => state.inventory.fetchedAt);
+  const includeArchived = useAppStore((state) => state.inventory.includeArchived);
+  const pendingRestore = useAppStore((state) => state.inventory.pendingRestore);
   const connection = useAppStore((state) => state.connection);
   const serverLabel = useAppStore((state) => state.connection.serverLabel);
   const [search, setSearch] = useState('');
@@ -147,7 +149,7 @@ export function SessionsScreen() {
             variant="small"
             color={connection.state === 'current' ? 'ink' : 'muted'}
             numberOfLines={1}
-            style={{ marginLeft: space.xxs, maxWidth: 170 }}
+            style={{ marginLeft: space.xxs, maxWidth: 140 }}
           >
             {connectionLabel}
           </Text>
@@ -238,10 +240,11 @@ export function SessionsScreen() {
         </View>
       ) : (
         <SectionList
+          style={{ flex: 1 }}
           sections={groups}
           keyExtractor={(item) => item.session_id}
           stickySectionHeadersEnabled={false}
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: 96 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -258,6 +261,7 @@ export function SessionsScreen() {
           renderItem={({ item, index, section }) => (
             <SessionRow
               session={item}
+              live={connection.state === 'current'}
               first={index === 0}
               last={index === section.data.length - 1}
               onPress={() => openSession(item)}
@@ -265,23 +269,46 @@ export function SessionsScreen() {
             />
           )}
           ListFooterComponent={
-            partial || sessions.length >= 50 ? (
-              <View style={styles.loadMore}>
+            <View style={styles.loadMore}>
+              {partial || sessions.length >= 50 ? (
                 <TextAction
                   label="Load more sessions"
                   onPress={() => controller.loadMoreSessions()}
                   align="center"
                 />
+              ) : null}
+              <TextAction
+                label={includeArchived ? 'Hide archived sessions' : 'Show archived sessions'}
+                onPress={() =>
+                  controller.refreshSessions({ force: true, includeArchived: !includeArchived })
+                }
+                align="center"
+              />
+              {fetchedAt ? (
                 <Text variant="caption" color="muted">
-                  {fetchedAt ? `Loaded ${sessions.length}. Fetched ${formatTime(fetchedAt)}.` : ''}
+                  Loaded {sessions.length}. Fetched {formatTime(fetchedAt)}.
                 </Text>
-              </View>
-            ) : undefined
+              ) : null}
+            </View>
           }
         />
       )}
 
-      <View style={[styles.dock, { paddingBottom: Math.max(insets.bottom, space.sm) }]}>
+      {pendingRestore ? (
+        <View style={[styles.restoreNotice, { backgroundColor: colors.raised }]}>
+          <Text variant="small" color="muted" style={{ flex: 1 }} numberOfLines={2}>
+            Session archived.
+          </Text>
+          <TextAction
+            label="Undo"
+            onPress={() => {
+              void controller.restoreSession(pendingRestore.session);
+            }}
+          />
+        </View>
+      ) : null}
+
+      <View style={[styles.dock, { backgroundColor: colors.bg, paddingBottom: Math.max(insets.bottom, space.sm) }]}>
         <Button
           label="New session"
           onPress={() => setNewSessionVisible(true)}
@@ -307,6 +334,10 @@ export function SessionsScreen() {
           setActionSession(null);
           void controller.archiveSession(session);
         }}
+        onRestored={(session) => {
+          setActionSession(null);
+          void controller.restoreSession(session);
+        }}
         onOpen={(session) => {
           setActionSession(null);
           void openSession(session);
@@ -318,12 +349,14 @@ export function SessionsScreen() {
 
 const SessionRow = React.memo(function SessionRow({
   session,
+  live,
   first,
   last,
   onPress,
   onLongPress,
 }: {
   session: SessionInfo;
+  live: boolean;
   first: boolean;
   last: boolean;
   onPress: () => void;
@@ -331,14 +364,17 @@ const SessionRow = React.memo(function SessionRow({
 }) {
   const { colors } = useTheme();
   const directory = basename(session.working_dir);
-  const status =
-    session.live_state === 'working'
-      ? 'Working'
-      : session.live_state === 'ready'
-        ? 'Ready'
-        : session.user_connected
-          ? 'Open elsewhere'
-          : null;
+  const status = session.archived
+    ? 'Archived'
+    : !live
+      ? 'Saved'
+      : session.live_state === 'working'
+        ? 'Working'
+        : session.live_state === 'ready'
+          ? 'Ready'
+          : session.user_connected
+            ? 'Open elsewhere'
+            : null;
   const time = formatTime(session.updated_at_ms);
   return (
     <View style={{ paddingHorizontal: geometry.gutterCompact }}>
@@ -365,7 +401,7 @@ const SessionRow = React.memo(function SessionRow({
             ) : null}
             {directory && status ? <Text variant="caption" color="muted"> · </Text> : null}
             {status ? (
-              <Text variant="caption" color={session.live_state === 'working' ? 'success' : 'muted'}>
+              <Text variant="caption" color={live && session.live_state === 'working' ? 'success' : 'muted'}>
                 {status}
               </Text>
             ) : null}
@@ -387,11 +423,13 @@ function SessionActionsSheet({
   session,
   onClose,
   onArchived,
+  onRestored,
   onOpen,
 }: {
   session: SessionInfo | null;
   onClose: () => void;
   onArchived: (session: SessionInfo) => void;
+  onRestored: (session: SessionInfo) => void;
   onOpen: (session: SessionInfo) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -437,9 +475,19 @@ function SessionActionsSheet({
             detail={copied ? 'Copied' : session.session_id.slice(0, 18) + '…'}
           />
           <ActionRow
-            label="Archive session"
-            detail={session.live_state === 'working' ? 'Running turn' : undefined}
+            label={session.archived ? 'Restore session' : 'Archive session'}
+            detail={
+              session.archived
+                ? 'Reversible'
+                : session.live_state === 'working'
+                  ? 'Running turn'
+                  : undefined
+            }
             onPress={() => {
+              if (session.archived) {
+                onRestored(session);
+                return;
+              }
               if (session.live_state === 'working') {
                 setError('Stop or wait for this turn before archiving.');
                 return;
@@ -539,8 +587,18 @@ const styles = StyleSheet.create({
   dock: {
     paddingHorizontal: geometry.gutterCompact,
     paddingTop: space.sm,
+    backgroundColor: 'transparent',
   },
-  loadMore: { paddingVertical: space.md, alignItems: 'center' },
+  loadMore: { paddingVertical: space.md, alignItems: 'center', gap: space.xs },
+  restoreNotice: {
+    marginHorizontal: geometry.gutterCompact,
+    marginBottom: space.xs,
+    borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   actionRow: {
     minHeight: target,
     flexDirection: 'row',

@@ -82,10 +82,26 @@ export function decodeHistoryMessage(value: unknown, fallbackIndex: number): His
   const index = num(record.index);
   if (!role || content === undefined) return null;
   const stats = asRecord(record.response_stats);
+  const toolData = asRecord(record.tool_data);
+  const toolId = toolData ? str(toolData.id) : undefined;
+  const toolName = toolData ? str(toolData.name) : undefined;
   return {
     index: index !== undefined ? index : fallbackIndex,
     role,
     content,
+    ...(Array.isArray(record.tool_calls)
+      ? { tool_calls: stringArray(record.tool_calls) }
+      : null),
+    ...(toolData && toolId && toolName
+      ? {
+          tool_data: {
+            id: toolId,
+            name: toolName,
+            input: toolData.input,
+            intent: str(toolData.intent),
+          },
+        }
+      : null),
     ...(stats
       ? {
           response_stats: {

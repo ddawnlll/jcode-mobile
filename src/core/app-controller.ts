@@ -34,6 +34,7 @@ import {
   type ServerProfileRow,
 } from './persistence/db';
 import { deleteToken, loadToken, saveToken } from './persistence/credentials';
+import { importDevPairingFile } from './dev/pairing-import';
 import {
   deriveSeam,
   formatClock,
@@ -88,6 +89,7 @@ class AppControllerImpl {
     this.booted = true;
     try {
       await initDatabase();
+      await importDevPairingFile();
       const [appearance, privacy, deviceName] = await Promise.all([
         getPref(APPEARANCE),
         getPref(PRIVACY),
@@ -133,7 +135,9 @@ class AppControllerImpl {
 
   private installListeners(): void {
     NetInfo.addEventListener((state: NetInfoState) => {
-      const online = state.isConnected !== false && state.isInternetReachable !== false;
+      // A VPS can be reachable over a LAN, VPN, or loopback with no internet
+      // route, so only a confirmed transport disconnection is "offline".
+      const online = state.isConnected !== false;
       const changed = online !== this.online;
       this.online = online;
       if (!online) {
@@ -146,7 +150,7 @@ class AppControllerImpl {
     AppState.addEventListener('change', (next) => {
       const previous = this.appState;
       this.appState = next;
-      if (next === 'background' || next === 'inactive') {
+      if (next === 'background') {
         this.onBackground();
       } else if (next === 'active' && previous !== 'active') {
         void this.onForeground();
@@ -163,6 +167,8 @@ class AppControllerImpl {
     // its socket, and reopening reconciles authoritative history.
     this.client?.close();
     this.client = null;
+    this.attachedSessionId = null;
+    store.setState((state) => ({ conversation: { ...state.conversation, attachmentId: null } }));
     if (store.get().conversation.sessionId) {
       store.setState((state) => ({
         connection: {
@@ -210,7 +216,13 @@ class AppControllerImpl {
     if (input.deviceName.trim().length === 0) {
       return { ok: false, error: 'Name this phone so you can recognize it later.' };
     }
-    const profileId = newClientId('srv');
+    const existing = (await listServers()).find(
+      (server) =>
+        server.host === parsed.endpoint.host &&
+        server.port === parsed.endpoint.port &&
+        (server.tls === 1) === parsed.endpoint.tls,
+    );
+    const profileId = existing?.id ?? newClientId('srv');
     const body = {
       code,
       device_id: (await getPref('deviceId')) ?? profileId,
@@ -248,10 +260,10 @@ class AppControllerImpl {
       port: parsed.endpoint.port,
       tls: parsed.endpoint.tls ? 1 : 0,
       device_id: body.device_id,
-      created_at: Date.now(),
+      created_at: existing?.created_at ?? Date.now(),
       last_connected_at: Date.now(),
-      daemon_version: null,
-      capabilities_json: null,
+      daemon_version: existing?.daemon_version ?? null,
+      capabilities_json: existing?.capabilities_json ?? null,
     };
     await saveToken(profileId, payload.token);
     await saveServer(profile);
@@ -305,19 +317,20 @@ class AppControllerImpl {
     }
   }
 
-  async connectNow(options: { immediate?: boolean } = {}): Promise<void> {
+  async connectNow(options: { immediate?: boolean; force?: boolean } = {}): Promise<void> {
     if (!this.profile) return;
     if (!this.token) {
       this.setConnectionState('pair_again', 'Pair this phone again.');
       return;
     }
     if (this.connectPromise) return this.connectPromise;
-    if (this.appState !== 'active') return;
-    if (!this.online) {
+    if (this.appState !== 'active' && !options.force) return;
+    if (!this.online && !options.force) {
       this.setConnectionState('offline');
       return;
     }
     this.clearReconnect();
+    this.attachedSessionId = null;
     const hadContent = store.get().conversation.messages.length > 0;
     this.setConnectionState(hadContent ? 'reconnecting' : 'connecting');
     this.connectPromise = (async () => {
@@ -406,6 +419,10 @@ class AppControllerImpl {
   }
 
   private onTransportClosed(): void {
+    this.attachedSessionId = null;
+    store.setState((state) => ({
+      conversation: { ...state.conversation, attachmentId: null },
+    }));
     this.markDeliveriesUnconfirmed();
     const hadContent = store.get().conversation.messages.length > 0;
     this.setConnectionState(hadContent ? 'reconnecting' : 'offline');
@@ -749,7 +766,9 @@ class AppControllerImpl {
     const conversation = store.get().conversation;
     if (!conversation.sessionId) return;
     const nextIndex = Math.max(index, conversation.seam?.index ?? index);
-    const message = conversation.messages.find((entry) => entry.index === nextIndex);
+    const message =
+      conversation.messages.find((entry) => entry.index === nextIndex) ??
+      conversation.messages[conversation.messages.length - 1];
     await setBookmark(
       this.profile.id,
       conversation.sessionId,
@@ -1072,6 +1091,26 @@ class AppControllerImpl {
 
   /* ---------------------------------------------------------------- servers */
 
+  async profiles(): Promise<Array<{ id: string; label: string; host: string; active: boolean }>> {
+    const rows = await listServers();
+    const activeId = store.get().profileId;
+    return rows.map((row) => ({
+      id: row.id,
+      label: row.label,
+      host: `${row.host}:${row.port}`,
+      active: row.id === activeId,
+    }));
+  }
+
+  async switchProfile(profileId: string): Promise<void> {
+    const rows = await listServers();
+    const profile = rows.find((row) => row.id === profileId);
+    if (!profile) return;
+    await setPref(LAST_SERVER, profile.id);
+    this.closeConversation();
+    await this.activateProfile(profile, { restore: true });
+  }
+
   async forgetServer(): Promise<void> {
     if (!this.profile) return;
     const profileId = this.profile.id;
@@ -1117,7 +1156,7 @@ class AppControllerImpl {
 
   async reconnect(): Promise<void> {
     this.reconnectAttempt = 0;
-    await this.connectNow({ immediate: true });
+    await this.connectNow({ immediate: true, force: true });
   }
 
   async clearLocalCache(): Promise<void> {
@@ -1417,6 +1456,10 @@ class AppControllerImpl {
         const idle = frame.status === 'idle' || frame.status === 'ready';
         if (working) this.setWorking(this.lastTurnId, undefined);
         else if (idle) {
+          const previous = store.get().conversation.execution;
+          const recentlyStopped =
+            previous.kind === 'stopped' && Date.now() - previous.observedAt < 8_000;
+          if (recentlyStopped) return;
           this.commitProvisional();
           this.setExecution({
             kind: 'ready',

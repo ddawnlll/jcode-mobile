@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +30,10 @@ export function ConnectScreen() {
   const [showDetails, setShowDetails] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const pendingPairLink = useAppStore((state) => state.pendingPairLink);
+  const setPendingPairLink = useAppStore((state) => state.actions.setPendingPairLink);
+
+  const dismissKeyboard = () => Keyboard.dismiss();
 
   const parsed = address.trim() ? parseServerAddress(address) : null;
 
@@ -41,7 +45,11 @@ export function ConnectScreen() {
         const host = parsedUrl.searchParams.get('host');
         const port = parsedUrl.searchParams.get('port');
         const invite = parsedUrl.searchParams.get('code');
-        if (host) setAddress(`${host}${port ? `:${port}` : ''}`);
+        if (host) {
+          const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+          const insecure = parsedUrl.searchParams.get('insecure') === '1' && loopback;
+          setAddress(`${insecure ? 'ws://' : ''}${host}${port ? `:${port}` : ''}`);
+        }
         if (invite) setCode(invite);
         setError(null);
       } catch {
@@ -55,6 +63,29 @@ export function ConnectScreen() {
     return () => subscription.remove();
   }, []);
 
+  useEffect(() => {
+    if (!pendingPairLink) return;
+    const handle = (url: string) => {
+      try {
+        const parsedUrl = new URL(url.replace('jcode://', 'https://'));
+        const host = parsedUrl.searchParams.get('host');
+        const port = parsedUrl.searchParams.get('port');
+        const invite = parsedUrl.searchParams.get('code');
+        if (host) {
+          const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+          const insecure = parsedUrl.searchParams.get('insecure') === '1' && loopback;
+          setAddress(`${insecure ? 'ws://' : ''}${host}${port ? `:${port}` : ''}`);
+        }
+        if (invite) setCode(invite);
+        setError(null);
+      } catch {
+        setError('That pairing link could not be read.');
+      }
+    };
+    handle(pendingPairLink);
+    setPendingPairLink(null);
+  }, [pendingPairLink, setPendingPairLink]);
+
   const shouldShowConnect = profileId !== null;
 
   const pair = async () => {
@@ -66,7 +97,7 @@ export function ConnectScreen() {
       setError(result.error);
       return;
     }
-    if (shouldShowConnect) navigation.navigate('Sessions' as never);
+    navigation.reset({ index: 0, routes: [{ name: 'Sessions' as never }] });
   };
 
   const copy = async (id: string, value: string) => {
@@ -95,10 +126,11 @@ export function ConnectScreen() {
           </Pressable>
         ) : null}
       </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
+        keyboardDismissMode="on-drag"
       >
         <Text variant="display" accessibilityRole="header">
           Bring your server.
@@ -145,7 +177,9 @@ export function ConnectScreen() {
                   const port = parsedUrl.searchParams.get('port');
                   const invite = parsedUrl.searchParams.get('code');
                   if (!host || !invite) throw new Error('missing');
-                  setAddress(`${host}${port ? `:${port}` : ''}`);
+                  const loopback = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+                  const insecure = parsedUrl.searchParams.get('insecure') === '1' && loopback;
+                  setAddress(`${insecure ? 'ws://' : ''}${host}${port ? `:${port}` : ''}`);
                   setCode(invite);
                   setError(null);
                 } catch {
@@ -172,6 +206,8 @@ export function ConnectScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
+            returnKeyType="done"
+            onSubmitEditing={dismissKeyboard}
             leading={<LinkIcon size={20} color={colors.muted} />}
             helper="Scheme, host, and port are shown below before anything is sent."
           />
@@ -191,7 +227,9 @@ export function ConnectScreen() {
             value={code}
             onChangeText={(value) => setCode(value.replace(/[^\d\s]/g, '').slice(0, 7))}
             placeholder="123 456"
-            keyboardType="number-pad"
+            keyboardType="numbers-and-punctuation"
+            returnKeyType="done"
+            onSubmitEditing={dismissKeyboard}
             maxLength={7}
             helper="Minted by `jcode pair` on your server. Valid for five minutes."
           />
@@ -268,6 +306,7 @@ export function ConnectScreen() {
         </Text>
         <View style={{ height: space.xxl }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

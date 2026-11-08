@@ -35,6 +35,8 @@ export interface DeliveryRecord {
 export interface ToolRow {
   callId: string;
   name: string;
+  /** Reconstructed from persisted history, not a live event. */
+  historical?: boolean;
   input?: unknown;
   output?: string;
   error?: string | null;
@@ -116,11 +118,14 @@ export interface AppState {
   conversation: ConversationState;
   appearance: 'system' | 'light' | 'night';
   privacyPreview: boolean;
+  /** A pairing deep link awaiting consumption by the Connect screen. */
+  pendingPairLink: string | null;
   actions: {
     setBootstrap: (value: AppState['bootstrap'], error?: string | null) => void;
     setProfile: (profileId: string | null, deviceName: string) => void;
     setAppearance: (value: AppState['appearance']) => void;
     setPrivacyPreview: (value: boolean) => void;
+    setPendingPairLink: (value: string | null) => void;
   };
 }
 
@@ -181,11 +186,13 @@ export const useAppStore = create<AppState>()((set) => ({
   conversation: emptyConversation,
   appearance: 'system',
   privacyPreview: true,
+  pendingPairLink: null,
   actions: {
     setBootstrap: (value, error = null) => set({ bootstrap: value, bootstrapError: error }),
     setProfile: (profileId, deviceName) => set({ profileId, deviceName }),
     setAppearance: (value) => set({ appearance: value }),
     setPrivacyPreview: (value) => set({ privacyPreview: value }),
+    setPendingPairLink: (value) => set({ pendingPairLink: value }),
   },
 }));
 

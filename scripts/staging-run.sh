@@ -9,6 +9,7 @@ export JCODE_SOCKET="$STAGE/run/jcode.sock"
 export JCODE_API_SOCKET="$STAGE/run/jcode-api.sock"
 export JCODE_ADAPTER_STATE="$STAGE/adapter"
 export STAGING_WORK_DIR="$STAGE/work"
+export JCODE_STAGING_DIR="$STAGE"
 export ADAPTER_BASE="${ADAPTER_BASE:-http://127.0.0.1:7643}"
 
 cd "$(dirname "$0")/.."

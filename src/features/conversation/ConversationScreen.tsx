@@ -8,6 +8,7 @@ import {
   Pressable,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -18,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 
-import type { RootStackParamList } from '../../app/navigation';
+import type { RootStackParamList } from '../../shell/navigation';
 import { BottomSheet } from '../../design/BottomSheet';
 import { Button, Field, IconButton, TextAction } from '../../design/controls';
 import {
@@ -36,7 +37,6 @@ import { useTheme } from '../../design/theme';
 import { budgets, geometry, radius, space, target } from '../../design/tokens';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
-import { basename } from '../../core/session/selectors';
 import { useAppStore, type DeliveryRecord } from '../../core/state/store';
 import type { HistoryMessage } from '../../core/protocol/frames';
 import { Markdown } from './Markdown';
@@ -73,6 +73,8 @@ export function ConversationScreen() {
   const route = useRoute<Route>();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const textScale = Math.min(Math.max(fontScale, 1), 2);
 
   const conversation = useAppStore((state) => state.conversation);
   const connection = useAppStore((state) => state.connection);
@@ -103,6 +105,7 @@ export function ConversationScreen() {
 
   useEffect(() => {
     if (!conversation.sessionId) return;
+    restoredScroll.current = false;
     void controller.draft(conversation.sessionId).then((value) => setDraft(value));
     return () => {
       controller.flushDraft();
@@ -110,7 +113,13 @@ export function ConversationScreen() {
   }, [conversation.sessionId]);
 
   const messages = useMemo(
-    () => conversation.messages.filter((message) => message.role !== 'tool' && !isSystemReminder(message)),
+    () =>
+      conversation.messages.filter(
+        (message) =>
+          message.role !== 'tool' &&
+          !isSystemReminder(message) &&
+          !(message.tool_data && message.content.trim().length === 0),
+      ),
     [conversation.messages],
   );
 
@@ -236,8 +245,10 @@ export function ConversationScreen() {
       : !sendGate.ok
         ? sendGate.reason
         : undefined;
+  const hasHistoricalTools = conversation.messages.some((message) => message.tool_data);
   const showDock =
     conversation.tools.length > 0 ||
+    hasHistoricalTools ||
     working ||
     conversation.execution.kind === 'stopped' ||
     conversation.pendingSoftInterrupts > 0 ||
@@ -246,7 +257,7 @@ export function ConversationScreen() {
     ? conversation.execution.label
     : conversation.execution.kind === 'stopped'
       ? conversation.execution.label
-      : conversation.tools.length
+      : conversation.tools.length > 0 || hasHistoricalTools
         ? 'View work'
         : 'Ready';
 
@@ -261,11 +272,9 @@ export function ConversationScreen() {
           : 'Status unavailable';
 
   const markSeamSeen = async () => {
-    if (conversation.seam?.index != null) {
-      await controller.markSeenThrough(conversation.seam.index);
-    } else {
-      await controller.dismissSeam();
-    }
+    // The user explicitly acknowledged the boundary, so everything currently
+    // committed from that point on counts as seen.
+    await controller.markSeenThrough(conversation.totalMessages);
   };
 
   const renderItem = ({ item }: { item: ConversationItem }) => {
@@ -408,6 +417,9 @@ export function ConversationScreen() {
             draggingRef.current = false;
           }}
           onViewableItemsChanged={onViewableItemsChanged as never}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+          }}
           viewabilityConfig={{ itemVisiblePercentThreshold: 40 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
@@ -424,7 +436,12 @@ export function ConversationScreen() {
                 {conversation.workingDir ? (
                   <>
                     <FolderIcon size={16} color={colors.muted} />
-                    <Text variant="caption" color="muted" numberOfLines={1} style={{ marginLeft: space.xxs, flexShrink: 1 }}>
+                    <Text
+                      variant="caption"
+                      color="muted"
+                      numberOfLines={1}
+                      style={{ marginLeft: space.xxs, marginRight: space.xs, flexShrink: 1 }}
+                    >
                       {conversation.workingDir}
                     </Text>
                   </>
@@ -538,11 +555,16 @@ export function ConversationScreen() {
           <View
             style={[
               styles.composerField,
-              { borderColor: colors.control, backgroundColor: colors.surface },
+              {
+                borderColor: colors.control,
+                backgroundColor: colors.surface,
+                minHeight: Math.max(geometry.composerMin, 44 + 16 * textScale),
+              },
             ]}
           >
             <TextInput
               ref={inputRef}
+              allowFontScaling={false}
               accessibilityLabel={working ? 'Add an instruction' : 'Message'}
               value={draft}
               onChangeText={(value) => {
@@ -551,13 +573,30 @@ export function ConversationScreen() {
                 if (composerError) setComposerError(null);
               }}
               onBlur={() => controller.flushDraft()}
-              placeholder={working ? 'A thought, a question, a direction…' : 'Write a message'}
+              placeholder={
+                textScale > 1.35
+                  ? working
+                    ? 'Instruction'
+                    : 'Message'
+                  : working
+                    ? 'A thought, a question, a direction…'
+                    : 'Write a message'
+              }
               placeholderTextColor={colors.muted}
               selectionColor={colors.focus}
               multiline
               maxLength={32_000}
               textAlignVertical="top"
-              style={[styles.input, { color: colors.ink }]}
+              style={[
+                styles.input,
+                {
+                  color: colors.ink,
+                  fontSize: 16 * textScale,
+                  lineHeight: 24 * textScale,
+                  minHeight: 26 * textScale + 20,
+                  maxHeight: (geometry.composerMax - 16) * Math.min(textScale, 1.7),
+                },
+              ]}
               onKeyPress={(event) => {
                 const native = event.nativeEvent as unknown as { key?: string; modifiers?: string[] };
                 if (native.key === 'Enter' && native.modifiers?.some((value) => value === 'meta' || value === 'ctrl')) {
@@ -723,13 +762,18 @@ function SeamRow({ count, onSeen, onViewWork }: { count: number | null; onSeen: 
   const { colors } = useTheme();
   return (
     <View style={styles.seamWrap}>
-      <View style={[styles.seamLine, { backgroundColor: colors.accent }]} />
-      <View style={styles.seamBody}>
-        <Text variant="small" weight="semibold" color="ink">
+      <View style={styles.seamRuleRow}>
+        <View style={[styles.seamRule, { backgroundColor: colors.accent }]} />
+        <Text variant="small" weight="semibold" style={{ marginHorizontal: space.sm }}>
           Since you left
         </Text>
+        <View style={[styles.seamRule, { backgroundColor: colors.accent }]} />
+      </View>
+      <View style={styles.seamBody}>
         <Text variant="caption" color="muted">
-          {count !== null ? `${count} ${count === 1 ? 'update' : 'updates'}` : 'New activity since your last visit'}
+          {count !== null
+            ? `${count} ${count === 1 ? 'update' : 'updates'}`
+            : 'New activity since your last visit'}
         </Text>
         <View style={styles.seamActions}>
           <TextAction label="Mark seen" onPress={onSeen} />
@@ -947,9 +991,10 @@ const styles = StyleSheet.create({
   },
   deliveryFooter: { marginTop: space.xs, alignItems: 'flex-end' },
   deliveryActions: { flexDirection: 'row', marginTop: space.xxs, gap: space.xs },
-  seamWrap: { flexDirection: 'row', marginTop: space.lg, marginBottom: space.xs },
-  seamLine: { width: 1, marginRight: space.sm },
-  seamBody: { flex: 1, paddingVertical: space.xxs },
+  seamWrap: { marginTop: space.lg, marginBottom: space.xs, paddingVertical: space.xxs },
+  seamRuleRow: { flexDirection: 'row', alignItems: 'center' },
+  seamRule: { flex: 1, height: StyleSheet.hairlineWidth },
+  seamBody: { paddingLeft: space.xxs, paddingTop: space.xxs },
   seamActions: { flexDirection: 'row', gap: space.md, marginTop: space.xxs },
   olderLoader: { paddingVertical: space.md, alignItems: 'center' },
   errorRow: {
@@ -1006,11 +1051,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minHeight: 40,
-    maxHeight: geometry.composerMax - 16,
-    paddingTop: Platform.OS === 'ios' ? 10 : 6,
-    paddingBottom: Platform.OS === 'ios' ? 10 : 6,
-    fontSize: 16,
-    lineHeight: 24,
+    paddingTop: Platform.OS === 'ios' ? 8 : 6,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 6,
     includeFontPadding: false,
   },
   sendTarget: {

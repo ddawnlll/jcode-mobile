@@ -80,32 +80,59 @@ export function WorkSheet({
     }
   }, [visible]);
 
+  const showPlanTab = (conversation.plan?.state.todos.length ?? 0) > 0;
+
   useEffect(() => {
     if (!visible) return;
     void controller.loadPlan();
   }, [visible]);
 
-  const showPlanTab = conversation.plan !== null;
+  useEffect(() => {
+    if (!showPlanTab && tab === 'plan') setTab('activity');
+  }, [showPlanTab, tab]);
 
   const activities = useMemo<Activity[]>(() => {
-    const result: Activity[] = [];
-    const seamIndex = conversation.seam?.index ?? null;
-    let seamPlaced = false;
+    const entries: Activity[] = [];
     for (const message of conversation.messages) {
-      if (message.role !== 'tool') continue;
-      if (!seamPlaced && seamIndex !== null && message.index >= seamIndex) {
-        result.push({ kind: 'seam', key: `seam-${seamIndex}`, count: conversation.seam?.count ?? null });
-        seamPlaced = true;
+      if (message.tool_data) {
+        entries.push({
+          kind: 'tool',
+          key: `ht-${message.index}`,
+          row: {
+            callId: message.tool_data.id,
+            name: message.tool_data.name,
+            input: message.tool_data.input,
+            state: 'done',
+            startedAt: 0,
+            historical: true,
+          },
+        });
+        continue;
       }
-      result.push({ kind: 'historyTool', key: `h-${message.index}`, message });
-    }
-    if (!seamPlaced && seamIndex !== null) {
-      result.push({ kind: 'seam', key: `seam-live`, count: conversation.seam?.count ?? null });
+      if (message.role !== 'tool') continue;
+      entries.push({ kind: 'historyTool', key: `h-${message.index}`, message });
     }
     for (const row of conversation.tools) {
-      result.push({ kind: 'tool', key: `t-${row.callId}`, row });
+      entries.push({ kind: 'tool', key: `t-${row.callId}`, row });
     }
-    return result;
+    const seamIndex = conversation.seam?.index ?? null;
+    if (seamIndex === null || entries.length === 0) return entries;
+    const seam: Activity = {
+      kind: 'seam',
+      key: `seam-${seamIndex}`,
+      count: conversation.seam?.count ?? null,
+    };
+    const firstHistory = entries.findIndex(
+      (entry) =>
+        (entry.kind === 'historyTool' && entry.message.index >= seamIndex) ||
+        (entry.kind === 'tool' && entry.row.historical),
+    );
+    if (firstHistory >= 0) {
+      entries.splice(firstHistory, 0, seam);
+    } else {
+      entries.push(seam);
+    }
+    return entries;
   }, [conversation.messages, conversation.tools, conversation.seam]);
 
   const copy = async (id: string, value: string) => {
@@ -220,15 +247,18 @@ export function WorkSheet({
                     if (item.kind === 'seam') {
                       return (
                         <View key={item.key} style={styles.seam}>
-                          <View style={[styles.seamLine, { backgroundColor: colors.accent }]} />
-                          <View style={{ flex: 1 }}>
-                            <Text variant="small" weight="semibold">
+                          <View style={styles.seamRuleRow}>
+                            <View style={[styles.seamRule, { backgroundColor: colors.accent }]} />
+                            <Text variant="small" weight="semibold" style={{ marginHorizontal: space.sm }}>
                               Since you left
                             </Text>
-                            <Text variant="caption" color="muted">
-                              {item.count !== null ? `${item.count} ${item.count === 1 ? 'update' : 'updates'}` : 'New activity since your last visit'}
-                            </Text>
+                            <View style={[styles.seamRule, { backgroundColor: colors.accent }]} />
                           </View>
+                          <Text variant="caption" color="muted" style={{ marginTop: space.xxs }}>
+                            {item.count !== null
+                              ? `${item.count} ${item.count === 1 ? 'update' : 'updates'}`
+                              : 'New activity since your last visit'}
+                          </Text>
                         </View>
                       );
                     }
@@ -272,7 +302,7 @@ export function WorkSheet({
                           { backgroundColor: pressed ? colors.raised : 'transparent' },
                         ]}
                       >
-                        <View style={styles.spine} />
+                        <View style={[styles.spine, { backgroundColor: colors.line }]} />
                         {row.state === 'running' ? (
                           <WorkIcon size={18} color={colors.success} />
                         ) : row.state === 'failed' ? (
@@ -471,9 +501,11 @@ function ToolDetail({
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: geometry.gutterCompact, paddingBottom: space.xxl }}>
         <Text variant="caption" color="muted">
-          {row?.state === 'running' ? 'Running' : row?.state === 'failed' ? 'Failed' : 'Completed'}
-          {row ? ` · started ${formatClock(row.startedAt)}` : ''}
-          {row?.completedAt ? ` · finished ${formatClock(row.completedAt)}` : ''}
+          {row?.historical
+            ? 'Recorded in saved history'
+            : `${row?.state === 'running' ? 'Running' : row?.state === 'failed' ? 'Failed' : 'Completed'}${
+                row?.startedAt ? ` · started ${formatClock(row.startedAt)}` : ''
+              }${row?.completedAt ? ` · finished ${formatClock(row.completedAt)}` : ''}`}
         </Text>
         <Text variant="subhead" style={{ marginTop: space.xxs }}>
           {name}
@@ -482,6 +514,12 @@ function ToolDetail({
           <Section title={copied === 'params' ? 'Parameters · Copied' : 'Parameters'} onCopy={() => copy('params', params)}>
             <Code text={boundedParams.text + (boundedParams.truncated ? '\n… truncated' : '')} />
           </Section>
+        ) : null}
+        {!output && row?.historical ? (
+          <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
+            The tool result is not part of the bounded history window. Open the conversation to read
+            the committed output.
+          </Text>
         ) : null}
         {output ? (
           <Section
@@ -618,17 +656,18 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   spine: {
+    position: 'absolute',
+    left: geometry.gutterCompact + 8,
+    top: 0,
+    bottom: 0,
     width: StyleSheet.hairlineWidth,
-    alignSelf: 'stretch',
-    backgroundColor: 'transparent',
   },
   seam: {
-    flexDirection: 'row',
     paddingHorizontal: geometry.gutterCompact,
     paddingVertical: space.sm,
-    gap: space.sm,
   },
-  seamLine: { width: 2 },
+  seamRuleRow: { flexDirection: 'row', alignItems: 'center' },
+  seamRule: { flex: 1, height: StyleSheet.hairlineWidth },
   planRow: {
     minHeight: geometry.planItemMin,
     flexDirection: 'row',

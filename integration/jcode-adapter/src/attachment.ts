@@ -61,6 +61,7 @@ export class Attachment {
   private currentToolCallId: string | null = null;
   private closed = false;
   private createdAt = Date.now();
+  private daemonVersion: string | null = null;
 
   constructor(options: AttachmentOptions) {
     this.options = options;
@@ -78,6 +79,10 @@ export class Attachment {
 
   get ageMs(): number {
     return Date.now() - this.createdAt;
+  }
+
+  get observedDaemonVersion(): string | null {
+    return this.daemonVersion;
   }
 
   private emit(frame: Record<string, unknown>, replyTo?: number): void {
@@ -288,6 +293,7 @@ export class Attachment {
         const pending = this.pending.get(id);
         if (!pending) return;
         this.pending.delete(id);
+        if (this.stoppedThisTurn) this.finishTurn();
         const accepted = {
           ev: 'message_accepted',
           ...this.identity(),
@@ -321,8 +327,9 @@ export class Attachment {
         }
         this.status = 'ready';
         this.noteTerminal(message);
+        this.stoppedThisTurn = true;
         this.push({ ev: 'turn_stopped', ...this.identity(), turn_id: this.turnId, reason: 'error', message });
-        this.finishTurn();
+        this.scheduleStoppedFallback();
         return;
       }
       case 'text_delta': {
@@ -437,10 +444,10 @@ export class Attachment {
         const reason = typeof event.reason === 'string' ? event.reason : 'unknown';
         const message = typeof event.message === 'string' ? event.message : 'The turn stopped.';
         this.status = 'ready';
-        this.stoppedThisTurn = true;
         this.noteTerminal(message);
+        this.stoppedThisTurn = true;
         this.push({ ev: 'turn_stopped', ...this.identity(), turn_id: this.turnId, reason, message });
-        this.finishTurn();
+        this.scheduleStoppedFallback();
         this.requestHistory();
         return;
       }
@@ -455,7 +462,7 @@ export class Attachment {
           reason: 'interrupted',
           message: 'Stopped by you.',
         });
-        this.finishTurn();
+        this.scheduleStoppedFallback();
         return;
       }
       case 'provider_guardrail': {
@@ -463,6 +470,7 @@ export class Attachment {
           typeof event.message === 'string' ? event.message : 'The provider ended the turn without output.';
         this.status = 'ready';
         this.noteTerminal(message);
+        this.stoppedThisTurn = true;
         this.push({
           ev: 'turn_stopped',
           ...this.identity(),
@@ -470,12 +478,14 @@ export class Attachment {
           reason: 'provider_guardrail',
           message,
         });
-        this.finishTurn();
+        this.scheduleStoppedFallback();
         return;
       }
       case 'done': {
         this.status = 'ready';
         if (this.stoppedThisTurn) {
+          // `done` is the terminal confirmation of the stopped turn, not a
+          // successful completion. Keep Stopped visible and close the turn.
           this.finishTurn();
           return;
         }
@@ -576,7 +586,22 @@ export class Attachment {
     else this.queue(frame);
   }
 
+  private stoppedFallback: NodeJS.Timeout | null = null;
+
+  private scheduleStoppedFallback(): void {
+    if (this.stoppedFallback) clearTimeout(this.stoppedFallback);
+    this.stoppedFallback = setTimeout(() => {
+      this.stoppedFallback = null;
+      if (this.stoppedThisTurn && !this.closed) this.finishTurn();
+    }, 2500);
+    this.stoppedFallback.unref?.();
+  }
+
   private finishTurn(): void {
+    if (this.stoppedFallback) {
+      clearTimeout(this.stoppedFallback);
+      this.stoppedFallback = null;
+    }
     this.turnId += 1;
     this.stoppedThisTurn = false;
     this.tools.clear();
@@ -585,6 +610,9 @@ export class Attachment {
   }
 
   private onHistory(event: Record<string, unknown>): void {
+    if (typeof event.server_version === 'string' && event.server_version) {
+      this.daemonVersion = event.server_version;
+    }
     const messages = Array.isArray(event.messages) ? event.messages : [];
     const parsed = messages
       .map((message, index) => {
@@ -593,10 +621,31 @@ export class Attachment {
         const role = typeof record.role === 'string' ? record.role : '';
         const content = typeof record.content === 'string' ? record.content : '';
         if (!role) return null;
+        const toolCalls = Array.isArray(record.tool_calls)
+          ? record.tool_calls.filter((value): value is string => typeof value === 'string')
+          : undefined;
+        const toolData =
+          record.tool_data && typeof record.tool_data === 'object'
+            ? (record.tool_data as Record<string, unknown>)
+            : null;
+        const toolId = toolData && typeof toolData.id === 'string' ? toolData.id : null;
+        const toolName = toolData && typeof toolData.name === 'string' ? toolData.name : null;
+        const boundedInput = toolData ? truncate(JSON.stringify(toolData.input ?? null), 8192) : null;
         return {
           index,
           role,
           content,
+          ...(toolCalls && toolCalls.length ? { tool_calls: toolCalls.slice(0, 20) } : null),
+          ...(toolId && toolName
+            ? {
+                tool_data: {
+                  id: toolId,
+                  name: toolName,
+                  ...(boundedInput ? { input: safeParse(boundedInput.text) } : null),
+                  ...(typeof toolData?.intent === 'string' ? { intent: toolData.intent } : null),
+                },
+              }
+            : null),
           ...(record.response_stats ? { response_stats: record.response_stats } : null),
         };
       })
@@ -752,6 +801,14 @@ export class Attachment {
   private closeConnection(): void {
     this.dispose();
     this.options.onClosed?.();
+  }
+}
+
+function safeParse(raw: string): unknown {
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
   }
 }
 

@@ -26,6 +26,7 @@ export function parseMarkdown(source: string): Block[] {
   let quote: string[] = [];
   let code: { language: string; lines: string[]; closed: boolean } | null = null;
   let table: { header: string[]; rows: string[][] } | null = null;
+  let skipTableSeparator = false;
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
@@ -57,6 +58,10 @@ export function parseMarkdown(source: string): Block[] {
   for (const raw of lines) {
     if (blocks.length >= MAX_BLOCKS) break;
     const line = raw.replace(/\t/g, '    ');
+    if (skipTableSeparator) {
+      skipTableSeparator = false;
+      continue;
+    }
     if (code) {
       if (line.trim().startsWith('```')) {
         blocks.push({ type: 'code', language: code.language, code: code.lines.join('\n'), closed: true });
@@ -102,6 +107,7 @@ export function parseMarkdown(source: string): Block[] {
         if (separator.length === cells.length && separator.every((cell) => /^:?-{2,}:?$/.test(cell.trim()))) {
           flushAll();
           table = { header: cells, rows: [] };
+          skipTableSeparator = true;
           continue;
         }
       }

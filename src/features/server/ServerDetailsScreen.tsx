@@ -24,11 +24,17 @@ export function ServerDetailsScreen() {
   const [details, setDetails] = useState<Awaited<ReturnType<typeof controller.serverDetails>>>(null);
   const [cache, setCache] = useState<{ bytes: number; sessions: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<Array<{ id: string; label: string; host: string; active: boolean }>>([]);
 
   const refresh = useCallback(async () => {
-    const [next, stats] = await Promise.all([controller.serverDetails(), cacheStats()]);
+    const [next, stats, servers] = await Promise.all([
+      controller.serverDetails(),
+      cacheStats(),
+      controller.profiles(),
+    ]);
     setDetails(next);
     setCache(stats);
+    setProfiles(servers);
   }, []);
 
   useFocusEffect(
@@ -91,8 +97,37 @@ export function ServerDetailsScreen() {
           </View>
         </View>
 
+        {profiles.length > 1 ? (
+          <Group title="Servers">
+            {profiles.map((profile) => (
+              <Pressable
+                key={profile.id}
+                accessibilityRole="button"
+                accessibilityLabel={`Switch to ${profile.label}`}
+                accessibilityState={{ selected: profile.active }}
+                disabled={profile.active}
+                onPress={async () => {
+                  await controller.switchProfile(profile.id);
+                  navigation.navigate('Sessions' as never);
+                }}
+                style={({ pressed }) => [styles.settingRow, pressed && { opacity: 0.7 }]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text variant="body">{profile.label}</Text>
+                  <Text variant="caption" color="muted">
+                    {profile.host}
+                  </Text>
+                </View>
+                <Text variant="small" color={profile.active ? 'success' : 'muted'}>
+                  {profile.active ? 'Current' : 'Switch'}
+                </Text>
+              </Pressable>
+            ))}
+          </Group>
+        ) : null}
+
         <Group title="Connection">
-          <SettingRow label="JCode version" value={connection.daemonVersion ?? 'From server'} />
+          <SettingRow label="JCode version" value={connection.daemonVersion ?? 'Not reported yet'} />
           <SettingRow
             label="Last contact"
             value={connection.lastCheckedAt ? formatClock(connection.lastCheckedAt) : 'Not yet'}
@@ -261,8 +296,9 @@ function SettingRow({
   value: string;
   valueColor?: 'ink' | 'muted' | 'success' | 'warning' | 'error';
 }) {
+  const { colors } = useTheme();
   return (
-    <View style={styles.settingRow}>
+    <View style={[styles.settingRow, { borderBottomColor: colors.line }]}>
       <Text variant="body" style={{ flex: 1 }}>
         {label}
       </Text>
@@ -292,7 +328,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(113,137,129,0.35)',
     gap: space.sm,
   },
   toggleRow: {

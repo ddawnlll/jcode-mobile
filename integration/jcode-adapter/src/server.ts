@@ -237,7 +237,6 @@ export class MobileAdapter {
           version: 1,
           server: 'jcode-mobile-adapter/0.1.0',
           capabilities: ADAPTER_CAPABILITIES,
-          daemon_version: this.bridge.daemonVersion,
         });
         return;
       }
@@ -245,13 +244,13 @@ export class MobileAdapter {
         this.reply(client, id, { ev: 'ok' });
         return;
       case 'get_server_info': {
-        let daemonVersion = this.bridge.daemonVersion;
+        let daemonVersion = this.observedDaemonVersion() ?? undefined;
         try {
           await this.bridge.ensure();
-          daemonVersion = this.bridge.daemonVersion;
         } catch (error) {
           log(this.config, 'warn', `server info: ${(error as Error).message}`);
         }
+        daemonVersion = this.observedDaemonVersion() ?? daemonVersion;
         this.reply(client, id, {
           ev: 'server_info',
           server: 'jcode-mobile-adapter/0.1.0',
@@ -353,6 +352,7 @@ export class MobileAdapter {
       case 'cancel': {
         const attachment = this.requireAttachment(client, id, frame);
         if (!attachment) return;
+        log(this.config, 'info', 'explicit stop requested', { session: attachment.sessionId });
         attachment.cancel();
         this.reply(client, id, { ev: 'ok' });
         return;
@@ -504,6 +504,16 @@ export class MobileAdapter {
     } catch (error) {
       this.error(client, id, 'daemon_unavailable', (error as Error).message);
     }
+  }
+
+  private observedDaemonVersion(): string | null {
+    for (const client of this.clients) {
+      for (const attachment of client.attachments.values()) {
+        const version = attachment.observedDaemonVersion;
+        if (version) return version;
+      }
+    }
+    return null;
   }
 
   private liveStates(): Map<string, 'working' | 'ready'> {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   BackHandler,
+  Keyboard,
   findNodeHandle,
   Pressable,
   StyleSheet,
@@ -63,6 +64,7 @@ export function BottomSheet({
 
   useEffect(() => {
     if (visible) {
+      Keyboard.dismiss();
       setMounted(true);
       closing.current = false;
       translateY.value = sheetHeight;
@@ -135,7 +137,7 @@ export function BottomSheet({
   return (
     <View style={StyleSheet.absoluteFill} testID={testID} pointerEvents="box-none">
       <AnimatedView
-        style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: 0.32 }, scrimStyle]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.32)' }, scrimStyle]}
         pointerEvents="none"
       />
       <Pressable
