@@ -100,3 +100,4 @@ No performance claim is made from the HTML exhibit or from Simulator memory. And
 - Manual VoiceOver/TalkBack passes: NOT_RUN.
 - A09 has adapter-contract evidence only; A05/A07/A08/A10 have native evidence. Two-adapter A10 test shared one staging device registry, so the inactive profile showed `Pair again` after the test; draft scoping itself was unaffected.
 - The release APK was installed from `artifacts/` and paired through the Connect screen against the loopback adapter (`adb reverse`), with a loopback-scoped Android network security config. Remote hosts still require TLS.
+- The iOS Release Simulator build keeps `NSAllowsLocalNetworking` disabled, so it cannot pair over plain `ws://127.0.0.1`. iOS end-to-end pairing/sending was verified with the dev build; the release zip was verified to install and launch to Connect. A remote TLS endpoint is required for iOS release acceptance.
