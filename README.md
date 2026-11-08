@@ -56,13 +56,7 @@ This binds the adapter to all interfaces with TLS. Restrict the port with a fire
 
 ### 2. Mint a pairing code
 
-On the server, in any JCode session:
-
-```text
-/remote pair
-```
-
-Or from a shell:
+On the server, as the same user that runs the JCode daemon:
 
 ```sh
 jcode pair
@@ -70,12 +64,14 @@ jcode pair
 
 The six-digit code is valid for five minutes. It is exchanged once for a device token.
 
+`/remote` is not available in JCode 0.99.1's CLI, so use `jcode pair`. If the command is missing, check `jcode --version` and upgrade JCode. The adapter must read the same `JCODE_HOME/devices.json` that `jcode pair` wrote.
+
 ### 3. Install the app
 
 **Android:** download the APK from [Releases](https://github.com/ddawnlll/jcode-mobile/releases/latest), then:
 
 ```sh
-adb install -r jcode-mobile-0.1.1-android-release.apk
+adb install -r jcode-mobile-0.1.2-android-release.apk
 ```
 
 The APK is a release build, but it is debug-signed for sideloading. It is not a Play Store artifact.
@@ -83,7 +79,7 @@ The APK is a release build, but it is debug-signed for sideloading. It is not a 
 **iOS Simulator:** download the zip, unzip it, and install it into a booted Simulator:
 
 ```sh
-unzip -o jcode-mobile-0.1.1-ios-simulator.app.zip -d /tmp/jcode-ios
+unzip -o jcode-mobile-0.1.2-ios-simulator.app.zip -d /tmp/jcode-ios
 xcrun simctl install booted /tmp/jcode-ios/JCodeMobile.app
 xcrun simctl launch booted com.jcodemobile.app
 ```

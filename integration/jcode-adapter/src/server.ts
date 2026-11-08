@@ -251,7 +251,7 @@ export class MobileAdapter {
         this.reply(client, id, {
           ev: 'hello_ok',
           version: 1,
-          server: 'jcode-mobile-adapter/0.1.1',
+          server: 'jcode-mobile-adapter/0.1.2',
           capabilities: ADAPTER_CAPABILITIES,
         });
         return;
@@ -269,7 +269,7 @@ export class MobileAdapter {
         daemonVersion = this.observedDaemonVersion() ?? daemonVersion;
         this.reply(client, id, {
           ev: 'server_info',
-          server: 'jcode-mobile-adapter/0.1.1',
+          server: 'jcode-mobile-adapter/0.1.2',
           daemon_version: daemonVersion,
           continuation: true,
           capabilities: ADAPTER_CAPABILITIES,

@@ -8,7 +8,7 @@ Updated: 2026-11-08
 | --- | --- |
 | Branch | `main` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.1.1 |
+| App version | 0.1.2 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -36,8 +36,8 @@ Updated: 2026-11-08
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.1.1-ios-simulator.app.zip` | 24 MiB | `7ee0afd5b15cab79148dffe713965fe74df71a9cb2f77aab245d2d69858ea968` |
-| `artifacts/jcode-mobile-0.1.1-android-release.apk` | 60 MiB | `0e1e97092788d399949a8bebe21913f8f63ba72dc21563b76b61c5895d7714e9` |
+| `artifacts/jcode-mobile-0.1.2-ios-simulator.app.zip` | 24 MiB | `e5919b9ccce1a3e944c43ad2bb1d544db5de482e2408df8e7117e7b639655d46` |
+| `artifacts/jcode-mobile-0.1.2-android-release.apk` | 60 MiB | `01086f389050de505f7444d7a0373ac180aa9cca3a83d4d4b970114d507373ea` |
 
 The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
 

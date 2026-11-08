@@ -95,7 +95,7 @@ export class MobileClient {
 
       socket.onopen = () => {
         this.setState('open');
-        this.request({ req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.1' })
+        this.request({ req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.2' })
           .then((frame) => {
             if (settled) return;
             if (frame.ev !== 'hello_ok') {

@@ -56,7 +56,7 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL, with `NOT_RUN` and `PARTIAL` for v
 | 5.2 | Visual critique and refinement | DONE | Seam, dock, scrim, composer, spine fixes |
 | 5.3 | Performance measurements | PARTIAL | Android emulator baseline recorded; physical performance NOT_RUN |
 | 5.4 | Tests: unit, RNTL, contract | DONE | 34 tests + 7 adapter tests |
-| 5.5 | Android APK + iOS Simulator `.app` | DONE | Final v0.1.1 checksums `0e1e9709…14e9` / `7ee0afd5…a968`; both installed and launched |
+| 5.5 | Android APK + iOS Simulator `.app` | DONE | Final v0.1.2 checksums `01086f38…73ea` / `e5919b9c…5d46`; both installed and launched |
 | 5.6 | CI, README, notices, push | DONE | CI run `42497990160` success; private draft assets verified; repo private |
 
 ## Genuine blockers

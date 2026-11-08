@@ -271,22 +271,13 @@ export function ConnectScreen() {
         {showDetails ? (
           <View style={[styles.setup, { backgroundColor: colors.surface, borderColor: colors.line }]}>
             <Text variant="small" color="muted">
-              On the server, in a JCode session:
-            </Text>
-            <CommandRow
-              command="/remote on"
-              copied={copied === 'remote'}
-              onCopy={() => copy('remote', '/remote on')}
-            />
-            <CommandRow
-              command="/remote pair"
-              copied={copied === 'paircmd'}
-              onCopy={() => copy('paircmd', '/remote pair')}
-            />
-            <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
-              Or from a shell:
+              Run this on the server as the same user that runs the JCode daemon:
             </Text>
             <CommandRow command="jcode pair" copied={copied === 'cli'} onCopy={() => copy('cli', 'jcode pair')} />
+            <Text variant="small" color="muted" style={{ marginTop: space.xs }}>
+              The six-digit code is valid for five minutes. If `jcode pair` is missing, upgrade JCode;
+              this build was verified with JCode 0.99.1.
+            </Text>
             <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
               This app also needs the JCode Mobile adapter on the server, with TLS enabled for remote
               access. The adapter reuses the same pairing registry and sets disconnect continuation on
