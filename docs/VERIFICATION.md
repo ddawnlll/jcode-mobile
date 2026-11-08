@@ -11,7 +11,7 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | TypeScript strict | PASS | `npx tsc --noEmit` | exit 0, no diagnostics |
 | ESLint | PASS | `npx eslint .` | exit 0, 2 style warnings (unused pattern; no errors) |
 | Unit + RNTL tests | PASS | `npm test` | 5 suites, 33 tests passed |
-| Adapter contract tests | PASS | `node --test integration/jcode-adapter/test/attach-contract.test.ts` | 2/2 pass; records `continue_on_disconnect: true`, exact target, no cancel/clear/prepare_disconnect on dispose |
+| Adapter contract tests | PASS | `node --test integration/jcode-adapter/test/attach-contract.test.ts` | 3/3 pass; continuation flag, exact target, no destructive dispose frames, and retry rollback clears provisional text |
 | iOS dev build | PASS | `npx expo run:ios --device "iPhone 17 Pro"` | BUILD SUCCEEDED, launched |
 | iOS Simulator release `.app` | PASS | `bash scripts/build-ios-simulator.sh` | BUILD SUCCEEDED; `main.jsbundle` present; zip 24 MiB |
 | Android release APK | PASS | `bash scripts/build-android-release.sh`; installed, launched, paired, created sessions, archived/undone, revoked/re-paired on the API 36 emulator; SHA-256 in BUILD_STATE |
@@ -34,7 +34,7 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | A06 stale terminal fencing | PARTIAL | Adapter-normalized attachment/turn ids and client guards implemented; no deterministic stale-frame replay test |
 | A07 guidance incorporated exactly once | PASS | During a 90 s bash turn, guidance showed `Queued for the next safe point`, then one instruction block and one assistant occurrence (`GUIDANCE-THREE`) after completion. Capture: `android-guidance.png` |
 | A08 reading anchor during a burst | NOT_RUN | Implemented; not measured |
-| A09 retry rollback replacement | NOT_RUN | Implemented; provider retry not forced |
+| A09 retry rollback replacement | PARTIAL | Adapter contract test injects `retry_rollback`: emits `text_replace` with empty text and `retrying (1/3)`, no cancel. A real provider retry was not forced natively |
 | A10 server switch while typing | NOT_RUN | Scoped drafts implemented; native test not run |
 | A11 keyboard at 200% text | PASS | Accessibility text size `accessibility-extra-extra-large`; composer, Send, labels reflow and remain reachable; composer placeholder shortened |
 | A12 no fabricated plan/approval/push/file controls | PASS | With a reported plan, Work > Plan shows `0 of 3 reported steps complete` and three pending steps; hidden when zero todos; no approval UI; notifications reported unavailable |
@@ -95,5 +95,5 @@ No performance claim is made from the HTML exhibit or from Simulator memory. And
 - Live VPS: BLOCKED. `v7-remote` resets SSH on its configured port; no alternate authorized endpoint was assumed.
 - Physical iOS device and Samsung A34: NOT_RUN (not attached).
 - Manual VoiceOver/TalkBack passes: NOT_RUN.
-- A08/A09/A10 adversarial native scenarios: NOT_RUN as listed. A05/A07 now have native evidence.
+- A08/A10 adversarial native scenarios remain NOT_RUN; A09 has adapter-contract evidence only. A05/A07 have native evidence.
 - The release APK was installed from `artifacts/` and paired through the Connect screen against the loopback adapter (`adb reverse`), with a loopback-scoped Android network security config. Remote hosts still require TLS.

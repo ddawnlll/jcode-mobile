@@ -55,7 +55,7 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL, with `NOT_RUN` and `PARTIAL` for v
 | 5.1 | Accessibility, 200% text, reduced motion | DONE (manual SR NOT_RUN) | Large-text capture; AX tree inspected |
 | 5.2 | Visual critique and refinement | DONE | Seam, dock, scrim, composer, spine fixes |
 | 5.3 | Performance measurements | PARTIAL | Android emulator baseline recorded; physical performance NOT_RUN |
-| 5.4 | Tests: unit, RNTL, contract | DONE | 33 tests + 2 contract tests |
+| 5.4 | Tests: unit, RNTL, contract | DONE | 33 tests + 3 contract tests |
 | 5.5 | Android APK + iOS Simulator `.app` | DONE | Final checksums `13e0b77c…7600` / `035e3e22…3269`; both installed and launched |
 | 5.6 | CI, README, notices, push | DONE | CI run `42497990160` success; private draft assets verified; repo private |
 
@@ -63,4 +63,4 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL, with `NOT_RUN` and `PARTIAL` for v
 
 - Live VPS (`v7-remote`) unreachable: SSH resets. Live-VPS acceptance remains BLOCKED; isolated local staging used.
 - Physical iOS device and Samsung A34 not attached: physical performance/battery/manual screen-reader checks NOT_RUN.
-- A08/A09/A10 and the manual screen-reader pass remain NOT_RUN; A06 and performance are PARTIAL. A05/A07/A15/A16 are now PASS.
+- A08/A10 and the manual screen-reader pass remain NOT_RUN; A06, A09, and performance are PARTIAL. A05/A07/A15/A16 are now PASS.

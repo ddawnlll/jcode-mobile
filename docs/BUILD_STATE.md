@@ -47,7 +47,7 @@ The APK is a release build (embedded Hermes bundle, debug signing for local inst
 npx tsc --noEmit            # pass
 npx eslint .                # pass, no warnings
 npm test                    # 33/33 pass
-node --test integration/jcode-adapter/test/attach-contract.test.ts   # 2/2 pass
+node --test integration/jcode-adapter/test/attach-contract.test.ts   # 3/3 pass
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts  # PASS
 bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts # PASS
 npx expo run:ios --device "iPhone 17 Pro"  # dev build + launch, pass

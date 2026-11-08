@@ -151,7 +151,7 @@ Exact checksums are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md); scenario re
 
 ```sh
 npm test          # 33 pure + RNTL tests
-node --test integration/jcode-adapter/test/attach-contract.test.ts  # 2 contract tests
+node --test integration/jcode-adapter/test/attach-contract.test.ts  # 3 contract tests
 npm run check     # typecheck + lint + tests
 ```
 

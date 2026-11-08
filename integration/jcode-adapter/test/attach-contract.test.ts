@@ -179,3 +179,34 @@ test('attach never sends a destructive request before an explicit Stop', async (
     assert.ok(!types.includes('cancel'));
   });
 });
+
+test('retry rollback clears provisional text and reports the retry phase', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 4,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_target_3',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_target_3', is_processing: true, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_target_3', messages: [] });
+    await started;
+
+    send({ type: 'text_delta', text: 'partial answer' });
+    send({ type: 'retry_rollback', attempt: 1, max: 3 });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const replacement = emitted.find((frame) => frame.ev === 'text_replace');
+    assert.ok(replacement, 'text_replace emitted');
+    assert.equal(replacement!.text, '', 'provisional text is cleared');
+    const phase = emitted.find((frame) => frame.ev === 'connection_phase');
+    assert.ok(phase, 'retry phase emitted');
+    assert.match(String(phase!.phase), /retrying \(1\/3\)/);
+    const types = frames().map((frame) => frame.type);
+    assert.ok(!types.includes('cancel'), 'retry must not cancel the turn');
+    attachment.dispose();
+  });
+});
