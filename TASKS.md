@@ -1,6 +1,6 @@
 # JCode Mobile — task ledger
 
-Status: DONE / DOING / TODO / BLOCKED / FAIL. A gate is only DONE with evidence in `docs/VERIFICATION.md`.
+Status: DONE / DOING / TODO / BLOCKED / FAIL, with `NOT_RUN` and `PARTIAL` for verification items. A gate is only DONE with evidence in `docs/VERIFICATION.md`.
 
 ## Phase 1 — Bootstrap (G0)
 
@@ -40,12 +40,12 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL. A gate is only DONE with evidence 
 
 | # | Task | Status | Acceptance |
 | --- | --- | --- | --- |
-| 4.1 | Work sheet, tool rows, detail, file read | DONE | Historical tool calls reconstructed from `tool_data` |
+| 4.1 | Work sheet, tool rows, detail, file read | DONE | Live and historical rows deduped by call id; file read capability-gated |
 | 4.2 | Plan tab only when reported | DONE | Hidden with zero todos |
-| 4.3 | New session sheet + validation | DONE | Implemented; create path proven via adapter/integration |
-| 4.4 | Connect/pair, server details, appearance | DONE | Android deep-link pairing + Night |
+| 4.3 | New session sheet + validation | DONE | Native create with server folder + first instruction; returned id used for attach |
+| 4.4 | Connect/pair, server details, appearance | DONE | Deep-link pairing, revoked re-pair, server details, Night |
 | 4.5 | Archive/restore with undo | DONE | Undo notice, archived list toggle, restore action |
-| 4.6 | Persistence: SecureStore, SQLite, drafts, cache | DONE | Serialized transactions; bounded cache |
+| 4.6 | Persistence: SecureStore, SQLite, drafts, cache | DONE | Serialized transactions; bounded cache; no transaction errors in final runs |
 | 4.7 | Offline/recovery states | DONE | Android offline capture + reconciliation |
 
 ## Phase 5 — Craft, reliability, delivery (G4/G5)
@@ -56,11 +56,11 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL. A gate is only DONE with evidence 
 | 5.2 | Visual critique and refinement | DONE | Seam, dock, scrim, composer, spine fixes |
 | 5.3 | Performance measurements | NOT_RUN | No release-build metrics collected |
 | 5.4 | Tests: unit, RNTL, contract | DONE | 33 tests + 2 contract tests |
-| 5.5 | Android APK + iOS Simulator `.app` | DOING | Rebuild with final code in progress |
-| 5.6 | CI, README, notices, push | DOING | Workflow added; run not yet inspected |
+| 5.5 | Android APK + iOS Simulator `.app` | DONE | Final checksums `7c6baa18…674b1` / `39e09f14…3408`; both installed and launched |
+| 5.6 | CI, README, notices, push | DONE | CI run `42497990160` success; private draft assets verified; repo private |
 
 ## Genuine blockers
 
 - Live VPS (`v7-remote`) unreachable: SSH resets. Live-VPS acceptance remains BLOCKED; isolated local staging used.
 - Physical iOS device and Samsung A34 not attached: physical performance/battery/manual screen-reader checks NOT_RUN.
-- A05/A07/A08/A09/A10/A13-manual/A15-native/A16-native remain NOT_RUN or PARTIAL as listed in VERIFICATION.
+- A05/A07/A08/A09/A10 and the manual screen-reader pass remain NOT_RUN; A06 is PARTIAL. A15/A16 are now PASS.

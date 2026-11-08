@@ -10,7 +10,7 @@ A native React Native + TypeScript companion for [JCode](https://github.com/1jeh
 | --- | --- |
 | Native iOS and Android app | Expo SDK 58 / React Native 0.88 / React 19.3 / strict TypeScript, Hermes, new architecture |
 | Backend | A small authenticated adapter (`integration/jcode-adapter/`) over the JCode daemon's raw Unix-socket protocol |
-| Continuation | Every attach sets `continue_on_disconnect: true`; proven with a force-quit test against a real staging daemon |
+| Continuation | Every attach sets `continue_on_disconnect: true`; proven with a transport-loss continuity test against a real staging daemon (the same path a force-quit takes) |
 | Daemon death | Reattachment reports the source-backed interruption and recovery directive instead of claiming the turn is still running |
 | Permissions, push, file upload | Not advertised; the UI says so rather than faking controls |
 

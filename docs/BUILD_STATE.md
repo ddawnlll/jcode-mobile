@@ -16,7 +16,7 @@ Updated: 2026-11-08
 | Adapter protocol | v1 |
 | Active iOS Simulator | iPhone 17 Pro, iOS 26.1 (`E9144064-F5FC-4846-A88C-E43DF837F103`) |
 | Staging daemon | `$JCODE_SCRATCH_DIR/jcode-mobile-staging` (private home/runtime dirs) |
-| Staging adapter | `127.0.0.1:7643` (plain ws, loopback development exception) |
+| Staging adapter | `127.0.0.1:7643` (plain ws, loopback development exception); stopped after verification |
 
 ## Decisions that affect resumption
 
@@ -67,7 +67,7 @@ bash scripts/build-ios-simulator.sh          # release Simulator .app, pass
 1. Final release artifacts are rebuilt from the freeze commit; checksums are in `artifacts/*.sha256`.
 2. Native integration, offline/reconnect, Work, Night, and large-text evidence is under `docs/evidence/native/`.
 3. Remaining gates are enumerated in `docs/VERIFICATION.md` as NOT_RUN/PARTIAL/BLOCKED (physical devices, live VPS, some adversarial scenarios).
-4. Push the freeze commit and inspect the GitHub Actions run.
+4. Push the freeze commit and inspect the GitHub Actions run. Done at `d2bccc8`; CI `42497990160` passed. Staging daemon/adapter/emulator were stopped after verification; restart with `scripts/staging-up.sh` and `scripts/staging-adapter.sh`.
 
 ## Device/build identifiers
 
