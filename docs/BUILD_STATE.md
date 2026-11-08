@@ -29,13 +29,15 @@ Updated: 2026-11-08
 - iOS builds need a local compatibility patch for `expo-modules-jsi@58.0.22` (Xcode 26.1 Swift 6.2 sendability). `scripts/patch-expo-modules-jsi.js` runs on postinstall and is idempotent.
 - Local simulator pairing is seeded through a development-only file import (`__DEV__` only, loopback only). Production pairing uses the real `/pair` endpoint with a code from `jcode pair`.
 - The same attachment identity can arrive as history and as a live tool event; Work dedupes by `call_id` and prefers the live row. Attaching a different session resets the transcript and title instead of reusing the previous session's.
+- Sending forces the transcript to the newest item even when the reader was parked at the seam.
+- `JCODE_ADAPTER_FAULT=drop_after_send` is a test-only hook that closes the daemon attachment after a prompt write; it is off by default and used for the A05 capture.
 
 ## Release artifacts (freeze build)
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `39e09f14238206315abd8ed9b70b96cf115297db3aa953d1964962f79a933408` |
-| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `7c6baa183834f7d30a0a43e10877538e9a62c9fc86096fd3c93ced03bf8674b1` |
+| `artifacts/jcode-mobile-0.1.0-ios-simulator.app.zip` | 24 MiB | `035e3e22760b256190defce1296f970c3496616fa47afce0334bb32139fc3269` |
+| `artifacts/jcode-mobile-0.1.0-android-release.apk` | 60 MiB | `13e0b77caef980a461aff9188a909a85504470b0317e3804870b761113d67600` |
 
 The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
 

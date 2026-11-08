@@ -704,6 +704,11 @@ export class Attachment {
     const id = this.nextId();
     this.pending.set(id, { clientMessageId, sentAt: Date.now() });
     this.connection.send({ type: 'message', id, content });
+    if (this.options.config.faultAfterSend) {
+      // Deterministic A05 harness: drop the attachment after the prompt is
+      // written but before the daemon ack can be delivered to the phone.
+      setTimeout(() => this.connection.close(), 0);
+    }
     return { accepted: true };
   }
 

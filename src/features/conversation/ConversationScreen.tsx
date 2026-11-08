@@ -228,6 +228,7 @@ export function ConversationScreen() {
     setDraft('');
     controller.setNearBottom(true);
     nearBottomRef.current = true;
+    scrollToEnd(true);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 

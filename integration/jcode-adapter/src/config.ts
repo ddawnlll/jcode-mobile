@@ -20,6 +20,8 @@ export interface AdapterConfig {
   maxHistoryMessages: number;
   historyWindow: number;
   logLevel: 'debug' | 'info' | 'warn';
+  /** Test-only fault injection; disabled unless explicitly set. */
+  faultAfterSend: boolean;
 }
 
 function runtimeDir(): string {
@@ -56,6 +58,7 @@ export function loadConfig(): AdapterConfig {
     maxHistoryMessages: numberFrom(process.env.JCODE_ADAPTER_MAX_HISTORY, 5000),
     historyWindow: numberFrom(process.env.JCODE_ADAPTER_HISTORY_WINDOW, 60),
     logLevel: (process.env.JCODE_ADAPTER_LOG as AdapterConfig['logLevel']) ?? 'info',
+    faultAfterSend: process.env.JCODE_ADAPTER_FAULT === 'drop_after_send',
   };
 }
 

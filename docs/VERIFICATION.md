@@ -30,9 +30,9 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | A14 Back navigation does not cancel | PASS | Same run: the turn continued after leaving Conversation; no cancel request observed |
 | A18 explicit Stop | PASS | Native: Stop target sent a cancel (adapter log `explicit stop requested`), dock shows red square + `Stopped`, no Stop target remains; adapter suppresses the terminal `done` from flipping to Ready |
 | A03 network loss/cache reconciliation | PASS | Android: adapter stopped, `Offline. Last checked at 17:32. Saved history only.` with editable draft; adapter restarted, Retry reconciled authoritative history and showed a 10-update seam. Full airplane-mode stack not tested |
-| A05 ambiguous delivery | NOT_RUN | State machine and ledger implemented; no native post-write disconnect test |
+| A05 ambiguous delivery | PASS | `JCODE_ADAPTER_FAULT=drop_after_send` closed the daemon attachment after write. The message stayed visible, then became `Delivery unconfirmed` with explicit `Send again` / `Dismiss record`; it was never auto-resent and remained unconfirmed after restart/reconnect. Captures: `android-unconfirmed.png`, `android-unconfirmed-review.png` |
 | A06 stale terminal fencing | PARTIAL | Adapter-normalized attachment/turn ids and client guards implemented; no deterministic stale-frame replay test |
-| A07 guidance incorporated exactly once | NOT_RUN | Queued/injected identity path implemented; not exercised natively |
+| A07 guidance incorporated exactly once | PASS | During a 90 s bash turn, guidance showed `Queued for the next safe point`, then one instruction block and one assistant occurrence (`GUIDANCE-THREE`) after completion. Capture: `android-guidance.png` |
 | A08 reading anchor during a burst | NOT_RUN | Implemented; not measured |
 | A09 retry rollback replacement | NOT_RUN | Implemented; provider retry not forced |
 | A10 server switch while typing | NOT_RUN | Scoped drafts implemented; native test not run |
@@ -65,6 +65,9 @@ Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator 
 | Android new session | `docs/evidence/native/android-new-session.png` | Created from the app, reply rendered |
 | Android revoked | `docs/evidence/native/android-revoked.png` | `Pair again`, cached sessions readable |
 | Android 200% text | `docs/evidence/native/android-large-text.png` | Night mode, shortest placeholder, composer holds |
+| Android unconfirmed delivery | `docs/evidence/native/android-unconfirmed.png` | No auto-resend; explicit review |
+| Android unconfirmed review | `docs/evidence/native/android-unconfirmed-review.png` | `Send again` or `Dismiss record` |
+| Android guidance | `docs/evidence/native/android-guidance.png` | One queued/injected instruction |
 | Android offline | `docs/evidence/native/android-offline.png` | Adapter stopped; cached history, Retry, editable draft |
 
 The dev-client floating gear button appears in development captures. It is not part of the app and is absent in the release build.
@@ -75,20 +78,22 @@ The dev-client floating gear button appears in development captures. It is not p
 | --- | --- | --- | --- |
 | Input/press response | p95 ≤50 ms | NOT_RUN | Simulator only |
 | Warm cached route | p95 ≤150 ms | NOT_RUN | |
-| Cold cached first content | p95 ≤600 ms | NOT_RUN | |
+| Cold cached first content | p95 ≤600 ms | NOT_RUN | Emulator cold start measured separately |
 | Foreground text | ≤150 ms | NOT_RUN | Coalescing is 100 ms by design |
 | Navigation frames | p95 ≤16.7 ms | NOT_RUN | |
-| Android PSS | ≤120/180/220 MiB | NOT_RUN | |
+| Android PSS | ≤120/180/220 MiB | 122,076 KB (~119 MiB) PSS | Release APK on API 36 emulator, swiftshader; not a physical-device claim |
+| Android cold start | target not set | 1,114 ms TotalTime (COLD) | `am start -W`, release APK on emulator |
+| Android frame timing | p95 ≤16.7 ms | p50 73 ms, p95 93 ms, 87.5% janky (72 frames) | Software-rendered emulator; excluded from acceptance |
 | iOS footprint | ≤160/220 MiB | NOT_RUN | |
 | Adapter overhead | ≤32/64 MiB | NOT_RUN | |
 | Stress fixtures | bounded | NOT_RUN | 10k-message fixture not built |
 
-No performance claim is made from the HTML exhibit or from Simulator memory.
+No performance claim is made from the HTML exhibit or from Simulator memory. Android numbers are emulator baselines only; the software renderer makes frame timing non-representative.
 
 ## Limitations and blocked gates
 
 - Live VPS: BLOCKED. `v7-remote` resets SSH on its configured port; no alternate authorized endpoint was assumed.
 - Physical iOS device and Samsung A34: NOT_RUN (not attached).
 - Manual VoiceOver/TalkBack passes: NOT_RUN.
-- A05/A07/A08/A09/A10 adversarial native scenarios: NOT_RUN as listed.
+- A08/A09/A10 adversarial native scenarios: NOT_RUN as listed. A05/A07 now have native evidence.
 - The release APK was installed from `artifacts/` and paired through the Connect screen against the loopback adapter (`adb reverse`), with a loopback-scoped Android network security config. Remote hosts still require TLS.

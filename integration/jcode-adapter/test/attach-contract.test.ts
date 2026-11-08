@@ -29,6 +29,7 @@ function configFor(socketPath: string, stateDir: string): AdapterConfig {
     maxHistoryMessages: 100,
     historyWindow: 10,
     logLevel: 'warn',
+    faultAfterSend: false,
   };
 }
 
