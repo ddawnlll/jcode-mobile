@@ -198,7 +198,9 @@ export interface FieldProps extends Omit<TextInputProps, 'style'> {
   minHeight?: number;
 }
 
-export const Field = React.forwardRef<TextInput, FieldProps>(function Field(
+type TextInputRef = React.ComponentRef<typeof TextInput>;
+
+export const Field = React.forwardRef<TextInputRef, FieldProps>(function Field(
   { label, error, helper, leading, trailing, containerStyle, minHeight, onFocus, onBlur, ...rest },
   ref,
 ) {
@@ -326,7 +328,7 @@ export function Row({
 }
 
 export function useInputRef() {
-  const ref = useRef<TextInput>(null);
+  const ref = useRef<React.ComponentRef<typeof TextInput>>(null);
   const focus = useCallback(() => ref.current?.focus(), []);
   const blur = useCallback(() => ref.current?.blur(), []);
   return { ref, focus, blur };

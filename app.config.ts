@@ -14,13 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'portrait',
   scheme: 'jcodemobile',
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
   icon: './assets/icon.png',
-  splash: {
-    image: './assets/splash-icon.png',
-    resizeMode: 'contain',
-    backgroundColor: '#F3F6F5',
-  },
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.jcodemobile.app',
@@ -38,7 +32,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.jcodemobile.app',
     versionCode: 1,
-    edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: true,
     adaptiveIcon: {
       backgroundColor: '#F3F6F5',

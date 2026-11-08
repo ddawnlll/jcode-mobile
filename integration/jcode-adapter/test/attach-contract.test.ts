@@ -75,10 +75,10 @@ async function withFakeDaemon(
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'jcode-adapter-test-'));
   const socketPath = join(dir, 'daemon.sock');
-  let daemonSocket: Socket | null = null;
+  const holder: { socket: Socket | null } = { socket: null };
   const received: Record<string, unknown>[] = [];
   const server: Server = createServer((socket) => {
-    daemonSocket = socket;
+    holder.socket = socket;
     const frames = readFrames(socket);
     void (async () => {
       for (;;) {
@@ -94,10 +94,10 @@ async function withFakeDaemon(
       socketPath,
       stateDir: dir,
       frames: () => received,
-      send: (frame) => daemonSocket?.write(`${JSON.stringify(frame)}\n`),
+      send: (frame) => holder.socket?.write(`${JSON.stringify(frame)}\n`),
     });
   } finally {
-    daemonSocket?.destroy();
+    holder.socket?.destroy();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(dir, { recursive: true, force: true });
   }
@@ -123,7 +123,7 @@ test('attach sends continue_on_disconnect and exact target_session_id', async ()
     assert.equal(subscribe!.client_has_local_history, false);
     assert.equal(subscribe!.allow_session_takeover, false);
 
-    send({ type: 'state', id: subscribe!.id === 1 ? 2 : 2, session_id: 'session_target_1', is_processing: false, message_count: 3 });
+    send({ type: 'state', id: 2, session_id: 'session_target_1', is_processing: false, message_count: 3 });
     send({
       type: 'history',
       id: 9,
@@ -169,7 +169,6 @@ test('attach never sends a destructive request before an explicit Stop', async (
     });
     const started = attachment.start();
     await new Promise((resolve) => setTimeout(resolve, 100));
-    const subscribe = frames().find((frame) => frame.type === 'subscribe')!;
     send({ type: 'state', id: 2, session_id: 'session_target_2', is_processing: true, message_count: 0 });
     send({ type: 'history', id: 3, session_id: 'session_target_2', messages: [] });
     await started;

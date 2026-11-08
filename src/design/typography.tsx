@@ -26,9 +26,11 @@ export function Text({
   ...rest
 }: AppTextProps) {
   const { colors, typeStyle } = useTheme();
-  const base: TextStyle = typeStyle(variant);
-  if (weight === 'medium') base.fontFamily = 'HankenGrotesk-Medium';
-  if (weight === 'semibold') base.fontFamily = 'HankenGrotesk-SemiBold';
+  const base: TextStyle = {
+    ...typeStyle(variant),
+    ...(weight === 'medium' ? { fontFamily: 'HankenGrotesk-Medium' } : null),
+    ...(weight === 'semibold' ? { fontFamily: 'HankenGrotesk-SemiBold' } : null),
+  };
   return (
     <RNText
       allowFontScaling={scale}

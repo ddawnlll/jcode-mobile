@@ -3,10 +3,10 @@
  * the v1 adapter protocol. Tokens come from JCode's own device registry; the
  * socket never accepts a token in the query string.
  */
-import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import type { IncomingMessage, ServerResponse, Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { readFile } from 'node:fs/promises';
-import type { Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { AdapterConfig } from './config.ts';
@@ -688,6 +688,19 @@ export class MobileAdapter {
     if (request.method === 'GET' && url.pathname === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ ok: true, service: 'jcode-mobile-adapter', version: 1 }));
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/whoami') {
+      const header = request.headers.authorization;
+      const match = typeof header === 'string' ? /^Bearer\s+([0-9a-f]{64})$/i.exec(header.trim()) : null;
+      const device = match ? await this.registry.validateTokenAsync(match[1]) : null;
+      if (!device) {
+        response.writeHead(401, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ok: false, error: 'revoked' }));
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ ok: true, device: { id: device.id, name: device.name } }));
       return;
     }
     if (request.method === 'GET' && url.pathname === '/info') {
