@@ -169,6 +169,11 @@ test.describe('Tidal Glass and rich content', () => {
     }
 
     await page.getByTestId('appearance-mode-night').click();
+    await expect(page.getByTestId('appearance-mode-night')).toHaveAttribute('aria-checked', 'true');
+    // setAppearance updates the store synchronously and then awaits the SQLite
+    // preference write. The trace showed reload starting ~31ms after the click,
+    // which can beat that write; let the write settle before reloading.
+    await page.waitForTimeout(500);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
     await expect(page.getByTestId('theme-monokai')).toHaveAttribute('aria-checked', 'true');
