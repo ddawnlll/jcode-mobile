@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Linking, StyleSheet, Text as RNText, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -63,8 +63,27 @@ export default function AppRoot() {
 function ThemedApp() {
   const { scheme, colors } = useTheme();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
+  const profileId = useAppStore((state) => state.profileId);
   const setPendingPairLink = useAppStore((state) => state.actions.setPendingPairLink);
   const pendingPairLink = useAppStore((state) => state.pendingPairLink);
+  const [navReady, setNavReady] = useState(false);
+  const lastProfile = useRef<string | null | undefined>(undefined);
+
+  // Authorization, not initialRouteName, owns the root stack. Forgetting the
+  // last profile resets to Connect; switching profiles resets to Sessions.
+  useEffect(() => {
+    if (!navReady) return;
+    if (lastProfile.current === undefined) {
+      lastProfile.current = profileId;
+      return;
+    }
+    if (lastProfile.current === profileId) return;
+    lastProfile.current = profileId;
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: profileId ? 'Sessions' : 'Connect' }],
+    });
+  }, [profileId, navReady, navigationRef]);
 
   useEffect(() => {
     const handle = (url: string) => {
@@ -87,7 +106,7 @@ function ThemedApp() {
     <>
       <StatusBar style={scheme === 'night' ? 'light' : 'dark'} />
       <View style={{ flex: 1, backgroundColor: colors.bg }}>
-        <NavigationContainer ref={navigationRef}>
+        <NavigationContainer ref={navigationRef} onReady={() => setNavReady(true)}>
           <RootNavigator />
         </NavigationContainer>
         <PrivacyShield />

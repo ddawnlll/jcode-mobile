@@ -1,6 +1,28 @@
 require('react-native-gesture-handler/jestSetup');
 
-jest.mock('react-native-reanimated', () => require('react-native-reanimated/mock'));
+jest.mock('react-native-reanimated', () => {
+  const { View } = require('react-native');
+  const Animated = {
+    View,
+    createAnimatedComponent: (component) => component,
+  };
+  return {
+    __esModule: true,
+    default: Animated,
+    View,
+    useSharedValue: (value) => ({ value }),
+    useAnimatedStyle: (factory) => factory(),
+    withTiming: (value) => value,
+    withSpring: (value) => value,
+    runOnJS: (fn) => fn,
+    Easing: {
+      bezier: () => () => 0,
+      out: () => 0,
+      quad: () => 0,
+      inOut: () => 0,
+    },
+  };
+});
 
 jest.mock('expo-font', () => ({
   useFonts: () => [true, null],

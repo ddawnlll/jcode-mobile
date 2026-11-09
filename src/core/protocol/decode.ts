@@ -202,7 +202,16 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
       };
     }
     case 'ok':
-      return { ok: true, frame: { ev, ...base } };
+      return {
+        ok: true,
+        frame: {
+          ev,
+          ...base,
+          ...(str(record.session_id) ? { session_id: str(record.session_id)! } : null),
+          ...('title' in record ? { title: optionalStr(record.title) ?? null } : null),
+          ...(str(record.display_title) ? { display_title: str(record.display_title)! } : null),
+        },
+      };
     case 'error': {
       const code = str(record.code) as ErrorCode | undefined;
       const message = str(record.message);

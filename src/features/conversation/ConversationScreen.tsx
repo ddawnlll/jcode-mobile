@@ -95,6 +95,7 @@ export function ConversationScreen() {
   const [renameVisible, setRenameVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
 
   useEffect(() => {
     if (route.params?.sessionId && conversation.sessionId !== route.params.sessionId) {
@@ -672,6 +673,7 @@ export function ConversationScreen() {
                 setMenuVisible(false);
                 setRenameValue(title);
                 setRenameError(null);
+                setRenameSaving(false);
                 setRenameVisible(true);
               }}
             />
@@ -739,10 +741,15 @@ export function ConversationScreen() {
           <Button
             label="Save title"
             fullWidth
+            loading={renameSaving}
+            loadingLabel="Waiting for server…"
             style={{ marginTop: space.md }}
             onPress={async () => {
               if (!conversation.sessionId) return;
+              setRenameSaving(true);
+              setRenameError(null);
               const result = await controller.renameSession(conversation.sessionId, renameValue.trim() || null);
+              setRenameSaving(false);
               if (!result.ok) setRenameError(result.error ?? 'Rename failed.');
               else setRenameVisible(false);
             }}
