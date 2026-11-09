@@ -8,7 +8,7 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { Attachment } from '../src/attachment.ts';
 import type { AdapterConfig } from '../src/config.ts';
@@ -455,52 +455,60 @@ test('a timed-out rename cannot complete or hide a later rename', async () => {
     send({ type: 'history', id: 3, session_id: 'session_rename_order', messages: [] });
     await started;
 
-    const first = attachment.rename('A title');
-    await new Promise((resolve) => setTimeout(resolve, 60));
-    const firstRequest = frames().find((frame) => frame.type === 'rename_session');
-    assert.ok(firstRequest);
-    await assert.rejects(first, /did not confirm/);
+    const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const first = attachment.rename('A title');
+      await settle();
+      const firstRequest = frames().find((frame) => frame.type === 'rename_session');
+      assert.ok(firstRequest);
+      mock.timers.tick(201);
+      await assert.rejects(first, /did not confirm/);
 
-    // The daemon may still process the timed-out request. Overlapping a new
-    // rename would make a late event for A indistinguishable from B.
-    await assert.rejects(attachment.rename('B title'), /still pending|pending/);
+      // The daemon may still process the timed-out request. Overlapping a new
+      // rename would make a late event for A indistinguishable from B.
+      await assert.rejects(attachment.rename('B title'), /still pending|pending/);
 
-    // Late confirmation for A is authoritative for A, but must not complete B.
-    send({
-      type: 'session_renamed',
-      session_id: 'session_rename_order',
-      title: 'A title',
-      display_title: 'A title',
-    });
-    send({ type: 'done', id: firstRequest!.id });
-    await new Promise((resolve) => setTimeout(resolve, 30));
+      // Late confirmation for A is authoritative for A, but must not complete B.
+      send({
+        type: 'session_renamed',
+        session_id: 'session_rename_order',
+        title: 'A title',
+        display_title: 'A title',
+      });
+      send({ type: 'done', id: firstRequest!.id });
+      await settle();
+      await settle();
 
-    const second = attachment.rename('B title');
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const secondRequest = frames().filter((frame) => frame.type === 'rename_session').at(-1);
-    assert.ok(secondRequest);
-    assert.notEqual(secondRequest!.id, firstRequest!.id);
+      const second = attachment.rename('B title');
+      await settle();
+      const secondRequest = frames().filter((frame) => frame.type === 'rename_session').at(-1);
+      assert.ok(secondRequest);
+      assert.notEqual(secondRequest!.id, firstRequest!.id);
 
-    // A duplicate late A event must not resolve B.
-    send({
-      type: 'session_renamed',
-      session_id: 'session_rename_order',
-      title: 'A title',
-      display_title: 'A title',
-    });
-    let settled = false;
-    void second.then(() => { settled = true; });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    assert.equal(settled, false, 'late A did not complete B');
+      // A duplicate late A event must not resolve B.
+      send({
+        type: 'session_renamed',
+        session_id: 'session_rename_order',
+        title: 'A title',
+        display_title: 'A title',
+      });
+      let settled = false;
+      void second.then(() => { settled = true; });
+      await settle();
+      assert.equal(settled, false, 'late A did not complete B');
 
-    send({
-      type: 'session_renamed',
-      session_id: 'session_rename_order',
-      title: 'B title',
-      display_title: 'B title',
-    });
-    send({ type: 'done', id: secondRequest!.id });
-    assert.deepEqual(await second, { title: 'B title', displayTitle: 'B title' });
-    attachment.dispose();
+      send({
+        type: 'session_renamed',
+        session_id: 'session_rename_order',
+        title: 'B title',
+        display_title: 'B title',
+      });
+      send({ type: 'done', id: secondRequest!.id });
+      assert.deepEqual(await second, { title: 'B title', displayTitle: 'B title' });
+    } finally {
+      mock.timers.reset();
+      attachment.dispose();
+    }
   });
 });
