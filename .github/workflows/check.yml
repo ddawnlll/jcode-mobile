@@ -68,8 +68,8 @@ jobs:
       - run: bunx --bun expo prebuild --platform android --no-install
       - name: Assert generated Gradle uses Bun
         run: |
-          grep -q 'nodeExecutableAndArgs.set(["bun", "--bun"])' android/app/build.gradle
-          ! grep -q '["node",' android/app/build.gradle
+          grep -Fq 'nodeExecutableAndArgs.set(["bun", "--bun"])' android/app/build.gradle
+          ! grep -Fq '["node",' android/app/build.gradle
       - name: Build release APK
         run: |
           cd android
