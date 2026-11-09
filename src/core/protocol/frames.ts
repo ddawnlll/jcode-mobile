@@ -134,7 +134,14 @@ export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
 
 export type ServerEvent =
   | { ev: 'hello_ok'; version: number; server: string; capabilities: string[]; daemon_version?: string; server_name?: string }
-  | { ev: 'ok' }
+  | {
+      ev: 'ok';
+      session_id?: string;
+      /** Custom title; null means the custom title was cleared. */
+      title?: string | null;
+      /** Derived title the server will display. */
+      display_title?: string;
+    }
   | { ev: 'error'; code: ErrorCode; message: string; detail?: string }
   | { ev: 'sessions'; sessions: SessionInfo[]; partial: boolean }
   | {

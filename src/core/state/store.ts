@@ -105,7 +105,10 @@ export interface AppState {
   deviceName: string;
   connection: {
     state: ConnectionState;
+    /** Last network check, successful or not. Drives "Last checked". */
     lastCheckedAt: number | null;
+    /** Last confirmed contact with the daemon. */
+    lastContactAt: number | null;
     serverLabel: string;
     host: string;
     daemonVersion: string | null;
@@ -165,6 +168,7 @@ export const useAppStore = create<AppState>()((set) => ({
   connection: {
     state: 'cached',
     lastCheckedAt: null,
+    lastContactAt: null,
     serverLabel: '',
     host: '',
     daemonVersion: null,

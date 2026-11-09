@@ -8,7 +8,7 @@ Updated: 2026-11-08
 | --- | --- |
 | Branch | `main` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.1.3 |
+| App version | 0.1.4 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -56,6 +56,10 @@ bash scripts/build-android-release.sh        # release APK, pass
 bash scripts/build-ios-simulator.sh          # release Simulator .app, pass
 gh workflow run check.yml --ref main         # Android 36 build, pass
 ```
+
+## v0.1.4 reliability patch
+
+Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`, followed by nine review-round race fixes. Full evidence is in `docs/V0_1_4_VERIFICATION.md`. Current checks under Node 22.21.1: `npm run check` (62 Jest tests), `npm run adapter:test` (12 tests), `npm run e2e` (10 tests, Expo web/Chromium). Native Android/iOS checks remain NOT_RUN on this host.
 
 ## Web target (verified 2026-11-09 on Debian 13)
 

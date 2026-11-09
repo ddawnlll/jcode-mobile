@@ -180,9 +180,15 @@ export function SessionsScreen() {
                     ? 'This server needs mobile continuation support.'
                     : 'Saved on this phone. Reconnecting…'}
           </Text>
-          {connection.state === 'offline' || connection.state === 'pair_again' ? (
+          {connection.state === 'offline' ? (
             <TextAction
-              label={connection.state === 'pair_again' ? 'Pair again' : 'Retry now'}
+              label="Retry now"
+              testID="sessions-retry"
+              onPress={() => void controller.reconnect()}
+            />
+          ) : connection.state === 'pair_again' ? (
+            <TextAction
+              label="Pair again"
               onPress={() => navigation.navigate('ServerDetails')}
             />
           ) : null}
@@ -215,7 +221,7 @@ export function SessionsScreen() {
           <Text variant="body" color="muted" style={{ marginTop: space.xs, textAlign: 'center' }}>
             {error}
           </Text>
-          <Button label="Retry" onPress={() => controller.refreshSessions({ force: true })} style={{ marginTop: space.md }} />
+          <Button label="Retry" onPress={() => void controller.reconnect()} style={{ marginTop: space.md }} />
           <TextAction label="Connection details" onPress={() => navigation.navigate('ServerDetails')} />
         </View>
       ) : loading && sessions.length === 0 ? (

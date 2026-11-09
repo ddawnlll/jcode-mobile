@@ -193,6 +193,17 @@ export const budgets = {
   codePreviewBytes: 64 * 1024,
   maxFrameBytes: 4 * 1024 * 1024,
   autofollowSlop: 80,
+  /** Foreground liveness probe; never runs while the app is backgrounded. */
+  healthCheckMs: 15_000,
+  healthTimeoutMs: 5_000,
+  /** Handshake + profile save + inventory + attach, not history. */
+  connectAttemptMs: 45_000,
+  /** A selected session must finish attach + history inside this window. */
+  reconcileTimeoutMs: 25_000,
+  /** Whole pairing request including body parsing. */
+  pairRequestMs: 12_000,
+  pairUiTimeoutMs: 20_000,
+  renameTimeoutMs: 10_000,
 } as const;
 
 export const reconnect = {

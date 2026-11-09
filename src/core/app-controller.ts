@@ -7,7 +7,13 @@ import { AppState, type AppStateStatus } from 'react-native';
 import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 
 import { budgets } from '../design/tokens';
-import { MobileClient, httpBase, parseServerAddress, type ServerEndpoint } from './connection/client';
+import {
+  MobileClient,
+  TransportError,
+  httpBase,
+  parseServerAddress,
+  type ServerEndpoint,
+} from './connection/client';
 import { backoffDelay } from './connection/reconnect';
 import type { HistoryMessage, ServerEvent, SessionInfo } from './protocol/frames';
 import {
@@ -29,6 +35,7 @@ import {
   setDraft,
   setPref,
   updateSessionLiveState,
+  updateSessionTitle,
   upsertMessages,
   upsertSessions,
   type ServerProfileRow,
@@ -60,7 +67,15 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
 
-class AppControllerImpl {
+interface ConnectionAttempt {
+  epoch: number;
+  profileId: string;
+  generation: number;
+  client: MobileClient;
+  promise: Promise<void>;
+}
+
+export class AppController {
   private client: MobileClient | null = null;
   private profile: ServerProfileRow | null = null;
   private token: string | null = null;
@@ -79,13 +94,232 @@ class AppControllerImpl {
   private booted = false;
   private firstVisit = false;
   private creating: Promise<string> | null = null;
-  private connectPromise: Promise<void> | null = null;
+  /** Profile/lifecycle epoch. Every async operation captures this value. */
+  private lifecycleEpoch = 0;
+  /** The one in-flight connection attempt, owned by epoch + profile. */
+  private connectAttempt: ConnectionAttempt | null = null;
+  /** A retry/manual recovery arrived while an attempt was in progress. */
+  private recoveryRequested = false;
   private clientGeneration = 0;
   private expectedAttachSessionId: string | null = null;
   private openSequence = 0;
   private continuationConfirmed = false;
   private lastSessionRefresh = 0;
   private serverInfoObserved = false;
+  private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private healthInFlight = false;
+  private reconciliationTimer: ReturnType<typeof setTimeout> | null = null;
+  private attemptTimer: ReturnType<typeof setTimeout> | null = null;
+  private inventoryRequested = false;
+  /** Pairing attempt identity and cancellation owner. */
+  private pairAttempt = 0;
+  private pairAbort: AbortController | null = null;
+  private pairWriteSeq = 0;
+  private pairWrites = new Map<string, { seq: number; token: string }>();
+  /** Serializes credential/profile writes and cleanup for one profile. */
+  private profileQueues = new Map<string, Promise<unknown>>();
+  /** A profile whose credential is being loaded; connections are blocked. */
+  private credentialLoading: {
+    epoch: number;
+    profile: ServerProfileRow;
+    options: { restore: boolean; deferConnect?: boolean };
+  } | null = null;
+  /** An activation interrupted by background, resumed on foreground. */
+  private pendingActivation: {
+    profile: ServerProfileRow;
+    options: { restore: boolean; deferConnect?: boolean };
+  } | null = null;
+  /** Confirmed titles newer than a pending inventory/attach response. */
+  private confirmedTitles = new Map<
+    string,
+    { title: string | null; displayTitle: string; at: number; revision: number }
+  >();
+  private titleRevision = 0;
+
+  /* ------------------------------------------------------------- ownership */
+
+  private owns(epoch: number, profileId: string | null | undefined): boolean {
+    return this.lifecycleEpoch === epoch && this.profile?.id === profileId;
+  }
+
+  private ownsClient(
+    epoch: number,
+    profileId: string | null | undefined,
+    generation: number,
+    client: MobileClient,
+  ): boolean {
+    return (
+      this.owns(epoch, profileId) &&
+      this.clientGeneration === generation &&
+      this.client === client
+    );
+  }
+
+  /**
+   * Serialize credential/profile writes and cleanup for one profile. A paused
+   * save cannot finish after a newer cleanup, and cleanup cannot read or
+   * delete while a newer save is in flight.
+   */
+  private profileQueue<T>(profileId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.profileQueues.get(profileId) ?? Promise.resolve();
+    const run = previous.then(work, work);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.profileQueues.set(profileId, tail);
+    void tail.finally(() => {
+      if (this.profileQueues.get(profileId) === tail) {
+        this.profileQueues.delete(profileId);
+      }
+    });
+    return run;
+  }
+
+  /** "Last checked" advances even when the attempt fails. */
+  private noteAttempt(): void {
+    store.setState((state) => ({
+      connection: { ...state.connection, lastCheckedAt: Date.now() },
+    }));
+  }
+
+  /** Successful contact is tracked separately from the attempt. */
+  private noteContact(): void {
+    const now = Date.now();
+    store.setState((state) => ({
+      connection: { ...state.connection, lastCheckedAt: now, lastContactAt: now },
+    }));
+  }
+
+  private clearReconciliation(): void {
+    if (this.reconciliationTimer) clearTimeout(this.reconciliationTimer);
+    this.reconciliationTimer = null;
+  }
+
+  private clearAttemptDeadline(): void {
+    if (this.attemptTimer) clearTimeout(this.attemptTimer);
+    this.attemptTimer = null;
+  }
+
+  private stopHealthChecks(): void {
+    if (this.healthTimer) clearInterval(this.healthTimer);
+    this.healthTimer = null;
+    this.healthInFlight = false;
+  }
+
+  /**
+   * Invalidate every in-flight lifecycle operation before switching, logging
+   * out, forgetting, or backgrounding. Old promises may still settle; their
+   * captured epoch no longer matches, so they cannot write state.
+   */
+  private invalidateLifecycle(): void {
+    this.lifecycleEpoch += 1;
+    this.credentialLoading = null;
+    this.pendingActivation = null;
+    this.clientGeneration += 1;
+    this.clearReconnect();
+    this.stopHealthChecks();
+    this.cancelPairing();
+    this.clearReconciliation();
+    this.clearAttemptDeadline();
+    this.recoveryRequested = false;
+    this.connectAttempt = null;
+    try {
+      this.client?.close();
+    } catch {
+      // Already closed.
+    }
+    this.client = null;
+    this.attachedSessionId = null;
+    this.expectedAttachSessionId = null;
+    this.continuationConfirmed = false;
+  }
+
+  /** Drop the transport without changing the selected profile. */
+  private dropTransport(): void {
+    this.stopHealthChecks();
+    this.clearReconciliation();
+    this.clearAttemptDeadline();
+    this.clientGeneration += 1;
+    this.connectAttempt = null;
+    try {
+      this.client?.close();
+    } catch {
+      // Already closed.
+    }
+    this.client = null;
+    this.attachedSessionId = null;
+    this.expectedAttachSessionId = null;
+    this.continuationConfirmed = false;
+  }
+
+  cancelPairing(): void {
+    this.pairAttempt += 1;
+    this.pairAbort?.abort();
+    this.pairAbort = null;
+  }
+
+  private titleKey(serverId: string, sessionId: string): string {
+    return `${serverId}:${sessionId}`;
+  }
+
+  /**
+   * Older inventory/attach replies must not overwrite a title confirmed by a
+   * rename event after the request started.
+   */
+  private mergeConfirmedTitle(
+    serverId: string,
+    session: SessionInfo,
+    revisionAtStart: number,
+  ): SessionInfo {
+    const confirmed = this.confirmedTitles.get(this.titleKey(serverId, session.session_id));
+    if (confirmed && confirmed.revision > revisionAtStart) {
+      return { ...session, title: confirmed.title ?? confirmed.displayTitle };
+    }
+    return session;
+  }
+
+  private applyConfirmedTitle(
+    serverId: string,
+    sessionId: string,
+    title: string | null,
+    displayTitle: string,
+    at = Date.now(),
+  ): void {
+    const key = this.titleKey(serverId, sessionId);
+    const existing = this.confirmedTitles.get(key);
+    if (existing && existing.at > at) return;
+    const visible = displayTitle || title || '';
+    const revision = ++this.titleRevision;
+    this.confirmedTitles.set(key, { title, displayTitle: visible, at, revision });
+    store.setState((state) => {
+      const conversation = state.conversation;
+      const sameConversation =
+        conversation.serverId === serverId && conversation.sessionId === sessionId;
+      return {
+        ...(sameConversation
+          ? {
+              conversation: {
+                ...conversation,
+                title: visible || conversation.title,
+                session: conversation.session
+                  ? { ...conversation.session, title: title ?? displayTitle }
+                  : conversation.session,
+              },
+            }
+          : null),
+        inventory: {
+          ...state.inventory,
+          sessions: state.inventory.sessions.map((session) =>
+            session.session_id === sessionId
+              ? { ...session, title: title ?? displayTitle }
+              : session,
+          ),
+        },
+      };
+    });
+    void updateSessionTitle(serverId, sessionId, visible || null);
+  }
 
   /* ------------------------------------------------------------- bootstrap */
 
@@ -147,8 +381,9 @@ class AppControllerImpl {
       const changed = online !== this.online;
       this.online = online;
       if (!online) {
-        this.setConnectionState('offline');
         this.clearReconnect();
+        this.dropTransport();
+        this.setConnectionState('offline');
       } else if (changed && this.appState === 'active') {
         void this.connectNow({ immediate: true });
       }
@@ -165,33 +400,36 @@ class AppControllerImpl {
   }
 
   private onBackground(): void {
-    this.clearReconnect();
-    this.stopInventoryPolling();
+    const interrupted = this.credentialLoading;
+    this.invalidateLifecycle();
+    if (interrupted) {
+      this.pendingActivation = {
+        profile: interrupted.profile,
+        options: interrupted.options,
+      };
+    }
+    this.suspendInventoryPolling();
     this.flushStream();
     this.flushDraft();
     // No background keepalive: the daemon owns the turn, the phone releases
     // its socket, and reopening reconciles authoritative history.
-    this.client?.close();
-    this.client = null;
-    this.attachedSessionId = null;
     store.setState((state) => ({ conversation: { ...state.conversation, attachmentId: null } }));
-    if (store.get().conversation.sessionId) {
-      store.setState((state) => ({
-        connection: {
-          ...state.connection,
-          state: 'cached',
-          lastCheckedAt: state.connection.lastCheckedAt ?? Date.now(),
-        },
-      }));
-    }
+    store.setState((state) => ({
+      connection: { ...state.connection, state: 'cached' },
+    }));
   }
 
   private async onForeground(): Promise<void> {
+    const pending = this.pendingActivation;
+    this.pendingActivation = null;
+    if (pending) {
+      await this.activateProfile(pending.profile, pending.options);
+      this.ensureInventoryTimer();
+      return;
+    }
     if (this.profile) {
       await this.connectNow({ immediate: true });
-      void this.refreshSessions({ force: true });
-      const sessionId = store.get().conversation.sessionId;
-      if (sessionId) void this.attachSession(sessionId);
+      this.ensureInventoryTimer();
     }
   }
 
@@ -222,21 +460,50 @@ class AppControllerImpl {
     if (input.deviceName.trim().length === 0) {
       return { ok: false, error: 'Name this phone so you can recognize it later.', code: 'DEVICE_NAME_REQUIRED' };
     }
+    const epoch = this.lifecycleEpoch;
+    const attempt = ++this.pairAttempt;
+    this.pairAbort?.abort();
+    const abort = new AbortController();
+    this.pairAbort = abort;
+    const cancelled = (): { ok: false; error: string; code: string; detail?: string } => ({
+      ok: false,
+      code: 'PAIR_CANCELLED',
+      error: 'Pairing was cancelled before it completed.',
+    });
+    const timeoutResult = (): { ok: false; error: string; code: string; detail?: string } => ({
+      ok: false,
+      code: 'PAIR_TIMEOUT',
+      error: `Pairing timed out after ${Math.round(budgets.pairRequestMs / 1000)}s. ${parsed.display} did not complete /pair. Check DNS, port 7643, firewall, and TLS.`,
+    });
+    const timedOut = () =>
+      abort.signal.aborted &&
+      this.pairAttempt === attempt &&
+      this.lifecycleEpoch === epoch;
+    const owns = () =>
+      this.pairAttempt === attempt && this.lifecycleEpoch === epoch && !abort.signal.aborted;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
     const existing = (await listServers()).find(
       (server) =>
         server.host === parsed.endpoint.host &&
         server.port === parsed.endpoint.port &&
         (server.tls === 1) === parsed.endpoint.tls,
     );
+    if (!owns()) return cancelled();
     const profileId = existing?.id ?? newClientId('srv');
+    const deviceId = (await getPref('deviceId')) ?? profileId;
+    if (!owns()) return cancelled();
     const body = {
       code,
-      device_id: (await getPref('deviceId')) ?? profileId,
+      device_id: deviceId,
       device_name: input.deviceName.trim(),
     };
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 12_000);
-    let response: Response;
+    // The deadline covers fetch, headers, and the response body. A body that
+    // stalls after headers must not outlive the advertised timeout.
+    timer = setTimeout(() => abort.abort(), budgets.pairRequestMs);
+    let response: Response | null = null;
+    let payload: { ok?: boolean; token?: string; error?: string };
     try {
       response = await fetch(`${httpBase(parsed.endpoint)}/pair`, {
         method: 'POST',
@@ -244,34 +511,36 @@ class AppControllerImpl {
         body: JSON.stringify(body),
         signal: abort.signal,
       });
+      payload = (await response.json()) as typeof payload;
     } catch (error) {
+      if (timedOut()) return timeoutResult();
+      if (!owns()) return cancelled();
       const detail = error instanceof Error ? error.message : String(error);
-      const timedOut = abort.signal.aborted;
       return {
         ok: false,
-        code: timedOut ? 'PAIR_TIMEOUT' : 'PAIR_NETWORK',
-        error: timedOut
-          ? `Pairing timed out after 12s. ${parsed.display} did not answer /pair. Check DNS, port 7643, firewall, and TLS.`
-          : `Cannot reach ${parsed.display}/pair. Check DNS, port 7643, firewall, and that the adapter is running.`,
+        code: 'PAIR_NETWORK',
+        error: `Cannot reach ${parsed.display}/pair. Check DNS, port 7643, firewall, and that the adapter is running.`,
         detail,
       };
-    } finally {
-      clearTimeout(timer);
     }
-    let payload: { ok?: boolean; token?: string; error?: string };
-    try {
-      payload = (await response.json()) as typeof payload;
-    } catch {
-      payload = { ok: false, error: `The server replied ${response.status} without JSON.` };
-    }
-    if (!response.ok || !payload.ok || !payload.token) {
+    if (timedOut()) return timeoutResult();
+    if (!owns()) return cancelled();
+    if (!response || !response.ok || !payload.ok || !payload.token) {
       return {
         ok: false,
-        code: `PAIR_HTTP_${response.status}`,
-        error: payload.error ?? `Pairing failed with HTTP ${response.status}.`,
-        detail: `POST ${httpBase(parsed.endpoint)}/pair returned ${response.status}.`,
+        code: `PAIR_HTTP_${response?.status ?? 0}`,
+        error: payload?.error ?? `Pairing failed with HTTP ${response?.status ?? 0}.`,
+        detail: `POST ${httpBase(parsed.endpoint)}/pair returned ${response?.status ?? 0}.`,
       };
     }
+    if (!/^[0-9a-f]{64}$/.test(payload.token)) {
+      return {
+        ok: false,
+        code: 'PAIR_BAD_TOKEN',
+        error: 'The server returned an invalid device token.',
+      };
+    }
+    const pairedToken = payload.token;
     const profile: ServerProfileRow = {
       id: profileId,
       label,
@@ -284,13 +553,80 @@ class AppControllerImpl {
       daemon_version: existing?.daemon_version ?? null,
       capabilities_json: existing?.capabilities_json ?? null,
     };
-    await saveToken(profileId, payload.token);
-    await saveServer(profile);
-    await setPref(LAST_SERVER, profileId);
+    const writeSeq = ++this.pairWriteSeq;
+    this.pairWrites.set(profileId, { seq: writeSeq, token: pairedToken });
+    const persisted = await this.profileQueue(profileId, async () => {
+      await saveToken(profileId, pairedToken);
+      if (!owns()) {
+        await this.cleanupPairWrites(profileId, writeSeq, pairedToken);
+        return false;
+      }
+      await saveServer(profile);
+      if (!owns()) {
+        await this.cleanupPairWrites(profileId, writeSeq, pairedToken);
+        return false;
+      }
+      await setPref(LAST_SERVER, profileId);
+      if (!owns()) {
+        await this.cleanupPairWrites(profileId, writeSeq, pairedToken);
+        return false;
+      }
+      return true;
+    });
+    if (!persisted || !owns()) {
+      if (persisted) {
+        await this.profileQueue(profileId, () =>
+          this.cleanupPairWrites(profileId, writeSeq, pairedToken),
+        );
+      }
+      return cancelled();
+    }
     // Pairing is complete once the token is stored. Connect in the background
     // so a slow or broken WebSocket cannot leave the Pair button spinning.
     await this.activateProfile(profile, { restore: false, deferConnect: true });
     return { ok: true, profileId };
+    } finally {
+      if (timer) clearTimeout(timer);
+      if (this.pairAbort === abort) this.pairAbort = null;
+    }
+  }
+
+  /**
+   * Remove only this attempt's local writes. A newer overlapping pair owns a
+   * later lease; if this attempt's paused save landed after it, restore the
+   * newer token instead of deleting it.
+   */
+  private async cleanupPairWrites(
+    profileId: string,
+    seq: number,
+    token: string,
+  ): Promise<void> {
+    const lease = this.pairWrites.get(profileId);
+    if (!lease || lease.seq !== seq) {
+      if (lease) {
+        const current = await loadToken(profileId).catch(() => null);
+        if (current !== lease.token) {
+          await saveToken(profileId, lease.token).catch(() => undefined);
+        }
+      } else {
+        // No live lease: a forget removed it, or the profile was cleared.
+        // Delete only this attempt's token if its paused write landed late.
+        const current = await loadToken(profileId).catch(() => null);
+        if (current === token) {
+          await deleteToken(profileId).catch(() => undefined);
+        }
+        if (!this.pairWrites.has(profileId)) {
+          await deleteServer(profileId).catch(() => undefined);
+        }
+      }
+      return;
+    }
+    const current = await loadToken(profileId).catch(() => null);
+    if (current !== null && current !== token) return;
+    await deleteToken(profileId).catch(() => undefined);
+    if (this.pairWrites.get(profileId)?.seq !== seq) return;
+    this.pairWrites.delete(profileId);
+    await deleteServer(profileId).catch(() => undefined);
   }
 
   private defaultPort(): number {
@@ -298,16 +634,41 @@ class AppControllerImpl {
   }
 
   async activateProfile(profile: ServerProfileRow, options: { restore: boolean; deferConnect?: boolean }): Promise<void> {
-    this.clearReconnect();
-    this.client?.close();
-    this.client = null;
+    this.invalidateLifecycle();
+    const epoch = this.lifecycleEpoch;
+    this.pendingActivation = null;
+    this.profile = null;
+    this.token = null;
+    this.credentialLoading = { epoch, profile, options };
+    store.setState((state) => ({
+      connection: {
+        ...state.connection,
+        state: 'connecting',
+        lastCheckedAt: null,
+        lastContactAt: null,
+        error: null,
+      },
+    }));
+    let token: string | null;
+    try {
+      token = await this.profileQueue(profile.id, () => loadToken(profile.id));
+    } catch {
+      if (this.credentialLoading?.epoch === epoch) this.credentialLoading = null;
+      return;
+    }
+    // A later activation may have won while the keychain read was pending.
+    // Never publish this profile or its bearer over the winner.
+    if (this.lifecycleEpoch !== epoch) return;
     this.profile = profile;
-    this.token = await loadToken(profile.id);
+    this.token = token;
+    this.credentialLoading = null;
     store.setState((state) => ({
       profileId: profile.id,
       connection: {
         ...state.connection,
         state: 'cached',
+        lastCheckedAt: null,
+        lastContactAt: null,
         serverLabel: profile.label,
         host: `${profile.host}:${profile.port}`,
         daemonVersion: profile.daemon_version,
@@ -320,6 +681,7 @@ class AppControllerImpl {
       conversation: resetConversation({ serverId: profile.id }),
     }));
     const cached = await loadCachedSessions(profile.id);
+    if (!this.owns(epoch, profile.id)) return;
     if (cached.length) {
       store.setState((state) => ({ inventory: { ...state.inventory, sessions: cached } }));
     }
@@ -335,6 +697,7 @@ class AppControllerImpl {
     }
     if (options.restore) {
       const lastSession = await getPref(LAST_SESSION);
+      if (!this.owns(epoch, profile.id)) return;
       if (lastSession && cached.some((session) => session.session_id === lastSession)) {
         const session = cached.find((entry) => entry.session_id === lastSession)!;
         await this.openSession(session);
@@ -342,61 +705,95 @@ class AppControllerImpl {
     }
   }
 
-  async connectNow(options: { immediate?: boolean; force?: boolean } = {}): Promise<void> {
+  async connectNow(options: { immediate?: boolean; force?: boolean; retry?: boolean } = {}): Promise<void> {
+    if (
+      this.credentialLoading &&
+      this.credentialLoading.epoch === this.lifecycleEpoch
+    ) {
+      return;
+    }
     if (!this.profile) return;
     if (!this.token) {
       this.setConnectionState('pair_again', 'Pair this phone again.');
       return;
     }
-    if (this.connectPromise) return this.connectPromise;
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile.id;
+    const existing = this.connectAttempt;
+    if (existing && existing.epoch === epoch && existing.profileId === profileId) {
+      // A retry deadline or manual recovery arrived while this attempt runs.
+      // Remember the intent; its finally block starts the next eligible try.
+      if (options.force || options.retry) this.recoveryRequested = true;
+      return existing.promise;
+    }
     if (this.appState !== 'active' && !options.force) return;
     if (!this.online && !options.force) {
       this.setConnectionState('offline');
       return;
     }
+
     this.clearReconnect();
+    this.stopHealthChecks();
+    this.clearReconciliation();
+    this.recoveryRequested = false;
     this.attachedSessionId = null;
     this.expectedAttachSessionId = null;
     this.continuationConfirmed = false;
     const generation = ++this.clientGeneration;
-    this.client?.close();
+    const previous = this.client;
+    if (previous) previous.close();
     const hadContent = store.get().conversation.messages.length > 0;
+    this.noteAttempt();
     this.setConnectionState(hadContent ? 'reconnecting' : 'connecting');
-    this.connectPromise = (async () => {
+
+    const token = this.token;
+    const endpoint = {
+      host: this.profile.host,
+      port: this.profile.port,
+      tls: this.profile.tls === 1,
+    };
+    const client = new MobileClient(endpoint, token, {
+      onEvent: (frame) => {
+        if (generation !== this.clientGeneration || this.client !== client) return;
+        this.onFrame(frame);
+      },
+      onState: (state) => {
+        if (generation !== this.clientGeneration || this.client !== client) return;
+        if (state === 'closed') {
+          this.client = null;
+          this.onTransportClosed();
+        }
+      },
+    });
+    this.client = client;
+
+    const attempt: ConnectionAttempt = {
+      epoch,
+      profileId,
+      generation,
+      client,
+      promise: Promise.resolve(),
+    };
+    const promise = (async () => {
       try {
-        const client = new MobileClient(
-          { host: this.profile!.host, port: this.profile!.port, tls: this.profile!.tls === 1 },
-          this.token!,
-          {
-            onEvent: (frame) => {
-              if (generation !== this.clientGeneration) return;
-              this.onFrame(frame);
-            },
-            onState: (state) => {
-              if (generation !== this.clientGeneration) return;
-              if (state === 'closed' && this.client === client) {
-                this.client = null;
-                this.onTransportClosed();
-              }
-            },
-          },
-        );
-        this.client = client;
         await client.connect();
-        if (generation !== this.clientGeneration || this.client !== client) {
+        if (!this.ownsClient(epoch, profileId, generation, client)) {
           client.close();
           return;
         }
-        this.reconnectAttempt = 0;
         const hello = client.hello;
-        const capabilities = hello && hello.ev === 'hello_ok' ? hello.capabilities : [];
-        const daemonVersion = hello && hello.ev === 'hello_ok' ? hello.daemon_version ?? null : null;
+        if (!hello || hello.ev !== 'hello_ok') {
+          throw new TransportError('The server is not protocol-ready.', 'not_ready');
+        }
+        this.reconnectAttempt = 0;
+        const capabilities = hello.capabilities;
+        const daemonVersion = hello.daemon_version ?? null;
         this.serverInfoObserved = false;
+        this.noteContact();
         store.setState((state) => ({
           connection: {
             ...state.connection,
             state: 'reconciling',
-            lastCheckedAt: Date.now(),
             capabilities,
             daemonVersion,
             error: null,
@@ -404,36 +801,121 @@ class AppControllerImpl {
           },
         }));
         if (this.profile) {
-          await saveServer({
+          const updated = {
             ...this.profile,
             last_connected_at: Date.now(),
             daemon_version: daemonVersion,
             capabilities_json: JSON.stringify(capabilities),
-          });
-          this.profile = { ...this.profile, last_connected_at: Date.now(), daemon_version: daemonVersion };
+          };
+          await saveServer(updated);
+          if (!this.ownsClient(epoch, profileId, generation, client)) return;
+          this.profile = updated;
         }
-        await this.refreshSessions({ force: true });
+        const inventory = await this.refreshSessions({ force: true });
+        if (!this.ownsClient(epoch, profileId, generation, client)) return;
+        if (!inventory.ok) {
+          throw new Error(inventory.error ?? 'The session inventory did not reconcile.');
+        }
         const sessionId = store.get().conversation.sessionId;
         if (sessionId) {
           await this.attachSession(sessionId);
+          if (!this.ownsClient(epoch, profileId, generation, client)) return;
+          if (this.attachedSessionId !== sessionId) {
+            throw new Error(store.get().conversation.lastError ?? 'The session attachment failed.');
+          }
+          // Current is published by authoritative history, not by attach alone.
+          this.startReconciliationDeadline(epoch, profileId, generation, client, sessionId);
         } else {
           this.setConnectionState('current');
+          this.noteContact();
         }
+        this.ensureInventoryTimer();
+        this.startHealthChecks();
         void this.refreshServerInfo();
       } catch (error) {
-        if (generation !== this.clientGeneration) return;
+        if (!this.ownsClient(epoch, profileId, generation, client)) return;
         this.client = null;
-        await this.classifyFailure(errorMessage(error));
+        client.close();
+        await this.classifyFailure(error, epoch, profileId, generation);
       } finally {
-        this.connectPromise = null;
+        if (this.connectAttempt === attempt) {
+          this.connectAttempt = null;
+          this.clearAttemptDeadline();
+        }
+        if (this.recoveryRequested && this.owns(epoch, profileId)) {
+          this.recoveryRequested = false;
+          if (!this.client?.isOpen) this.scheduleReconnect();
+        }
       }
     })();
-    return this.connectPromise;
+    attempt.promise = promise;
+    this.connectAttempt = attempt;
+    this.clearAttemptDeadline();
+    this.attemptTimer = setTimeout(() => {
+      if (this.connectAttempt !== attempt) return;
+      this.connectAttempt = null;
+      this.attemptTimer = null;
+      this.client = null;
+      client.close();
+      void this.classifyFailure(
+        new TransportError('The connection attempt did not complete in time.', 'attempt_timeout'),
+        epoch,
+        profileId,
+        generation,
+      );
+    }, budgets.connectAttemptMs);
+    return promise;
   }
 
-  private async classifyFailure(message: string): Promise<void> {
+  private startReconciliationDeadline(
+    epoch: number,
+    profileId: string,
+    generation: number,
+    client: MobileClient,
+    sessionId: string,
+  ): void {
+    this.clearReconciliation();
+    this.reconciliationTimer = setTimeout(() => {
+      this.reconciliationTimer = null;
+      if (!this.ownsClient(epoch, profileId, generation, client)) return;
+      if (store.get().connection.state !== 'reconciling') return;
+      if (store.get().conversation.sessionId !== sessionId) return;
+      void this.handleTransportFailure(
+        client,
+        generation,
+        'The server did not finish reconciling this session.',
+      );
+    }, budgets.reconcileTimeoutMs);
+  }
+
+  private async classifyFailure(
+    error: unknown,
+    epoch: number,
+    profileId: string | null,
+    generation: number,
+  ): Promise<void> {
+    const ownsAttempt = () =>
+      this.owns(epoch, profileId) && this.clientGeneration === generation;
+    const message = errorMessage(error);
+    if (
+      error instanceof TransportError &&
+      (error.code === 'unsupported_version' || error.code === 'unsupported_capability')
+    ) {
+      if (ownsAttempt()) {
+        this.setConnectionState('incompatible', message);
+      }
+      return;
+    }
+    if (error instanceof TransportError && error.code === 'unauthorized') {
+      if (ownsAttempt()) {
+        this.setConnectionState('pair_again', 'This phone is no longer authorized.');
+      }
+      return;
+    }
     const endpoint = this.endpoint();
+    let adapterReachable = false;
     if (endpoint && this.token) {
+      this.noteAttempt();
       try {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 4_000);
@@ -446,25 +928,34 @@ class AppControllerImpl {
         } finally {
           clearTimeout(timer);
         }
+        if (!ownsAttempt()) return;
         if (response.status === 401) {
           this.setConnectionState('pair_again', 'This phone is no longer authorized.');
           return;
         }
+        adapterReachable = response.ok;
       } catch {
         // Network-level failure: fall through to reconnect.
       }
     }
+    if (!ownsAttempt()) return;
     const hadContent = store.get().conversation.messages.length > 0;
     const offline = !this.online || this.reconnectAttempt >= 4;
+    const detail =
+      adapterReachable && !offline
+        ? `${message} The adapter is reachable; the daemon is not ready.`
+        : message;
     this.setConnectionState(
       offline ? 'offline' : hadContent ? 'reconnecting' : 'connecting',
-      message,
+      detail,
     );
     this.markDeliveriesUnconfirmed();
     this.scheduleReconnect();
   }
 
   private onTransportClosed(): void {
+    this.stopHealthChecks();
+    this.clearReconciliation();
     this.attachedSessionId = null;
     store.setState((state) => ({
       conversation: { ...state.conversation, attachmentId: null },
@@ -475,17 +966,70 @@ class AppControllerImpl {
     this.scheduleReconnect();
   }
 
-  private scheduleReconnect(): void {
+  private async handleTransportFailure(
+    client: MobileClient,
+    generation: number,
+    message: string,
+  ): Promise<void> {
+    if (this.client !== client || this.clientGeneration !== generation) return;
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id ?? null;
+    this.client = null;
+    client.close();
+    this.stopHealthChecks();
+    this.clearReconciliation();
+    this.attachedSessionId = null;
+    this.expectedAttachSessionId = null;
+    this.continuationConfirmed = false;
+    this.markDeliveriesUnconfirmed();
+    const hadContent = store.get().conversation.messages.length > 0;
+    this.setConnectionState(hadContent ? 'reconnecting' : 'offline', message);
+    await this.classifyFailure(
+      new TransportError(message, 'health_timeout'),
+      epoch,
+      profileId,
+      generation,
+    );
+  }
+
+  private startHealthChecks(): void {
+    this.stopHealthChecks();
+    this.healthTimer = setInterval(() => {
+      if (this.appState !== 'active' || this.healthInFlight) return;
+      const client = this.client;
+      if (!client?.isOpen) return;
+      const epoch = this.lifecycleEpoch;
+      const profileId = this.profile?.id ?? null;
+      const generation = this.clientGeneration;
+      this.healthInFlight = true;
+      this.noteAttempt();
+      client
+        .ping()
+        .then(() => {
+          if (this.ownsClient(epoch, profileId, generation, client)) this.noteContact();
+        })
+        .catch(() => {
+          if (this.ownsClient(epoch, profileId, generation, client)) {
+            void this.handleTransportFailure(client, generation, 'The server stopped answering.');
+          }
+        })
+        .finally(() => {
+          this.healthInFlight = false;
+        });
+    }, budgets.healthCheckMs);
+  }
+
+  private scheduleReconnect(immediate = false): void {
     if (this.reconnectTimer || !this.online || this.appState !== 'active') return;
     if (!this.profile || !this.token) return;
-    const delay = backoffDelay(this.reconnectAttempt);
+    const delay = immediate ? 0 : backoffDelay(this.reconnectAttempt);
     this.reconnectAttempt += 1;
     store.setState((state) => ({
       connection: { ...state.connection, attempt: this.reconnectAttempt },
     }));
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      void this.connectNow({ immediate: true });
+      void this.connectNow({ immediate: true, force: true, retry: true });
     }, delay);
   }
 
@@ -504,17 +1048,22 @@ class AppControllerImpl {
   }
 
   async refreshServerInfo(): Promise<void> {
-    if (!this.client?.isOpen) return;
+    const client = this.client;
+    if (!client?.isOpen) return;
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id ?? null;
+    const generation = this.clientGeneration;
     try {
-      const frame = await this.client.request({ req: 'get_server_info' }, 8_000);
+      const frame = await client.request({ req: 'get_server_info' }, 8_000);
+      if (!this.ownsClient(epoch, profileId, generation, client)) return;
       if (frame.ev !== 'server_info') return;
       this.serverInfoObserved = true;
+      this.noteContact();
       store.setState((state) => ({
         connection: {
           ...state.connection,
           daemonVersion: frame.daemon_version ?? state.connection.daemonVersion,
           capabilities: frame.capabilities,
-          lastCheckedAt: frame.observed_at_ms,
         },
       }));
       if (this.profile) {
@@ -534,18 +1083,48 @@ class AppControllerImpl {
   /* --------------------------------------------------------------- inventory */
 
   startInventoryPolling(): void {
-    this.stopInventoryPolling();
-    this.inventoryTimer = setInterval(() => {
-      if (this.appState === 'active') void this.refreshSessions();
-    }, budgets.inventoryRefreshMs);
+    this.inventoryRequested = true;
+    this.ensureInventoryTimer();
   }
 
   stopInventoryPolling(): void {
+    this.inventoryRequested = false;
+    this.suspendInventoryPolling();
+  }
+
+  /** Keep the focused-screen intent but stop background traffic. */
+  private suspendInventoryPolling(): void {
     if (this.inventoryTimer) clearInterval(this.inventoryTimer);
     this.inventoryTimer = null;
   }
 
-  async refreshSessions(options: { force?: boolean; includeArchived?: boolean } = {}): Promise<void> {
+  private ensureInventoryTimer(): void {
+    if (!this.inventoryRequested || this.appState !== 'active' || this.inventoryTimer) return;
+    this.inventoryTimer = setInterval(() => {
+      if (this.appState === 'active') void this.refreshInventoryWithRecovery();
+    }, budgets.inventoryRefreshMs);
+  }
+
+  private async refreshInventoryWithRecovery(): Promise<void> {
+    const client = this.client;
+    if (!client?.isOpen) return;
+    const generation = this.clientGeneration;
+    const result = await this.refreshSessions();
+    if (result.ok) return;
+    if (this.client !== client || this.clientGeneration !== generation) return;
+    const state = store.get().connection.state;
+    if (state === 'current' || state === 'reconciling') {
+      await this.handleTransportFailure(
+        client,
+        generation,
+        result.error ?? 'The session inventory did not reconcile.',
+      );
+    }
+  }
+
+  async refreshSessions(
+    options: { force?: boolean; includeArchived?: boolean } = {},
+  ): Promise<{ ok: boolean; error?: string }> {
     if (!this.client?.isOpen) {
       const state = store.get();
       if (state.inventory.sessions.length === 0 && this.profile) {
@@ -554,28 +1133,37 @@ class AppControllerImpl {
           store.setState((current) => ({ inventory: { ...current.inventory, sessions: cached } }));
         }
       }
-      return;
+      return { ok: false, error: 'The connection is not open.' };
     }
-    if (!options.force && Date.now() - this.lastSessionRefresh < 5_000) return;
+    if (!options.force && Date.now() - this.lastSessionRefresh < 5_000) return { ok: true };
     const state = store.get();
     const limit = state.inventory.limit;
     const includeArchived = options.includeArchived ?? state.inventory.includeArchived;
     const client = this.client;
     const generation = this.clientGeneration;
     const profileId = this.profile?.id;
+    const epoch = this.lifecycleEpoch;
+    const titleRevisionAtStart = this.titleRevision;
+    this.noteAttempt();
     store.setState((current) => ({ inventory: { ...current.inventory, loading: true, error: null } }));
     try {
       const frame = await client.request(
         { req: 'list_sessions', limit, include_archived: includeArchived },
         20_000,
       );
-      if (generation !== this.clientGeneration || this.profile?.id !== profileId) return;
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed.' };
+      }
       if (frame.ev !== 'sessions') throw new Error('Unexpected inventory reply.');
+      this.noteContact();
       this.lastSessionRefresh = Date.now();
+      const mergedSessions = frame.sessions.map((session) =>
+        this.mergeConfirmedTitle(profileId!, session, titleRevisionAtStart),
+      );
       store.setState((current) => ({
         inventory: {
           ...current.inventory,
-          sessions: frame.sessions,
+          sessions: mergedSessions,
           fetchedAt: Date.now(),
           loading: false,
           error: null,
@@ -583,9 +1171,82 @@ class AppControllerImpl {
           includeArchived,
         },
       }));
-      if (this.profile) await upsertSessions(this.profile.id, frame.sessions);
+      if (profileId) {
+        await upsertSessions(profileId, mergedSessions).catch(() => undefined);
+      }
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed.' };
+      }
+      // A rename may have been confirmed while the older inventory write was
+      // pending. Reapply it after the write so SQLite, the list, and the open
+      // header cannot revert to the pre-rename title.
+      let effectiveSessions = mergedSessions;
+      if (profileId && this.titleRevision > titleRevisionAtStart) {
+        effectiveSessions = frame.sessions.map((session) =>
+          this.mergeConfirmedTitle(profileId, session, titleRevisionAtStart),
+        );
+        const changed = effectiveSessions.filter(
+          (session, index) =>
+            (session.title ?? null) !== (mergedSessions[index].title ?? null),
+        );
+        for (const session of changed) {
+          const key = this.titleKey(profileId, session.session_id);
+          const confirmedBefore = this.confirmedTitles.get(key);
+          const confirmedRevision =
+            confirmedBefore && confirmedBefore.revision > titleRevisionAtStart
+              ? confirmedBefore.revision
+              : titleRevisionAtStart;
+          let title =
+            confirmedBefore && confirmedBefore.revision > titleRevisionAtStart
+              ? confirmedBefore.title ?? confirmedBefore.displayTitle
+              : session.title ?? null;
+          await updateSessionTitle(profileId, session.session_id, title).catch(() => undefined);
+          // A second rename may have been confirmed while this write was
+          // pending. Re-read the revision after each write until it settles.
+          let appliedRevision = confirmedRevision;
+          let latest = this.confirmedTitles.get(key);
+          for (let pass = 0; pass < 4 && latest && latest.revision > appliedRevision; pass += 1) {
+            title = latest.title ?? latest.displayTitle;
+            await updateSessionTitle(profileId, session.session_id, title).catch(
+              () => undefined,
+            );
+            appliedRevision = latest.revision;
+            latest = this.confirmedTitles.get(key);
+          }
+          effectiveSessions = effectiveSessions.map((entry) =>
+            entry.session_id === session.session_id ? { ...entry, title } : entry,
+          );
+          store.setState((current) => {
+            const conversation = current.conversation;
+            const sameConversation =
+              conversation.serverId === profileId &&
+              conversation.sessionId === session.session_id;
+            return {
+              inventory: {
+                ...current.inventory,
+                sessions: current.inventory.sessions.map((item) =>
+                  item.session_id === session.session_id
+                    ? { ...item, title }
+                    : item,
+                ),
+              },
+              ...(sameConversation
+                ? {
+                    conversation: {
+                      ...conversation,
+                      title: title ?? conversation.title,
+                      session: conversation.session
+                        ? { ...conversation.session, title }
+                        : conversation.session,
+                    },
+                  }
+                : null),
+            };
+          });
+        }
+      }
       const currentConversation = store.get().conversation;
-      const currentSession = frame.sessions.find(
+      const currentSession = effectiveSessions.find(
         (entry) => entry.session_id === currentConversation.sessionId,
       );
       const authoritativeTitle = currentSession?.title ?? currentSession?.save_label ?? null;
@@ -598,10 +1259,27 @@ class AppControllerImpl {
           },
         }));
       }
+      return { ok: true };
     } catch (error) {
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed.' };
+      }
       store.setState((current) => ({
         inventory: { ...current.inventory, loading: false, error: errorMessage(error) },
       }));
+      const connectionState = store.get().connection.state;
+      if (
+        this.client === client &&
+        !this.connectAttempt &&
+        (connectionState === 'current' || connectionState === 'reconciling')
+      ) {
+        void this.handleTransportFailure(
+          client,
+          generation,
+          errorMessage(error),
+        );
+      }
+      return { ok: false, error: errorMessage(error) };
     }
   }
 
@@ -616,9 +1294,16 @@ class AppControllerImpl {
     if (session.live_state === 'working') {
       return { ok: false, error: 'Stop or wait for this turn before archiving.' };
     }
-    if (!this.client?.isOpen) return { ok: false, error: 'This action needs a connection.' };
+    const client = this.client;
+    if (!client?.isOpen) return { ok: false, error: 'This action needs a connection.' };
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id;
+    const generation = this.clientGeneration;
     try {
-      const frame = await this.client.request({ req: 'archive_session', session_id: session.session_id }, 15_000);
+      const frame = await client.request({ req: 'archive_session', session_id: session.session_id }, 15_000);
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed while this action was pending.' };
+      }
       if (frame.ev !== 'ok') throw new Error(frame.ev === 'error' ? frame.message : 'Archive failed.');
       store.setState((current) => ({
         inventory: {
@@ -634,9 +1319,16 @@ class AppControllerImpl {
   }
 
   async restoreSession(session: SessionInfo): Promise<{ ok: boolean; error?: string }> {
-    if (!this.client?.isOpen) return { ok: false, error: 'This action needs a connection.' };
+    const client = this.client;
+    if (!client?.isOpen) return { ok: false, error: 'This action needs a connection.' };
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id;
+    const generation = this.clientGeneration;
     try {
-      const frame = await this.client.request({ req: 'restore_session', session_id: session.session_id }, 15_000);
+      const frame = await client.request({ req: 'restore_session', session_id: session.session_id }, 15_000);
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed while this action was pending.' };
+      }
       if (frame.ev !== 'ok') throw new Error(frame.ev === 'error' ? frame.message : 'Restore failed.');
       store.setState((current) => ({
         inventory: {
@@ -657,14 +1349,21 @@ class AppControllerImpl {
     saved: boolean,
     label?: string | null,
   ): Promise<{ ok: boolean; error?: string }> {
-    if (!this.client?.isOpen || !this.attachedSessionId || sessionId !== this.attachedSessionId) {
+    const client = this.client;
+    if (!client?.isOpen || !this.attachedSessionId || sessionId !== this.attachedSessionId) {
       return { ok: false, error: 'Open the session before changing its saved state.' };
     }
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id;
+    const generation = this.clientGeneration;
     try {
-      const frame = await this.client.request(
+      const frame = await client.request(
         { req: 'set_session_saved', session_id: sessionId, saved, label: label ?? null },
         10_000,
       );
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed while this action was pending.' };
+      }
       if (frame.ev !== 'ok') throw new Error(frame.ev === 'error' ? frame.message : 'Could not update the bookmark.');
       store.setState((state) => ({
         conversation: {
@@ -712,13 +1411,43 @@ class AppControllerImpl {
     }
     if (sessionId !== this.attachedSessionId) return { ok: false, error: 'Open the session before renaming it.' };
     const client = this.client;
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id;
     const generation = this.clientGeneration;
+    if (!profileId) return { ok: false, error: 'No server is selected.' };
+    this.noteAttempt();
     try {
-      const frame = await client.request({ req: 'rename_session', session_id: sessionId, title }, 10_000);
-      if (generation !== this.clientGeneration) return { ok: false, error: 'The server changed.' };
-      if (frame.ev !== 'ok') throw new Error(frame.ev === 'error' ? frame.message : 'Rename failed.');
+      const frame = await client.request(
+        { req: 'rename_session', session_id: sessionId, title },
+        budgets.renameTimeoutMs,
+      );
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed while the rename was pending.' };
+      }
+      if (frame.ev === 'error') return { ok: false, error: frame.message };
+      if (frame.ev !== 'ok') return { ok: false, error: 'The server did not confirm the rename.' };
+      if (frame.session_id && frame.session_id !== sessionId) {
+        return { ok: false, error: 'The server confirmed a different session.' };
+      }
+      const displayTitle = frame.display_title?.trim();
+      if (!displayTitle) {
+        return {
+          ok: false,
+          error: 'The server completed the request without confirming the new title.',
+        };
+      }
+      this.applyConfirmedTitle(
+        profileId,
+        sessionId,
+        frame.title === undefined ? null : frame.title,
+        displayTitle,
+      );
+      this.noteContact();
       return { ok: true };
     } catch (error) {
+      if (!this.owns(epoch, profileId)) {
+        return { ok: false, error: 'The server changed while the rename was pending.' };
+      }
       return { ok: false, error: errorMessage(error) };
     }
   }
@@ -728,6 +1457,7 @@ class AppControllerImpl {
   async openSession(session: SessionInfo): Promise<void> {
     if (!this.profile) return;
     const serverId = this.profile.id;
+    const epoch = this.lifecycleEpoch;
     const sequence = ++this.openSequence;
     const previousSession = store.get().conversation.sessionId;
     if (previousSession && previousSession !== session.session_id && this.client?.isOpen) {
@@ -741,14 +1471,31 @@ class AppControllerImpl {
     this.attachedSessionId = null;
     this.lastTurnId = 0;
     this.nearBottom = true;
+    if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
     await setPref(LAST_SESSION, session.session_id);
 
     const cached = await loadCachedMessages(serverId, session.session_id, 120);
     const bookmark = await getBookmark(serverId, session.session_id);
-    if (sequence !== this.openSequence || this.profile?.id !== serverId) return;
+    if (
+      sequence !== this.openSequence ||
+      epoch !== this.lifecycleEpoch ||
+      this.profile?.id !== serverId
+    ) {
+      return;
+    }
     this.firstVisit = bookmark === null;
     const pending = await listPendingSends(serverId, session.session_id);
-    if (sequence !== this.openSequence || this.profile?.id !== serverId) return;
+    if (
+      sequence !== this.openSequence ||
+      epoch !== this.lifecycleEpoch ||
+      this.profile?.id !== serverId
+    ) {
+      return;
+    }
+    const confirmed = this.confirmedTitles.get(this.titleKey(serverId, session.session_id));
+    const seededSession = confirmed
+      ? { ...session, title: confirmed.title ?? session.title }
+      : session;
     const delivery: DeliveryRecord[] = pending.map((row) => ({
       clientMessageId: row.client_message_id,
       content: row.content,
@@ -772,8 +1519,12 @@ class AppControllerImpl {
       conversation: resetConversation({
         serverId,
         sessionId: session.session_id,
-        session,
-        title: session.title ?? session.save_label ?? 'Session',
+        session: seededSession,
+        title:
+          confirmed?.displayTitle ??
+          session.title ??
+          session.save_label ??
+          'Session',
         workingDir: session.working_dir ?? null,
         messages: cached.messages,
         totalMessages: Math.max(cached.total, cached.messages.length),
@@ -805,12 +1556,15 @@ class AppControllerImpl {
     const client = this.client;
     if (!client?.isOpen) return;
     if (this.attachedSessionId === sessionId) return;
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id ?? null;
     const generation = this.clientGeneration;
     this.attachedSessionId = sessionId;
     this.expectedAttachSessionId = sessionId;
     try {
       const frame = await client.request({ req: 'attach_session', session_id: sessionId }, 20_000);
-      if (generation !== this.clientGeneration || this.client !== client) return;
+      if (!this.ownsClient(epoch, profileId, generation, client)) return;
+      this.noteContact();
       if (frame.ev === 'error') {
         this.attachedSessionId = null;
         store.setState((state) => ({
@@ -818,7 +1572,7 @@ class AppControllerImpl {
         }));
       }
     } catch (error) {
-      if (generation !== this.clientGeneration || this.client !== client) return;
+      if (!this.ownsClient(epoch, profileId, generation, client)) return;
       this.attachedSessionId = null;
       store.setState((state) => ({
         conversation: { ...state.conversation, lastError: errorMessage(error) },
@@ -1071,7 +1825,7 @@ class AppControllerImpl {
         created_at: createdAt,
       });
       return { ok: true };
-    } catch (error) {
+    } catch {
       // The instruction may have been queued before the socket died. Never
       // label this a rejection and never auto-resend it.
       if (owns()) {
@@ -1197,11 +1951,14 @@ class AppControllerImpl {
     const client = this.client;
     const sessionId = conversation.sessionId;
     if (!sessionId || !client?.isOpen) return;
+    const epoch = this.lifecycleEpoch;
+    const profileId = this.profile?.id ?? null;
     const generation = this.clientGeneration;
     store.setState((state) => ({ conversation: { ...state.conversation, planLoading: true } }));
     try {
       const frame = await client.request({ req: 'get_todo_state', session_id: sessionId }, 10_000);
-      if (generation !== this.clientGeneration || store.get().conversation.sessionId !== sessionId) return;
+      if (!this.ownsClient(epoch, profileId, generation, client)) return;
+      if (store.get().conversation.sessionId !== sessionId) return;
       if (frame.ev === 'todo_state') {
         store.setState((state) => ({
           conversation: {
@@ -1282,10 +2039,13 @@ class AppControllerImpl {
   }
 
   async switchProfile(profileId: string): Promise<void> {
+    const epoch = this.lifecycleEpoch;
     const rows = await listServers();
+    if (this.lifecycleEpoch !== epoch) return;
     const profile = rows.find((row) => row.id === profileId);
     if (!profile) return;
     await setPref(LAST_SERVER, profile.id);
+    if (this.lifecycleEpoch !== epoch) return;
     this.closeConversation();
     await this.activateProfile(profile, { restore: true });
   }
@@ -1293,13 +2053,26 @@ class AppControllerImpl {
   async forgetServer(): Promise<void> {
     if (!this.profile) return;
     const profileId = this.profile.id;
-    this.clearReconnect();
-    this.client?.close();
-    this.client = null;
-    await deleteToken(profileId);
-    await deleteServer(profileId);
-    await clearServerCache(profileId);
+    this.invalidateLifecycle();
+    const epoch = this.lifecycleEpoch;
+    this.profile = null;
+    this.token = null;
+    this.pairWrites.delete(profileId);
+    this.inventoryRequested = false;
+    this.suspendInventoryPolling();
+    await this.profileQueue(profileId, async () => {
+      // A new pair for this endpoint owns the profile now; do not delete it.
+      if (this.pairWrites.has(profileId)) return;
+      await deleteToken(profileId).catch(() => undefined);
+      await deleteServer(profileId).catch(() => undefined);
+      await clearServerCache(profileId).catch(() => undefined);
+    });
+    if (this.lifecycleEpoch !== epoch) return;
+    for (const key of [...this.confirmedTitles.keys()]) {
+      if (key.startsWith(`${profileId}:`)) this.confirmedTitles.delete(key);
+    }
     const remaining = await listServers();
+    if (this.lifecycleEpoch !== epoch) return;
     this.profile = null;
     this.token = null;
     this.attachedSessionId = null;
@@ -1308,6 +2081,7 @@ class AppControllerImpl {
       connection: {
         state: 'cached',
         lastCheckedAt: null,
+        lastContactAt: null,
         serverLabel: '',
         host: '',
         daemonVersion: null,
@@ -1323,18 +2097,22 @@ class AppControllerImpl {
   }
 
   async disconnect(): Promise<void> {
-    this.clearReconnect();
-    this.client?.close();
-    this.client = null;
-    this.attachedSessionId = null;
+    this.invalidateLifecycle();
+    this.suspendInventoryPolling();
     this.setConnectionState('cached');
-    store.setState((state) => ({
-      connection: { ...state.connection, lastCheckedAt: Date.now() },
-    }));
   }
 
   async reconnect(): Promise<void> {
+    if (this.credentialLoading) return;
     this.reconnectAttempt = 0;
+    this.clearReconnect();
+    this.recoveryRequested = true;
+    if (this.connectAttempt) {
+      this.setConnectionState('reconnecting');
+      return this.connectAttempt.promise;
+    }
+    this.dropTransport();
+    this.setConnectionState('reconnecting');
     await this.connectNow({ immediate: true, force: true });
   }
 
@@ -1439,7 +2217,10 @@ class AppControllerImpl {
       case 'hello_ok':
         return;
       case 'attached': {
-        const session = frame.session;
+        const profileId = this.profile?.id;
+        const session = profileId
+          ? this.mergeConfirmedTitle(profileId, frame.session, -1)
+          : frame.session;
         const previous = store.get().conversation;
         if (
           this.expectedAttachSessionId &&
@@ -1722,17 +2503,14 @@ class AppControllerImpl {
         return;
       }
       case 'session_renamed': {
-        store.setState((state) => ({
-          conversation: { ...state.conversation, title: frame.display_title },
-          inventory: {
-            ...state.inventory,
-            sessions: state.inventory.sessions.map((session) =>
-              session.session_id === frame.session_id
-                ? { ...session, title: frame.title ?? frame.display_title }
-                : session,
-            ),
-          },
-        }));
+        const profileId = this.profile?.id;
+        if (!profileId) return;
+        this.applyConfirmedTitle(
+          profileId,
+          frame.session_id,
+          frame.title ?? null,
+          frame.display_title || frame.title || '',
+        );
         return;
       }
       case 'peer_user_message': {
@@ -1760,16 +2538,23 @@ class AppControllerImpl {
       }
       case 'error': {
         if (frame.code === 'unauthorized') {
+          this.stopHealthChecks();
+          this.dropTransport();
           this.setConnectionState('pair_again', 'This phone is no longer authorized.');
           return;
         }
         if (frame.code === 'daemon_unavailable') {
           this.markDeliveriesUnconfirmed();
           this.setConnectionState('reconnecting', frame.message);
-          this.scheduleReconnect();
+          const client = this.client;
+          const generation = this.clientGeneration;
+          if (client) void this.handleTransportFailure(client, generation, frame.message);
+          else this.scheduleReconnect();
           return;
         }
         if (frame.code === 'unsupported_version' || frame.code === 'unsupported_capability') {
+          this.stopHealthChecks();
+          this.dropTransport();
           this.setConnectionState('incompatible', frame.message);
           return;
         }
@@ -1896,11 +2681,15 @@ class AppControllerImpl {
     if (!this.profile || !conversation.sessionId) return;
     const serverId = this.profile.id;
     const sessionId = conversation.sessionId;
+    const epoch = this.lifecycleEpoch;
     const generation = this.clientGeneration;
+    const client = this.client;
 
     const bookmark = await getBookmark(serverId, sessionId);
     if (
+      epoch !== this.lifecycleEpoch ||
       generation !== this.clientGeneration ||
+      this.client !== client ||
       this.profile?.id !== serverId ||
       store.get().conversation.sessionId !== sessionId
     ) {
@@ -1956,9 +2745,11 @@ class AppControllerImpl {
       },
       connection:
         current.connection.state === 'reconciling'
-          ? { ...current.connection, state: 'current', lastCheckedAt: Date.now(), error: null }
+          ? { ...current.connection, state: 'current', error: null }
           : current.connection,
     }));
+    this.clearReconciliation();
+    this.noteContact();
 
     if (firstVisit) {
       const last = frame.messages[frame.messages.length - 1];
@@ -1967,6 +2758,7 @@ class AppControllerImpl {
 
     // Persist asynchronously; a big transcript must not block the frame loop.
     setTimeout(() => {
+      if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
       void upsertMessages(serverId, sessionId, frame.messages);
     }, 0);
   }
@@ -2036,6 +2828,7 @@ class AppControllerImpl {
     state: string;
     daemonVersion: string | null;
     lastCheckedAt: number | null;
+    lastContactAt: number | null;
     capabilities: string[];
     deviceId: string | null;
   } | null> {
@@ -2049,6 +2842,7 @@ class AppControllerImpl {
       state: state.connection.state,
       daemonVersion: state.connection.daemonVersion,
       lastCheckedAt: state.connection.lastCheckedAt,
+      lastContactAt: state.connection.lastContactAt,
       capabilities: state.connection.capabilities,
       deviceId: this.profile.device_id,
     };
@@ -2060,4 +2854,4 @@ class AppControllerImpl {
   }
 }
 
-export const controller = new AppControllerImpl();
+export const controller = new AppController();

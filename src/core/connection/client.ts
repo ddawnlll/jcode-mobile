@@ -2,6 +2,10 @@
  * Transport for the mobile adapter protocol. One authenticated WebSocket, one
  * in-flight reconnection attempt, correlated requests, and no automatic
  * mutation retries.
+ *
+ * Transport-open and protocol-ready are separate. `isOpen` is only true after a
+ * validated `hello_ok`; a failed handshake closes and retires its socket so a
+ * later `connect()` must establish a fresh one.
  */
 import { Platform } from 'react-native';
 
@@ -29,6 +33,17 @@ interface PendingRequest {
   suppressEvent?: boolean;
 }
 
+/** A handshake/transport failure that keeps its protocol classification. */
+export class TransportError extends Error {
+  readonly code: string;
+
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = 'TransportError';
+    this.code = code;
+  }
+}
+
 export function httpBase(endpoint: ServerEndpoint): string {
   return `${endpoint.tls ? 'https' : 'http'}://${formatHost(endpoint.host)}:${endpoint.port}`;
 }
@@ -53,6 +68,9 @@ export class MobileClient {
   private closedByUser = false;
   private connecting: Promise<void> | null = null;
   private helloFrame: (ServerEvent & { reply_to?: number }) | null = null;
+  private lastReceivedAt = 0;
+  /** Every socket incarnation gets an epoch; late callbacks are ignored. */
+  private socketEpoch = 0;
 
   constructor(endpoint: ServerEndpoint, token: string, events: MobileClientEvents) {
     this.endpoint = endpoint;
@@ -60,12 +78,25 @@ export class MobileClient {
     this.events = events;
   }
 
+  /** Protocol-ready, not merely transport-open. */
   get isOpen(): boolean {
+    return this.state === 'open' && this.greeted && this.helloFrame !== null;
+  }
+
+  get isTransportOpen(): boolean {
     return this.state === 'open';
   }
 
   get hello(): (ServerEvent & { reply_to?: number }) | null {
     return this.helloFrame;
+  }
+
+  get lastReceived(): number {
+    return this.lastReceivedAt;
+  }
+
+  isHealthy(maxSilenceMs: number): boolean {
+    return this.isOpen && Date.now() - this.lastReceivedAt <= maxSilenceMs;
   }
 
   private setState(next: TransportState, detail?: string): void {
@@ -74,9 +105,12 @@ export class MobileClient {
   }
 
   connect(timeoutMs = 12_000): Promise<void> {
-    if (this.socket && this.state === 'open') return Promise.resolve();
+    if (this.isOpen) return Promise.resolve();
     if (this.connecting) return this.connecting;
     this.closedByUser = false;
+    this.greeted = false;
+    this.helloFrame = null;
+    const epoch = ++this.socketEpoch;
     this.connecting = new Promise<void>((resolve, reject) => {
       const SocketCtor = WebSocket as unknown as new (
         url: string,
@@ -93,39 +127,74 @@ export class MobileClient {
             });
       this.socket = socket;
       let settled = false;
-      const timer = setTimeout(() => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const retire = (error: Error, emitClosed: boolean) => {
+        if (this.socket !== socket || epoch !== this.socketEpoch) return;
+        this.socket = null;
+        this.greeted = false;
+        this.helloFrame = null;
+        this.state = 'idle';
+        this.failPending(error);
+        try {
+          socket.close();
+        } catch {
+          // Already gone.
+        }
+        if (emitClosed) this.setState('closed', error.message);
+      };
+
+      const failHandshake = (error: Error) => {
         if (settled) return;
         settled = true;
-        socket.close();
-        reject(new Error('The server did not answer in time.'));
+        if (timer) clearTimeout(timer);
+        // The caller still owns this client and classifies the failure.
+        // Emitting `closed` here would make the controller drop the reference
+        // before it can distinguish unsupported_version from a network drop.
+        retire(error, false);
+        reject(error);
+      };
+
+      timer = setTimeout(() => {
+        failHandshake(new TransportError('The server did not answer in time.', 'handshake_timeout'));
       }, timeoutMs);
 
       socket.onopen = () => {
+        if (this.socket !== socket || epoch !== this.socketEpoch) return;
+        // Transport is open; protocol readiness waits for hello_ok.
         this.setState('open');
-        this.request({ req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.3' })
+        this.requestInternal(
+          { req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.4' },
+          timeoutMs,
+          {},
+          true,
+        )
           .then((frame) => {
             if (settled) return;
+            if (this.socket !== socket || epoch !== this.socketEpoch) {
+              failHandshake(new TransportError('The connection changed during the handshake.', 'handshake_stale'));
+              return;
+            }
             if (frame.ev !== 'hello_ok') {
-              settled = true;
-              clearTimeout(timer);
-              reject(new Error('The server rejected the protocol handshake.'));
+              const code = frame.ev === 'error' ? frame.code : 'handshake_rejected';
+              const message =
+                frame.ev === 'error' ? frame.message : 'The server rejected the protocol handshake.';
+              failHandshake(new TransportError(message, code));
               return;
             }
             this.greeted = true;
             this.helloFrame = frame;
+            this.lastReceivedAt = Date.now();
             settled = true;
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             resolve();
           })
-          .catch((error: Error) => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            reject(error);
-          });
+          .catch((error: Error) => failHandshake(error));
       };
 
       socket.onmessage = (message) => {
+        if (this.socket !== socket || epoch !== this.socketEpoch) return;
+        this.lastReceivedAt = Date.now();
         const result = decodeFrame(String(message.data));
         if (!result.ok) return;
         const frame = result.frame;
@@ -142,33 +211,38 @@ export class MobileClient {
       };
 
       socket.onerror = () => {
+        if (this.socket !== socket || epoch !== this.socketEpoch) return;
+        const error = new TransportError('Cannot reach the server.', 'network');
         if (!settled) {
-          settled = true;
-          clearTimeout(timer);
-          reject(new Error('Cannot reach the server.'));
+          failHandshake(error);
+        } else {
+          retire(error, true);
         }
       };
 
       socket.onclose = (event) => {
-        const wasOpen = this.state === 'open';
-        const userClosed = this.closedByUser;
+        if (this.socket !== socket || epoch !== this.socketEpoch) return;
         this.socket = null;
-        if (!userClosed) this.setState('closed', `socket ${event.code}`);
-        else this.state = 'idle';
+        const wasReady = this.isOpen;
+        this.greeted = false;
+        this.helloFrame = null;
+        this.state = 'idle';
         this.failPending(new Error('The connection closed.'));
         if (!settled) {
           settled = true;
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           reject(
-            new Error(
+            new TransportError(
               event.code === 1006
                 ? 'Cannot reach the server. Check the address and network.'
                 : `The server closed the connection (${event.code}).`,
+              event.code === 1006 ? 'network' : 'closed',
             ),
           );
-        } else if (wasOpen) {
-          this.helloFrame = null;
         }
+        if (!this.closedByUser) this.setState('closed', `socket ${event.code}`);
+        this.closedByUser = false;
+        if (wasReady) this.helloFrame = null;
       };
     }).finally(() => {
       this.connecting = null;
@@ -189,14 +263,26 @@ export class MobileClient {
     timeoutMs = 15_000,
     options: { suppressEvent?: boolean } = {},
   ): Promise<ServerEvent & { reply_to?: number }> {
+    return this.requestInternal(request, timeoutMs, options, false);
+  }
+
+  private requestInternal(
+    request: Record<string, unknown>,
+    timeoutMs: number,
+    options: { suppressEvent?: boolean },
+    allowBeforeHello: boolean,
+  ): Promise<ServerEvent & { reply_to?: number }> {
     if (!this.socket || this.state !== 'open') {
-      return Promise.reject(new Error('The connection is not open.'));
+      return Promise.reject(new TransportError('The connection is not open.', 'not_open'));
+    }
+    if (!allowBeforeHello && !this.isOpen) {
+      return Promise.reject(new TransportError('The connection is not ready.', 'not_ready'));
     }
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error('The server did not answer in time.'));
+        reject(new TransportError('The server did not answer in time.', 'request_timeout'));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer, suppressEvent: options.suppressEvent });
       try {
@@ -207,6 +293,11 @@ export class MobileClient {
         reject(error as Error);
       }
     });
+  }
+
+  /** Foreground liveness probe. A rejection means the transport is suspect. */
+  ping(timeoutMs: number = budgets.healthTimeoutMs): Promise<void> {
+    return this.request({ req: 'ping' }, timeoutMs).then(() => undefined);
   }
 
   /** Sends without awaiting a reply; used for detach on unmount. */
@@ -221,10 +312,16 @@ export class MobileClient {
 
   close(): void {
     this.closedByUser = true;
+    this.socketEpoch += 1;
     this.failPending(new Error('Disconnected by the user.'));
-    this.socket?.close();
+    try {
+      this.socket?.close();
+    } catch {
+      // Already gone.
+    }
     this.socket = null;
     this.state = 'idle';
+    this.greeted = false;
     this.helloFrame = null;
   }
 

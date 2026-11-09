@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, TextAction } from '../../design/controls';
+import { BottomSheet } from '../../design/BottomSheet';
 import { BackIcon, LinkIcon, LinkOffIcon } from '../../design/icons';
 import { useTheme } from '../../design/theme';
 import { geometry, radius, space, target } from '../../design/tokens';
@@ -25,6 +26,7 @@ export function ServerDetailsScreen() {
   const [cache, setCache] = useState<{ bytes: number; sessions: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<Array<{ id: string; label: string; host: string; active: boolean }>>([]);
+  const [forgetVisible, setForgetVisible] = useState(false);
 
   const refresh = useCallback(async () => {
     const [next, stats, servers] = await Promise.all([
@@ -95,6 +97,10 @@ export function ServerDetailsScreen() {
                           : 'Saved on this phone.'}
             </Text>
           </View>
+          <Text variant="caption" color="muted" style={{ marginTop: space.xxs }}>
+            Last contact {formatClock(connection.lastContactAt) || '—'} · Last checked{' '}
+            {formatClock(connection.lastCheckedAt) || '—'}
+          </Text>
         </View>
 
         {profiles.length > 1 ? (
@@ -228,6 +234,14 @@ export function ServerDetailsScreen() {
         </Group>
 
         <View style={styles.actions}>
+          {connection.state !== 'current' &&
+          connection.state !== 'pair_again' &&
+          connection.state !== 'incompatible' ? (
+            <TextAction
+              label="Reconnect now"
+              onPress={() => void controller.reconnect()}
+            />
+          ) : null}
           <Button
             label="Disconnect this phone"
             variant="secondary"
@@ -252,26 +266,41 @@ export function ServerDetailsScreen() {
           <TextAction
             label="Forget this server"
             color="error"
-            onPress={() => {
-              Alert.alert(
-                'Forget this server?',
-                'This removes the device token, drafts, reading positions, and cached transcripts for this server from this phone. It does not revoke the token on the server.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Forget server',
-                    style: 'destructive',
-                    onPress: async () => {
-                      await controller.forgetServer();
-                      navigation.navigate('Sessions' as never);
-                    },
-                  },
-                ],
-              );
-            }}
+            onPress={() => setForgetVisible(true)}
           />
         </View>
       </ScrollView>
+      <BottomSheet
+        visible={forgetVisible}
+        onClose={() => setForgetVisible(false)}
+        accessibilityLabel="Forget server"
+      >
+        <View style={{ paddingHorizontal: space.lg }}>
+          <Text variant="title" accessibilityRole="header">
+            Forget this server?
+          </Text>
+          <Text variant="body" color="muted" style={{ marginTop: space.sm }}>
+            This removes the device token, drafts, reading positions, and cached
+            transcripts for this server from this phone. It does not revoke the
+            token on the server.
+          </Text>
+          <Button
+            label="Forget server"
+            fullWidth
+            style={{ marginTop: space.md }}
+            onPress={async () => {
+              setForgetVisible(false);
+              await controller.forgetServer();
+            }}
+          />
+          <TextAction
+            label="Cancel"
+            onPress={() => setForgetVisible(false)}
+            align="center"
+          />
+          <View style={{ height: space.lg }} />
+        </View>
+      </BottomSheet>
     </View>
   );
 }

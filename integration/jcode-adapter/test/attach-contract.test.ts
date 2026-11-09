@@ -8,7 +8,7 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 
 import { Attachment } from '../src/attachment.ts';
 import type { AdapterConfig } from '../src/config.ts';
@@ -30,6 +30,7 @@ function configFor(socketPath: string, stateDir: string, overrides: Partial<Adap
     maxHistoryMessages: 100,
     historyWindow: 10,
     maxHistoryBytes: 3 * 1024 * 1024,
+    renameTimeoutMs: 8_000,
     logLevel: 'warn',
     faultAfterSend: false,
     ...overrides,
@@ -319,5 +320,195 @@ test('history uses absolute indexes once and respects the outbound byte budget',
     assert.deepEqual(messages.map((message) => message.index), [3, 4]);
     assert.ok(JSON.stringify(messages).length < 4096);
     attachment.dispose();
+  });
+});
+
+test('rename resolves only after the daemon title confirmation', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_rename_ok',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_rename_ok', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_rename_ok', messages: [] });
+    await started;
+
+    const result = attachment.rename('New title');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const request = frames().find((frame) => frame.type === 'rename_session');
+    assert.ok(request, 'rename reached the daemon');
+    assert.equal(request!.title, 'New title');
+
+    // No resolution on transport ACK alone.
+    send({ type: 'ack', id: request!.id });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    let settled = false;
+    void result.then(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(settled, false, 'ACK is not confirmation');
+
+    send({
+      type: 'session_renamed',
+      session_id: 'session_rename_ok',
+      title: 'New title',
+      display_title: 'New title',
+    });
+    send({ type: 'done', id: request!.id });
+    assert.deepEqual(await result, { title: 'New title', displayTitle: 'New title' });
+    attachment.dispose();
+  });
+});
+
+test('rename rejection is correlated and does not become a stopped turn', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_rename_reject',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_rename_reject', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_rename_reject', messages: [] });
+    await started;
+
+    const result = attachment.rename('Rejected title');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const request = frames().find((frame) => frame.type === 'rename_session');
+    assert.ok(request);
+    send({ type: 'error', id: request!.id, message: 'Title rejected by policy' });
+
+    await assert.rejects(result, /Title rejected by policy/);
+    assert.ok(!emitted.some((frame) => frame.ev === 'turn_stopped'), 'rename error is not a turn');
+    attachment.dispose();
+  });
+});
+
+test('rename without an authoritative event is ambiguous, not success', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: () => undefined,
+      sessionId: 'session_rename_ambiguous',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_rename_ambiguous', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_rename_ambiguous', messages: [] });
+    await started;
+
+    const result = attachment.rename('Maybe');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const request = frames().find((frame) => frame.type === 'rename_session');
+    assert.ok(request);
+    send({ type: 'done', id: request!.id });
+    await assert.rejects(result, /without confirming the new title/);
+    attachment.dispose();
+  });
+});
+
+test('a second rename is rejected while one is pending', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: () => undefined,
+      sessionId: 'session_rename_busy',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_rename_busy', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_rename_busy', messages: [] });
+    await started;
+
+    const first = attachment.rename('First');
+    await assert.rejects(attachment.rename('Second'), /already in progress|still pending/);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const request = frames().find((frame) => frame.type === 'rename_session');
+    assert.ok(request);
+    send({ type: 'session_renamed', session_id: 'session_rename_busy', title: 'First', display_title: 'First' });
+    send({ type: 'done', id: request!.id });
+    assert.deepEqual(await first, { title: 'First', displayTitle: 'First' });
+    attachment.dispose();
+  });
+});
+
+test('a timed-out rename cannot complete or hide a later rename', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir, { renameTimeoutMs: 200 }),
+      replyTo: 1,
+      emit: () => undefined,
+      sessionId: 'session_rename_order',
+    });
+    const started = attachment.start();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    send({ type: 'state', id: 2, session_id: 'session_rename_order', is_processing: false, message_count: 0 });
+    send({ type: 'history', id: 3, session_id: 'session_rename_order', messages: [] });
+    await started;
+
+    const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const first = attachment.rename('A title');
+      await settle();
+      const firstRequest = frames().find((frame) => frame.type === 'rename_session');
+      assert.ok(firstRequest);
+      mock.timers.tick(201);
+      await assert.rejects(first, /did not confirm/);
+
+      // The daemon may still process the timed-out request. Overlapping a new
+      // rename would make a late event for A indistinguishable from B.
+      await assert.rejects(attachment.rename('B title'), /still pending|pending/);
+
+      // Late confirmation for A is authoritative for A, but must not complete B.
+      send({
+        type: 'session_renamed',
+        session_id: 'session_rename_order',
+        title: 'A title',
+        display_title: 'A title',
+      });
+      send({ type: 'done', id: firstRequest!.id });
+      await settle();
+      await settle();
+
+      const second = attachment.rename('B title');
+      await settle();
+      const secondRequest = frames().filter((frame) => frame.type === 'rename_session').at(-1);
+      assert.ok(secondRequest);
+      assert.notEqual(secondRequest!.id, firstRequest!.id);
+
+      // A duplicate late A event must not resolve B.
+      send({
+        type: 'session_renamed',
+        session_id: 'session_rename_order',
+        title: 'A title',
+        display_title: 'A title',
+      });
+      let settled = false;
+      void second.then(() => { settled = true; });
+      await settle();
+      assert.equal(settled, false, 'late A did not complete B');
+
+      send({
+        type: 'session_renamed',
+        session_id: 'session_rename_order',
+        title: 'B title',
+        display_title: 'B title',
+      });
+      send({ type: 'done', id: secondRequest!.id });
+      assert.deepEqual(await second, { title: 'B title', displayTitle: 'B title' });
+    } finally {
+      mock.timers.reset();
+      attachment.dispose();
+    }
   });
 });

@@ -40,6 +40,16 @@ interface ToolState {
   startedAt: number;
 }
 
+interface PendingRename {
+  id: number;
+  timer: ReturnType<typeof setTimeout>;
+  settled: boolean;
+  /** The custom title this request expects back; null means clear. */
+  expectedTitle: string | null;
+  resolve: (result: { title: string | null; displayTitle: string }) => void;
+  reject: (error: Error) => void;
+}
+
 const MAX_TOOL_INPUT_BYTES = 256 * 1024;
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 const MAX_HISTORY_MESSAGE_BYTES = 256 * 1024;
@@ -55,6 +65,9 @@ export class Attachment {
   private readonly turnByRequest = new Map<number, number>();
   private readonly tools = new Map<string, ToolState>();
   private nextLegacyId = 1;
+  private renameWaiter: PendingRename | null = null;
+  private orphanedRename: { id: number; expectedTitle: string | null } | null = null;
+  private completedRenameIds = new Set<number>();
   private history: Array<{ index: number; role: string; content: string; response_stats?: unknown }> = [];
   private historyTotal = 0;
   private historyReceived = false;
@@ -281,6 +294,12 @@ export class Attachment {
   private onSocketClose(): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.renameWaiter) {
+      clearTimeout(this.renameWaiter.timer);
+      this.renameWaiter.reject(new Error('The session connection ended before the rename confirmed.'));
+      this.renameWaiter = null;
+    }
+    this.orphanedRename = null;
     this.options.onClosed?.();
     this.options.emit({
       ev: 'error',
@@ -334,6 +353,18 @@ export class Attachment {
       case 'error': {
         const id = typeof event.id === 'number' ? event.id : -1;
         const message = typeof event.message === 'string' ? event.message : 'The server rejected the request.';
+        if (this.completedRenameIds.delete(id)) return;
+        if (this.orphanedRename?.id === id) {
+          this.orphanedRename = null;
+          return;
+        }
+        if (this.renameWaiter?.id === id) {
+          const waiter = this.renameWaiter;
+          this.renameWaiter = null;
+          clearTimeout(waiter.timer);
+          waiter.reject(new Error(message));
+          return;
+        }
         if (this.isDuplicateTerminal(message)) return;
         const pending = this.pending.get(id);
         if (pending) {
@@ -507,6 +538,22 @@ export class Attachment {
       }
       case 'done': {
         const id = typeof event.id === 'number' ? event.id : -1;
+        if (this.completedRenameIds.delete(id)) return;
+        if (this.orphanedRename?.id === id) {
+          this.orphanedRename = null;
+          return;
+        }
+        if (this.renameWaiter?.id === id) {
+          const waiter = this.renameWaiter;
+          this.renameWaiter = null;
+          clearTimeout(waiter.timer);
+          // The daemon emits session_renamed before done. A done without that
+          // event is ambiguous, not a success claim.
+          if (!waiter.settled) {
+            waiter.reject(new Error('The server completed the request without confirming the new title.'));
+          }
+          return;
+        }
         const turnId = this.turnByRequest.get(id) ?? this.turnId;
         this.status = 'ready';
         if (this.stoppedThisTurn) {
@@ -559,11 +606,35 @@ export class Attachment {
         return;
       }
       case 'session_renamed': {
+        const eventTitle = typeof event.title === 'string' ? event.title : null;
+        const displayTitle =
+          typeof event.display_title === 'string' ? event.display_title : '';
+        if (this.renameWaiter && this.renameWaiter.expectedTitle === eventTitle) {
+          const waiter = this.renameWaiter;
+          waiter.settled = true;
+          clearTimeout(waiter.timer);
+          this.renameWaiter = null;
+          this.completedRenameIds.add(waiter.id);
+          if (this.completedRenameIds.size > 50) {
+            const oldest = this.completedRenameIds.values().next().value;
+            if (typeof oldest === 'number') this.completedRenameIds.delete(oldest);
+          }
+          waiter.resolve({
+            title: eventTitle,
+            displayTitle,
+          });
+        }
+        if (this.orphanedRename && this.orphanedRename.expectedTitle === eventTitle) {
+          // The late confirmation belongs to the timed-out request. Retire its
+          // id so the following done cannot become a turn or a later rename.
+          this.completedRenameIds.add(this.orphanedRename.id);
+          this.orphanedRename = null;
+        }
         this.emit({
           ev: 'session_renamed',
           session_id: this.sessionId,
-          title: typeof event.title === 'string' ? event.title : null,
-          display_title: typeof event.display_title === 'string' ? event.display_title : '',
+          title: eventTitle,
+          display_title: displayTitle,
         });
         return;
       }
@@ -791,9 +862,39 @@ export class Attachment {
     this.connection.send({ type: 'cancel', id: this.nextId() });
   }
 
-  rename(title: string | null): void {
-    if (!this.connection.isOpen) return;
-    this.connection.send({ type: 'rename_session', id: this.nextId(), ...(title ? { title } : null) });
+  rename(title: string | null): Promise<{ title: string | null; displayTitle: string }> {
+    if (!this.connection.isOpen) {
+      return Promise.reject(new Error('The session connection is not open.'));
+    }
+    if (this.renameWaiter || this.orphanedRename) {
+      return Promise.reject(
+        new Error('A rename is still pending at the server; wait for it to reconcile.'),
+      );
+    }
+    const id = this.nextId();
+    const expectedTitle = title && title.length > 0 ? title : null;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.renameWaiter?.id !== id) return;
+        this.renameWaiter = null;
+        // The daemon may still process this request. Keep its identity so a
+        // late session_renamed cannot be mistaken for a newer rename.
+        this.orphanedRename = { id, expectedTitle };
+        reject(new Error('The server did not confirm the rename.'));
+      }, this.options.config.renameTimeoutMs);
+      this.renameWaiter = { id, timer, settled: false, expectedTitle, resolve, reject };
+      try {
+        this.connection.send({
+          type: 'rename_session',
+          id,
+          ...(title ? { title } : null),
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        this.renameWaiter = null;
+        reject(error as Error);
+      }
+    });
   }
 
   setSaved(saved: boolean, label?: string | null): void {

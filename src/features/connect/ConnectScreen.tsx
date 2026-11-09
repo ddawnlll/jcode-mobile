@@ -8,7 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Button, Divider, Field, TextAction } from '../../design/controls';
 import { CloseIcon, JCodeMark, LinkIcon } from '../../design/icons';
 import { useTheme } from '../../design/theme';
-import { geometry, radius, space } from '../../design/tokens';
+import { budgets, geometry, radius, space } from '../../design/tokens';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
 import { parseServerAddress } from '../../core/connection/client';
@@ -35,6 +35,27 @@ export function ConnectScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const pendingPairLink = useAppStore((state) => state.pendingPairLink);
   const setPendingPairLink = useAppStore((state) => state.actions.setPendingPairLink);
+  const pairAttempt = useRef(0);
+  const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (pairTimer.current) clearTimeout(pairTimer.current);
+      pairTimer.current = null;
+      controller.cancelPairing();
+    };
+  }, []);
+
+  useEffect(
+    () =>
+      navigation.addListener('blur', () => {
+        controller.cancelPairing();
+      }),
+    [navigation],
+  );
 
   const dismissKeyboard = () => Keyboard.dismiss();
 
@@ -146,28 +167,42 @@ export function ConnectScreen() {
     setError(null);
     setPairError(null);
     setBusy(true);
-    const started = Date.now();
-    const result = await Promise.race([
-      controller.pair({
-        address,
-        code,
-        label,
-        deviceName: name.trim() || 'JCode Mobile',
-      }),
-      new Promise<{ ok: false; error: string; code: string; detail?: string }>((resolve) =>
-        setTimeout(
-          () =>
-            resolve({
-              ok: false,
-              code: 'PAIR_TIMEOUT_UI',
-              error: 'Pairing was still waiting after 20s. The server did not complete /pair.',
-              detail: 'No response returned to the app. Check the adapter log and TLS chain.',
-            }),
-          20_000,
-        ),
-      ),
-    ]);
+    const attempt = ++pairAttempt.current;
+    let timedOut = false;
+    const result = await new Promise<
+      { ok: true; profileId: string } | { ok: false; error: string; code: string; detail?: string }
+    >((resolve) => {
+      pairTimer.current = setTimeout(() => {
+        timedOut = true;
+        controller.cancelPairing();
+        resolve({
+          ok: false,
+          code: 'PAIR_TIMEOUT_UI',
+          error: `Pairing was still waiting after ${Math.round(budgets.pairUiTimeoutMs / 1000)}s. The server did not complete /pair.`,
+          detail: 'No response returned to the app. Check the adapter log and TLS chain.',
+        });
+      }, budgets.pairUiTimeoutMs);
+      void controller
+        .pair({
+          address,
+          code,
+          label,
+          deviceName: name.trim() || 'JCode Mobile',
+        })
+        .then(resolve)
+        .catch((error: unknown) =>
+          resolve({
+            ok: false,
+            code: 'PAIR_NETWORK',
+            error: error instanceof Error ? error.message : 'Pairing failed.',
+          }),
+        );
+    });
+    if (pairTimer.current) clearTimeout(pairTimer.current);
+    pairTimer.current = null;
+    if (!mounted.current || attempt !== pairAttempt.current) return;
     setBusy(false);
+    if (!result.ok && result.code === 'PAIR_CANCELLED' && !timedOut) return;
     if (!result.ok) {
       setPairError({
         message: result.error,
@@ -176,7 +211,6 @@ export function ConnectScreen() {
       });
       return;
     }
-    void started;
     navigation.reset({ index: 0, routes: [{ name: 'Sessions' as never }] });
   };
 

@@ -264,6 +264,21 @@ export async function updateSessionLiveState(
   );
 }
 
+/** Persist an authoritative title for the exact server/session. */
+export async function updateSessionTitle(
+  serverId: string,
+  sessionId: string,
+  title: string | null,
+): Promise<void> {
+  await db().runAsync(
+    'UPDATE sessions SET title = ?, last_synced_at = ? WHERE server_id = ? AND session_id = ?',
+    title,
+    Date.now(),
+    serverId,
+    sessionId,
+  );
+}
+
 /* ---------------------------------------------------------------- messages */
 
 export async function loadCachedMessages(
