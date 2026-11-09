@@ -58,7 +58,7 @@ release metadata and marketing updates.
 | Playwright app e2e | `bun run e2e` | PASS, 26/26 in 3.8 min (the first full run was 24/25 because the saved-server spec used the Appearance screen's `Theme family` heading instead of its `appearance-screen` test id; after the fix the full suite passed) |
 | Marketing build | `bun run marketing:build` | PASS, 27 files |
 | Marketing tests | `bun run marketing:test` with the rootless Chromium `LD_LIBRARY_PATH` | PASS, 76 passed / 3 skipped |
-| Android release APK | CI `check.yml` workflow dispatch | PASS, artifact and SHA-256 recorded in `docs/BUILD_STATE.md` |
+| Android release APK | CI `check.yml` workflow dispatch | PASS, 62.7 MiB, SHA-256 `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
 | Native iOS / Android device pacing and large text | device or simulator | NOT_RUN on this Debian VPS |
 
 The first marketing run failed before launching Chromium because
@@ -91,6 +91,19 @@ GPU frame pacing. The native measurement remains NOT_RUN.
 - Playwright screenshots under `.staging/e2e/screens/v021-welcome-*.png`
 - Playwright trace and failure artefacts under `.staging/e2e/results/` while the
   staging run exists; they are not committed.
+
+## Release artifact
+
+| Item | Value |
+| --- | --- |
+| Asset | `jcode-mobile-0.2.1-android-release.apk` |
+| Size | 65,709,266 bytes (62.7 MiB) |
+| SHA-256 | `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
+| CI run | `42677587489`, `android-release` job in 14m41s |
+| ABIs | `arm64-v8a`, `armeabi-v7a` |
+| Bundle | `assets/index.android.bundle` present |
+| Signing | debug-signed, sideload only |
+| Device install | NOT_RUN |
 
 ## Remaining native gates
 

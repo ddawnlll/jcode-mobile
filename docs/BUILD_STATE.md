@@ -36,7 +36,7 @@ Updated: 2026-11-09
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.2.1-android-release.apk` | pending CI | pending CI |
+| `artifacts/jcode-mobile-0.2.1-android-release.apk` | 62.7 MiB (65,709,266 B) | `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
 | `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
 | `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
 | `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
@@ -56,7 +56,7 @@ saved-server routing, and retained theme preview. Evidence is in
 | `bun run adapter:test` | PASS, 16 tests |
 | `bun run e2e` | PASS, 26/26 |
 | `bun run marketing:test` | PASS, 76 passed / 3 skipped |
-| Android release APK | pending CI |
+| Android release APK | PASS, 62.7 MiB, `arm64-v8a` + `armeabi-v7a`, debug-signed; checksum above |
 | Native device pacing, large text, screen reader | NOT_RUN |
 
 ## Commands verified for v0.2.0
