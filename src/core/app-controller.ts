@@ -116,8 +116,19 @@ export class AppController {
   private pairAbort: AbortController | null = null;
   private pairWriteSeq = 0;
   private pairWrites = new Map<string, { seq: number; token: string }>();
+  /** Serializes credential/profile writes and cleanup for one profile. */
+  private profileQueues = new Map<string, Promise<unknown>>();
   /** A profile whose credential is being loaded; connections are blocked. */
-  private credentialLoading: { epoch: number; profileId: string } | null = null;
+  private credentialLoading: {
+    epoch: number;
+    profile: ServerProfileRow;
+    options: { restore: boolean; deferConnect?: boolean };
+  } | null = null;
+  /** An activation interrupted by background, resumed on foreground. */
+  private pendingActivation: {
+    profile: ServerProfileRow;
+    options: { restore: boolean; deferConnect?: boolean };
+  } | null = null;
   /** Confirmed titles newer than a pending inventory/attach response. */
   private confirmedTitles = new Map<
     string,
@@ -142,6 +153,27 @@ export class AppController {
       this.clientGeneration === generation &&
       this.client === client
     );
+  }
+
+  /**
+   * Serialize credential/profile writes and cleanup for one profile. A paused
+   * save cannot finish after a newer cleanup, and cleanup cannot read or
+   * delete while a newer save is in flight.
+   */
+  private profileQueue<T>(profileId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.profileQueues.get(profileId) ?? Promise.resolve();
+    const run = previous.then(work, work);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.profileQueues.set(profileId, tail);
+    void tail.finally(() => {
+      if (this.profileQueues.get(profileId) === tail) {
+        this.profileQueues.delete(profileId);
+      }
+    });
+    return run;
   }
 
   /** "Last checked" advances even when the attempt fails. */
@@ -183,6 +215,7 @@ export class AppController {
   private invalidateLifecycle(): void {
     this.lifecycleEpoch += 1;
     this.credentialLoading = null;
+    this.pendingActivation = null;
     this.clientGeneration += 1;
     this.clearReconnect();
     this.stopHealthChecks();
@@ -367,7 +400,14 @@ export class AppController {
   }
 
   private onBackground(): void {
+    const interrupted = this.credentialLoading;
     this.invalidateLifecycle();
+    if (interrupted) {
+      this.pendingActivation = {
+        profile: interrupted.profile,
+        options: interrupted.options,
+      };
+    }
     this.suspendInventoryPolling();
     this.flushStream();
     this.flushDraft();
@@ -380,6 +420,13 @@ export class AppController {
   }
 
   private async onForeground(): Promise<void> {
+    const pending = this.pendingActivation;
+    this.pendingActivation = null;
+    if (pending) {
+      await this.activateProfile(pending.profile, pending.options);
+      this.ensureInventoryTimer();
+      return;
+    }
     if (this.profile) {
       await this.connectNow({ immediate: true });
       this.ensureInventoryTimer();
@@ -493,6 +540,7 @@ export class AppController {
         error: 'The server returned an invalid device token.',
       };
     }
+    const pairedToken = payload.token;
     const profile: ServerProfileRow = {
       id: profileId,
       label,
@@ -506,20 +554,31 @@ export class AppController {
       capabilities_json: existing?.capabilities_json ?? null,
     };
     const writeSeq = ++this.pairWriteSeq;
-    this.pairWrites.set(profileId, { seq: writeSeq, token: payload.token });
-    await saveToken(profileId, payload.token);
-    if (!owns()) {
-      await this.cleanupPairWrites(profileId, writeSeq, payload.token);
-      return cancelled();
-    }
-    await saveServer(profile);
-    if (!owns()) {
-      await this.cleanupPairWrites(profileId, writeSeq, payload.token);
-      return cancelled();
-    }
-    await setPref(LAST_SERVER, profileId);
-    if (!owns()) {
-      await this.cleanupPairWrites(profileId, writeSeq, payload.token);
+    this.pairWrites.set(profileId, { seq: writeSeq, token: pairedToken });
+    const persisted = await this.profileQueue(profileId, async () => {
+      await saveToken(profileId, pairedToken);
+      if (!owns()) {
+        await this.cleanupPairWrites(profileId, writeSeq, pairedToken);
+        return false;
+      }
+      await saveServer(profile);
+      if (!owns()) {
+        await this.cleanupPairWrites(profileId, writeSeq, pairedToken);
+        return false;
+      }
+      await setPref(LAST_SERVER, profileId);
+      if (!owns()) {
+        await this.cleanupPairWrites(profileId, writeSeq, pairedToken);
+        return false;
+      }
+      return true;
+    });
+    if (!persisted || !owns()) {
+      if (persisted) {
+        await this.profileQueue(profileId, () =>
+          this.cleanupPairWrites(profileId, writeSeq, pairedToken),
+        );
+      }
       return cancelled();
     }
     // Pairing is complete once the token is stored. Connect in the background
@@ -577,9 +636,10 @@ export class AppController {
   async activateProfile(profile: ServerProfileRow, options: { restore: boolean; deferConnect?: boolean }): Promise<void> {
     this.invalidateLifecycle();
     const epoch = this.lifecycleEpoch;
+    this.pendingActivation = null;
     this.profile = null;
     this.token = null;
-    this.credentialLoading = { epoch, profileId: profile.id };
+    this.credentialLoading = { epoch, profile, options };
     store.setState((state) => ({
       connection: {
         ...state.connection,
@@ -591,7 +651,7 @@ export class AppController {
     }));
     let token: string | null;
     try {
-      token = await loadToken(profile.id);
+      token = await this.profileQueue(profile.id, () => loadToken(profile.id));
     } catch {
       if (this.credentialLoading?.epoch === epoch) this.credentialLoading = null;
       return;
@@ -1130,9 +1190,31 @@ export class AppController {
             (session.title ?? null) !== (mergedSessions[index].title ?? null),
         );
         for (const session of changed) {
-          const title = session.title ?? null;
-          await updateSessionTitle(profileId, session.session_id, title).catch(
-            () => undefined,
+          const key = this.titleKey(profileId, session.session_id);
+          const confirmedBefore = this.confirmedTitles.get(key);
+          const confirmedRevision =
+            confirmedBefore && confirmedBefore.revision > titleRevisionAtStart
+              ? confirmedBefore.revision
+              : titleRevisionAtStart;
+          let title =
+            confirmedBefore && confirmedBefore.revision > titleRevisionAtStart
+              ? confirmedBefore.title ?? confirmedBefore.displayTitle
+              : session.title ?? null;
+          await updateSessionTitle(profileId, session.session_id, title).catch(() => undefined);
+          // A second rename may have been confirmed while this write was
+          // pending. Re-read the revision after each write until it settles.
+          let appliedRevision = confirmedRevision;
+          let latest = this.confirmedTitles.get(key);
+          for (let pass = 0; pass < 4 && latest && latest.revision > appliedRevision; pass += 1) {
+            title = latest.title ?? latest.displayTitle;
+            await updateSessionTitle(profileId, session.session_id, title).catch(
+              () => undefined,
+            );
+            appliedRevision = latest.revision;
+            latest = this.confirmedTitles.get(key);
+          }
+          effectiveSessions = effectiveSessions.map((entry) =>
+            entry.session_id === session.session_id ? { ...entry, title } : entry,
           );
           store.setState((current) => {
             const conversation = current.conversation;
@@ -1978,9 +2060,13 @@ export class AppController {
     this.pairWrites.delete(profileId);
     this.inventoryRequested = false;
     this.suspendInventoryPolling();
-    await deleteToken(profileId).catch(() => undefined);
-    await deleteServer(profileId).catch(() => undefined);
-    await clearServerCache(profileId).catch(() => undefined);
+    await this.profileQueue(profileId, async () => {
+      // A new pair for this endpoint owns the profile now; do not delete it.
+      if (this.pairWrites.has(profileId)) return;
+      await deleteToken(profileId).catch(() => undefined);
+      await deleteServer(profileId).catch(() => undefined);
+      await clearServerCache(profileId).catch(() => undefined);
+    });
     if (this.lifecycleEpoch !== epoch) return;
     for (const key of [...this.confirmedTitles.keys()]) {
       if (key.startsWith(`${profileId}:`)) this.confirmedTitles.delete(key);

@@ -740,6 +740,41 @@ describe('review race regressions', () => {
     expect(store.get().connection.state).toBe('current');
   });
 
+  it('resumes an activation interrupted by background on foreground', async () => {
+    const firstRead = deferred<string>();
+    let bReads = 0;
+    (loadToken as jest.Mock).mockImplementation(async (id: string) => {
+      if (id === 'A') return 'a'.repeat(64);
+      bReads += 1;
+      return bReads === 1 ? firstRead.promise : 'b'.repeat(64);
+    });
+    const controller = makeController(A);
+
+    const activating = controller.activateProfile(B, { restore: false, deferConnect: true });
+    await flush();
+    expect((controller as unknown as { profile: unknown }).profile).toBeNull();
+
+    (controller as unknown as { onBackground: () => void }).onBackground();
+    expect(
+      (controller as unknown as { pendingActivation: { profile: { id: string } } }).pendingActivation
+        .profile.id,
+    ).toBe('B');
+
+    firstRead.resolve('b'.repeat(64));
+    await activating;
+    await flush();
+    expect((controller as unknown as { profile: unknown }).profile).toBeNull();
+
+    (controller as unknown as { onForeground: () => Promise<void> }).onForeground();
+    await flush();
+    await flush();
+
+    expect((controller as unknown as { profile: { id: string } }).profile.id).toBe('B');
+    expect((controller as unknown as { token: string }).token).toBe('b'.repeat(64));
+    expect(fakeClients.every((client) => client.token === 'b'.repeat(64))).toBe(true);
+    expect(store.get().connection.state).toBe('current');
+  });
+
   it('does not let a cancelled pair delete a newer overlapping pair', async () => {
     const tokens = new Map<string, string>();
     const servers = new Map<string, typeof A>();
@@ -789,17 +824,95 @@ describe('review race regressions', () => {
       label: 'A',
       deviceName: 'Phone',
     });
-    await second;
     await flush();
-    expect(tokens.get(A.id)).toBe(t2);
+    // The second attempt is queued behind the paused first save.
+    expect(writes).toBe(1);
 
     firstSave.resolve();
-    await first;
+    const [firstResult, secondResult] = await Promise.all([first, second]);
     await flush();
 
+    expect(firstResult).toMatchObject({ ok: false, code: 'PAIR_CANCELLED' });
+    expect(secondResult).toMatchObject({ ok: true });
     expect(tokens.get(A.id)).toBe(t2);
     expect(servers.has(A.id)).toBe(true);
     expect(await loadToken(A.id)).toBe(t2);
+  });
+
+  it('serializes cleanup reads with a newer pair write', async () => {
+    const tokens = new Map<string, string>();
+    const servers = new Map<string, typeof A>();
+    servers.set(A.id, A);
+    const serverSave = deferred<void>();
+    const cleanupRead = deferred<string | null>();
+    let serverWrites = 0;
+    let tokenReads = 0;
+    const t1 = '3'.repeat(64);
+    const t2 = '4'.repeat(64);
+
+    (loadToken as jest.Mock).mockImplementation(async (id: string) => {
+      tokenReads += 1;
+      if (tokenReads === 1) return cleanupRead.promise;
+      return tokens.get(id) ?? null;
+    });
+    (saveToken as jest.Mock).mockImplementation(async (id: string, token: string) => {
+      tokens.set(id, token);
+    });
+    (deleteToken as jest.Mock).mockImplementation(async (id: string) => {
+      tokens.delete(id);
+    });
+    (saveServer as jest.Mock).mockImplementation(async (profile: typeof A) => {
+      serverWrites += 1;
+      if (serverWrites === 1) await serverSave.promise;
+      servers.set(profile.id, profile);
+    });
+    (deleteServer as jest.Mock).mockImplementation(async (id: string) => {
+      servers.delete(id);
+    });
+    (listServers as jest.Mock).mockImplementation(async () => [...servers.values()]);
+
+    let fetchCalls = 0;
+    global.fetch = jest.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({ ok: true, token: fetchCalls++ === 0 ? t1 : t2 }),
+    })) as unknown as typeof fetch;
+
+    const controller = makeController(A);
+    const first = controller.pair({
+      address: 'https://a.example.test:443',
+      code: '111111',
+      label: 'A',
+      deviceName: 'Phone',
+    });
+    await flush();
+    expect(tokens.get(A.id)).toBe(t1);
+
+    const second = controller.pair({
+      address: 'https://a.example.test:443',
+      code: '222222',
+      label: 'A',
+      deviceName: 'Phone',
+    });
+    await flush();
+    serverSave.resolve();
+    await flush();
+
+    // Cleanup is paused on its token read; the newer write is queued behind it.
+    expect(tokens.get(A.id)).toBe(t1);
+    let secondSettled = false;
+    void second.then(() => { secondSettled = true; });
+    await flush();
+    expect(secondSettled).toBe(false);
+
+    cleanupRead.resolve(t1);
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    await flush();
+
+    expect(firstResult).toMatchObject({ ok: false, code: 'PAIR_CANCELLED' });
+    expect(secondResult).toMatchObject({ ok: true });
+    expect(tokens.get(A.id)).toBe(t2);
+    expect(servers.has(A.id)).toBe(true);
   });
 
   it('retires a forgotten profile before cleanup and ignores network restoration', async () => {
@@ -854,6 +967,72 @@ describe('review race regressions', () => {
     who.resolve({ status: 401, ok: false });
     await flush();
     expect(store.get().connection.state).toBe('current');
+  });
+
+  it('keeps the newest title when a second rename lands during the correction write', async () => {
+    const upsertGate = deferred<void>();
+    const correctionGate = deferred<void>();
+    const cachedTitles = new Map<string, string | null>();
+    let firstTitleWrites = 0;
+    (updateSessionTitle as jest.Mock).mockImplementation(async (_profileId, sessionId, title) => {
+      if (title === 'First') {
+        firstTitleWrites += 1;
+        if (firstTitleWrites === 2) await correctionGate.promise;
+      }
+      cachedTitles.set(sessionId, title);
+    });
+    const controller = makeController(A);
+    await connect(controller);
+    (upsertSessions as jest.Mock).mockImplementation(async (_profileId, sessions) => {
+      await upsertGate.promise;
+      for (const session of sessions) cachedTitles.set(session.session_id, session.title ?? null);
+    });
+    fakeConfig.request = async (_client, request) => {
+      if (request.req === 'list_sessions') {
+        return {
+          ev: 'sessions',
+          sessions: [{ session_id: 'S', title: 'Old', working_dir: '/test' }],
+          partial: false,
+        };
+      }
+      return { ev: 'ok' };
+    };
+    store.setState({
+      conversation: resetConversation({ serverId: 'A', sessionId: 'S', title: 'Old' }),
+    });
+
+    const refreshing = controller.refreshSessions({ force: true });
+    await flush();
+    (controller as unknown as { onFrame: (frame: unknown) => void }).onFrame({
+      ev: 'session_renamed',
+      session_id: 'S',
+      title: 'First',
+      display_title: 'First',
+    });
+    await flush();
+    expect(cachedTitles.get('S')).toBe('First');
+
+    upsertGate.resolve();
+    await flush();
+    // The post-inventory correction is now paused on the first title.
+    (controller as unknown as { onFrame: (frame: unknown) => void }).onFrame({
+      ev: 'session_renamed',
+      session_id: 'S',
+      title: 'Second',
+      display_title: 'Second',
+    });
+    await flush();
+    expect(store.get().conversation.title).toBe('Second');
+
+    correctionGate.resolve();
+    await refreshing;
+    await flush();
+
+    expect(cachedTitles.get('S')).toBe('Second');
+    expect(store.get().conversation.title).toBe('Second');
+    expect(
+      store.get().inventory.sessions.find((session) => session.session_id === 'S')?.title,
+    ).toBe('Second');
   });
 
   it('reapplies a confirmed title after an older inventory write lands', async () => {
