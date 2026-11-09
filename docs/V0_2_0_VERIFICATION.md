@@ -9,7 +9,7 @@ gate is not closed by a browser or Playwright result.
 | --- | --- |
 | Branch | `feature/v0.2.0-tidal-glass` |
 | Base | `cac75d0` (PR #12 merge) |
-| Candidate SHA | see PR head; implementation tested at `TBD` |
+| Candidate SHA | `7d88e1f` (implementation tested; final commit is docs-only) |
 | Pull request | https://github.com/ddawnlll/jcode-mobile/pull/13 |
 | Bun | 1.4.4 (`/home/quant/local/bun/bin/bun`) |
 | Host | Debian 13 x86_64 VPS, Chromium headless shell 1254 |
