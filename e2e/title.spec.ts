@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import { setE2EAdapter } from './adapter';
+import { E2E_SESSION_FOLDER } from './helpers';
 import { seedCredentials } from './seed';
 
 test.describe('confirmed title persistence', () => {
@@ -21,7 +22,7 @@ test.describe('confirmed title persistence', () => {
 
     await page.getByTestId('sessions-new').click();
     await expect(page.getByRole('heading', { name: 'New session' })).toBeVisible();
-    await page.getByRole('textbox', { name: 'Folder on server' }).fill('/home/quant/jcode-mobile');
+    await page.getByRole('textbox', { name: 'Folder on server' }).fill(E2E_SESSION_FOLDER);
     await page.getByRole('button', { name: 'Start session' }).click();
     await expect(page.getByRole('button', { name: 'Confirm and send' })).toBeVisible({
       timeout: 45_000,

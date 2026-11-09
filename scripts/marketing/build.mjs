@@ -28,6 +28,7 @@ export const MANIFEST_NAME = 'build-manifest.json';
  * product URL is added deliberately. */
 export const DEFAULT_ALLOWED_EXTERNAL_PREFIXES = Object.freeze([
   'https://github.com/ddawnlll/jcode-mobile',
+  'https://github.com/1jehuang/jcode',
 ]);
 
 const TEXT_EXTENSIONS = new Set(['.html', '.htm', '.css', '.js', '.mjs', '.json', '.svg', '.xml', '.txt', '.webmanifest']);
