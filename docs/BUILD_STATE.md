@@ -36,10 +36,11 @@ Updated: 2026-11-09
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
+| `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
 | `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
 | `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
 
-The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
+The 0.2.0 APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. It is attached to release `v0.2.0`. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
 
 ## Commands verified for v0.2.0
 
@@ -51,6 +52,7 @@ bun run adapter:test        # 16 tests
 bun run e2e                 # 20/20 Playwright tests, isolated staging
 bunx --bun expo export -p web
 bunx --bun expo prebuild --platform android --no-install  # Bun Gradle config generated
+gh workflow run check.yml --ref feature/v0.2.0-tidal-glass -f release=true  # release APK
 ```
 
 Historical native artifact commands below were run on the v0.1.3 host. They

@@ -98,3 +98,4 @@ Status is DONE only with evidence in `docs/V0_2_0_VERIFICATION.md`.
 | 7.8 | Bun vs Node performance | DONE | Cold readiness and RSS improve; p95 recorded |
 | 7.9 | Playwright full suite | DONE | 20/20 passed in 3.2 min; iPhone 14, Pixel 7, 320-wide |
 | 7.10 | PR for issue #1 | DONE | PR #13, candidate head, CI, coverage matrix and screenshots |
+| 7.11 | v0.2.0 Android APK release | DONE | CI release build, 63 MiB debug-signed APK, SHA-256, GitHub release v0.2.0 |

@@ -72,8 +72,9 @@ gate is not closed by a browser or Playwright result.
 | Bun-only PATH | `PATH` contains Bun and core system binaries only | PASS; no `node`/`npm`; typecheck, lint, 10 Jest suites / 75 tests, 16 adapter tests |
 | Expo Android prebuild | `bunx --bun expo prebuild --platform android --no-install` | PASS; generated `nodeExecutableAndArgs.set(["bun", "--bun"])`, five direct `node` calls rewritten, manifest `adjustResize` |
 | CI | GitHub Actions `check.yml` run `42629879571` | PASS (`js`); `android-build` skipped by workflow design |
-| Android release | `bash scripts/build-android-release.sh` | NOT_RUN this session (no JDK/Android SDK on VPS) |
+| Android release APK | CI `check.yml` dispatch `42634192446` | PASS; 63 MiB, `arm64-v8a` + `armeabi-v7a`, embedded JS, debug-signed |
 | Android debug CI | `gh workflow run check.yml` at `56f13c9` | PASS; `assembleDebug`, 15 m 52 s, generated Gradle uses Bun |
+| Android release APK | `gh workflow run check.yml -f release=true` at `9fe0c7a` | PASS; 63 MiB, SHA-256 `016890e4…2351`, embedded `assets/index.android.bundle` |
 | iOS release | `bash scripts/build-ios-simulator.sh` | NOT_RUN (macOS gate) |
 
 ### Bun vs Node adapter baseline
@@ -166,10 +167,11 @@ changes/copy/image/math flows on both mobile widths, and the 320-wide reflow.
 - Native release-build scroll/frame-time/peak-memory results are NOT_RUN.
 - Glass compositing contrast on varied native backdrops is NOT_RUN; opaque
   token contrast is recorded by the design source, not re-certified here.
-- The Android prebuild configuration is verified and the debug `assembleDebug`
-  job passes in CI. A full Gradle release build, a Node-free host proof, and
-  native device checks remain NOT_RUN; this VPS has no JDK or Android SDK, and
-  the iOS build remains a macOS gate.
+- The Android prebuild configuration is verified. Both `assembleDebug` and
+  `assembleRelease` pass in CI with the Bun Gradle configuration; the release
+  APK contains an embedded Hermes bundle and both phone ABIs. A Node-free host
+  proof, APK install smoke test, and native device checks remain NOT_RUN; the
+  iOS build remains a macOS gate.
 - F16 Work-memory/virtualization, F20 registry coordination, and F22 native
   focus/accessibility are characterized by existing tests but not fully closed
   for 0.2.0.

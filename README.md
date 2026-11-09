@@ -148,8 +148,8 @@ There is no password login after pairing. The device token does not expire. The 
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| Android | [APK](https://github.com/ddawnlll/jcode-mobile/releases/latest) | v0.1.4 artifact; v0.2.0 native gate pending |
-| iOS Simulator | [`.app.zip`](https://github.com/ddawnlll/jcode-mobile/releases/latest) | v0.1.4 artifact; v0.2.0 native gate pending |
+| Android | [APK](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.0) | v0.2.0 release build, embedded JS, debug-signed for sideloading |
+| iOS Simulator | [`.app.zip`](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.1.3) | v0.1.3 artifact; v0.2.0 iOS build pending macOS |
 
 Checksums and install commands are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md). Correctness fixes in this release: [`docs/REVIEW_FIXES.md`](docs/REVIEW_FIXES.md).
 
