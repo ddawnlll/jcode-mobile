@@ -18,7 +18,7 @@ test.describe('320-wide reflow', () => {
   test('welcome and composer keep primary actions reachable', async ({ page }) => {
     const errors = trackPageErrors(page);
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     await expect(page.getByTestId('welcome-connect')).toBeVisible();
     await expect(page.getByTestId('welcome-preview')).toBeVisible();
     await screenshot(page, 'v020-320-welcome');

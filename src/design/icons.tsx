@@ -121,6 +121,46 @@ export function StopIcon({ size = 24, color, label }: IconProps) {
   );
 }
 
+export function SkipIcon({ size = 24, color, label }: IconProps) {
+  const stroke = useStroke(color);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel={label} accessible={!!label}>
+      <Path
+        d="M6 6l9 6-9 6M18 6v12"
+        stroke={stroke}
+        strokeWidth={STROKE}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
+export function PauseIcon({ size = 24, color, label }: IconProps) {
+  const stroke = useStroke(color);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel={label} accessible={!!label}>
+      <Path d="M9 6v12M15 6v12" stroke={stroke} strokeWidth={STROKE} strokeLinecap="round" fill="none" />
+    </Svg>
+  );
+}
+
+export function PlayIcon({ size = 24, color, label }: IconProps) {
+  const stroke = useStroke(color);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel={label} accessible={!!label}>
+      <Path
+        d="M9 5l11 7-11 7Z"
+        stroke={stroke}
+        strokeWidth={STROKE}
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
 export function SendIcon({ size = 24, color, label }: IconProps) {
   const stroke = useStroke(color);
   return (

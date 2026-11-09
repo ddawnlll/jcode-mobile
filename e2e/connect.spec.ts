@@ -18,7 +18,7 @@ test.describe('connect screen', () => {
     const errors = trackPageErrors(page);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     await page.getByTestId('welcome-connect').click();
     await expect(page.getByRole('heading', { name: 'Bring your server.' })).toBeVisible();
     for (const label of ['Server address', 'Pairing code', 'Server label', 'Device name']) {
@@ -56,7 +56,7 @@ test.describe('connect screen', () => {
 
   test('shows the setup command only when asked', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     await page.getByTestId('welcome-connect').click();
     await expect(page.getByText('Run this on the server as the same user')).toHaveCount(0);
     await page.getByRole('button', { name: 'View setup details' }).click();

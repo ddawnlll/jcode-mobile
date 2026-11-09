@@ -6,7 +6,7 @@ test.describe.configure({ mode: 'serial' });
 
 async function enterPreview(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
   await page.getByTestId('welcome-preview').click();
   await expect(page.getByRole('heading', { name: 'Your sessions' })).toBeVisible({
     timeout: 30_000,
@@ -41,7 +41,7 @@ test.describe('Tidal Glass and rich content', () => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     await expect(page.getByTestId('theme-tidal')).toBeVisible();
     await page.getByTestId('theme-gruvbox').click();
     await expect(page.getByTestId('theme-gruvbox')).toHaveAttribute('aria-checked', 'true');
@@ -112,7 +112,7 @@ test.describe('Tidal Glass and rich content', () => {
     await screenshot(page, 'v020-conversation');
 
     await page.getByRole('button', { name: 'Exit preview' }).click();
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -139,7 +139,7 @@ test.describe('Tidal Glass and rich content', () => {
 
   test('all eleven families and both modes are selectable and persist', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     await page.getByTestId('welcome-preview').click();
     await expect(page.getByRole('heading', { name: 'Your sessions' })).toBeVisible();
 
@@ -175,7 +175,7 @@ test.describe('Tidal Glass and rich content', () => {
     // which can beat that write; let the write settle before reloading.
     await page.waitForTimeout(500);
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome to jcode/ })).toBeVisible();
     await expect(page.getByTestId('theme-monokai')).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByTestId('appearance-night')).toHaveAttribute('aria-checked', 'true');
     await screenshot(page, 'v020-appearance-night');

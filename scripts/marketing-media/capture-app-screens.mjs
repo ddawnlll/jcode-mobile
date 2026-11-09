@@ -56,7 +56,7 @@ async function shot(name) {
 }
 
 await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-await page.getByRole('heading', { name: /Your work\./ }).waitFor({ timeout: 45_000 });
+await page.getByRole('heading', { name: /Welcome to jcode/ }).waitFor({ timeout: 45_000 });
 await page.waitForTimeout(600);
 await shot('welcome');
 
@@ -91,7 +91,7 @@ await shot('work-v020');
 // The connection setup is a real screen with no server contact. Reload to a
 // clean first-run state so Preview state cannot leak into it.
 await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
-await page.getByRole('heading', { name: /Your work\./ }).waitFor({ timeout: 45_000 });
+await page.getByRole('heading', { name: /Welcome to jcode/ }).waitFor({ timeout: 45_000 });
 await page.getByTestId('welcome-connect').click();
 await page.getByRole('heading', { name: 'Bring your server.' }).waitFor({ timeout: 30_000 });
 await page.waitForTimeout(500);

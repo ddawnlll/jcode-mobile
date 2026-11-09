@@ -1,122 +1,143 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
-import { useIsFocused } from '@react-navigation/native';
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+} from 'react';
+import { Platform, StyleSheet, Text, View, type TextStyle } from 'react-native';
 
 import { fonts } from '../../design/tokens';
 import { useTheme } from '../../design/theme';
+import type { Palette } from '../../design/tokens';
 import {
-  ASCII_FRAME_MS,
-  ASCII_IDLE_FRAME_MS,
-  ASCII_OPEN_MS,
-  asciiWelcomeFrame,
+  ASCII_MONO_ADVANCE,
+  type AsciiLayerId,
+  type AsciiPaint,
+  type AsciiScene,
 } from './asciiTorus';
+import { useAsciiWelcome } from './useAsciiWelcome';
 
-const COLS = 40;
-const ROWS = 18;
+const LAYER_MATERIAL: Record<
+  AsciiLayerId,
+  { color: keyof Palette; opacity: number }
+> = {
+  field: { color: 'muted', opacity: 0.3 },
+  noise: { color: 'muted', opacity: 0.5 },
+  ringDim: { color: 'brand', opacity: 0.4 },
+  ringMid: { color: 'brand', opacity: 0.75 },
+  ringBright: { color: 'ink', opacity: 1 },
+  type: { color: 'ink', opacity: 1 },
+};
+
+export interface AsciiWelcomeHandle {
+  skip: () => void;
+  togglePause: () => void;
+}
+
+export interface AsciiMotionState {
+  opening: boolean;
+  paused: boolean;
+}
+
+interface AsciiWelcomeProps {
+  scene: AsciiScene | null;
+  reduceMotion: boolean;
+  onMotionState?: (state: AsciiMotionState) => void;
+}
 
 /**
- * The welcome art. It assembles in 1.6 seconds from the same character grid as
- * the design reference, then keeps a slow turn while the screen is focused and
- * the app is active. Reduce Motion gets the settled frame immediately.
+ * Full-screen character field. One Text block per glyph layer, never one per
+ * character. The idle turn only replaces the layers that cover the torus band,
+ * so the rest of the raster stays mounted and untouched.
+ *
+ * The animation clock lives here, not in the screen. Only this component
+ * re-renders on a frame; the welcome copy, actions and theme preview stay
+ * untouched. The screen receives one callback when the coarse motion state
+ * changes from opening to idle or paused to playing.
  */
-export function AsciiWelcome({ fontSize }: { fontSize: number }) {
-  const { colors, reduceMotion } = useTheme();
-  const focused = useIsFocused();
-  const [active, setActive] = useState(AppState.currentState !== 'background');
-  const [frame, setFrame] = useState(() =>
-    asciiWelcomeFrame({
-      cols: COLS,
-      rows: ROWS,
-      elapsedMs: reduceMotion ? ASCII_OPEN_MS : 0,
-      tick: 0,
-      reducedMotion: reduceMotion,
+export const AsciiWelcome = forwardRef<AsciiWelcomeHandle, AsciiWelcomeProps>(
+  function AsciiWelcome({ scene, reduceMotion, onMotionState }, ref) {
+    const welcome = useAsciiWelcome(scene, reduceMotion);
+
+    useImperativeHandle(
+      ref,
+      () => ({ skip: welcome.skip, togglePause: welcome.togglePause }),
+      [welcome.skip, welcome.togglePause],
+    );
+
+    useEffect(() => {
+      onMotionState?.({ opening: welcome.opening, paused: welcome.paused });
+    }, [onMotionState, welcome.opening, welcome.paused]);
+
+    if (!scene || !welcome.paint) return null;
+    return <AsciiField scene={scene} paint={welcome.paint} />;
+  },
+);
+
+const AsciiField = React.memo(function AsciiField({
+  scene,
+  paint,
+}: {
+  scene: AsciiScene;
+  paint: AsciiPaint;
+}) {
+  const { colors } = useTheme();
+  const layerStyle = useMemo<TextStyle>(
+    () => ({
+      position: 'absolute',
+      left: scene.originX,
+      width: scene.cols * scene.cellW + 1,
+      fontFamily: fonts.mono,
+      fontSize: scene.cellW / ASCII_MONO_ADVANCE,
+      lineHeight: scene.cellH,
+      includeFontPadding: false,
+      textAlignVertical: 'top',
+      letterSpacing: 0,
+      ...(Platform.OS === 'web'
+        ? ({ whiteSpace: 'pre' } as unknown as TextStyle)
+        : null),
     }),
+    [scene.cellH, scene.cellW, scene.cols, scene.originX],
   );
-  const elapsedRef = useRef(reduceMotion ? ASCII_OPEN_MS : 0);
-  const tickRef = useRef(0);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (next) => {
-      setActive(next !== 'background');
-    });
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      elapsedRef.current = ASCII_OPEN_MS;
-      setFrame(
-        asciiWelcomeFrame({
-          cols: COLS,
-          rows: ROWS,
-          elapsedMs: ASCII_OPEN_MS,
-          tick: tickRef.current,
-          reducedMotion: true,
-        }),
-      );
-      return;
-    }
-    if (!focused || !active) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let last = Date.now();
-    const step = () => {
-      const now = Date.now();
-      elapsedRef.current += Math.max(0, now - last);
-      last = now;
-      const elapsed = elapsedRef.current;
-      setFrame(
-        asciiWelcomeFrame({
-          cols: COLS,
-          rows: ROWS,
-          elapsedMs: elapsed,
-          tick: tickRef.current,
-          reducedMotion: false,
-        }),
-      );
-      tickRef.current += 1;
-      if (!cancelled) {
-        timer = setTimeout(step, elapsed < ASCII_OPEN_MS ? ASCII_FRAME_MS : ASCII_IDLE_FRAME_MS);
-      }
-    };
-    step();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [active, focused, reduceMotion]);
 
   return (
     <View
-      style={styles.wrap}
+      style={[StyleSheet.absoluteFill, styles.clip]}
+      pointerEvents="none"
       testID="welcome-ascii"
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       aria-hidden
     >
-      {frame.map((line, index) => (
-        <Text
-          key={index}
-          allowFontScaling={false}
-          selectable={false}
-          style={[
-            styles.line,
-            {
-              color: colors.brand,
-              fontSize,
-              lineHeight: Math.round(fontSize * 1.12),
-            },
-          ]}
-        >
-          {line}
-        </Text>
-      ))}
+      {paint.layers.map((layer) => {
+        const material = LAYER_MATERIAL[layer.id];
+        const color = colors[material.color];
+        return (
+          <Text
+            key={`${layer.id}-${layer.top}`}
+            allowFontScaling={false}
+            selectable={false}
+            style={[
+              layerStyle,
+              {
+                top: scene.originY + layer.top * scene.cellH,
+                color,
+                opacity:
+                  layer.id === 'type'
+                    ? material.opacity * paint.typeOpacity
+                    : material.opacity,
+              },
+            ]}
+          >
+            {layer.lines.join('\n').replace(/ /g, '\u00A0')}
+          </Text>
+        );
+      })}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', justifyContent: 'center' },
-  line: { fontFamily: fonts.mono, letterSpacing: 0, includeFontPadding: false },
+  clip: { overflow: 'hidden' },
 });
