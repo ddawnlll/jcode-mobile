@@ -1,0 +1,73 @@
+name: marketing
+
+# Manual only. This workflow never runs on push and never mutates a remote
+# deployment unless the dispatcher explicitly asks for it and types DEPLOY.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Build and test only, or deploy to GitHub Pages
+        type: boolean
+        default: false
+      confirm:
+        description: Type DEPLOY to confirm a Pages deployment
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketing-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and verify the static site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+          cache: true
+      - run: bun install --frozen-lockfile
+      - name: Install Chromium
+        run: bunx --bun playwright install --with-deps chromium
+      - name: Build, unit test, and Playwright test
+        run: bun run marketing:test
+      - name: Upload the static site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketing-site
+          path: dist/marketing
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy to GitHub Pages (manual confirmation required)
+    if: inputs.publish == true && inputs.confirm == 'DEPLOY'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download the verified static site
+        uses: actions/download-artifact@v4
+        with:
+          name: marketing-site
+          path: dist/marketing
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/marketing
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

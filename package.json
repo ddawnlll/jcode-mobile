@@ -19,6 +19,9 @@
     "e2e": "bash scripts/run-e2e.sh",
     "e2e:headed": "bash scripts/run-e2e.sh --headed",
     "e2e:report": "bunx --bun playwright show-report .staging/e2e/report",
+    "marketing:build": "bun --bun scripts/marketing/build.mjs",
+    "marketing:serve": "bun --bun scripts/marketing/serve.mjs",
+    "marketing:test": "bun run marketing:build && bun test scripts/marketing/*.test.mjs && bunx --bun playwright test -c e2e/marketing/playwright.config.ts",
     "web": "bunx --bun expo start --web",
     "web:export": "bunx --bun expo export -p web",
     "web:serve": "bun --bun scripts/serve-web.mjs dist/web",
@@ -88,6 +91,7 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/e2e/",
+      "/scripts/marketing/",
       "/.staging/",
       "/integration/",
       "/ios/",
