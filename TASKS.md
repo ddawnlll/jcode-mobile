@@ -89,12 +89,12 @@ Status is DONE only with evidence in `docs/V0_2_0_VERIFICATION.md`.
 | # | Task | Status | Acceptance |
 | --- | --- | --- | --- |
 | 7.1 | 11 families / 22 palettes and independent prefs | DONE (web) | Theme registry, Appearance screen, persistence, Playwright family loop |
-| 7.2 | Welcome, live preview, pending loader | DONE (web) | Welcome flow, demo preview, 1,400 ms pending mark, reduced-motion static |
+| 7.2 | Welcome, live preview, pending loader | DONE (web) | 1.6 s ASCII character-grid reveal, demo preview, 1,400 ms pending mark, reduced-motion still frame |
 | 7.3 | Rich content pipeline | DONE (web) | Typed CommonMark/GFM/math parser, highlight.js, native math, code full view, parser tests |
 | 7.4 | Message copy and images | DONE (web) | Copy text/Markdown, composer picker, bounded adapter tuples, Markdown images |
 | 7.5 | Projects, folder browser, new-session transaction | DONE (web) | Real adapter directory tests; create/configure/send flow; staging app spec |
 | 7.6 | Composer, context, thinking, work rail, menus, find, changes | DONE (web) | Playwright v020 spec passes at 390/412; 320 narrow spec passes |
-| 7.7 | Bun sole runtime and package manager | DONE | Lock/scripts/CI/Jest/adapter/export; clean Bun-only PATH proof |
+| 7.7 | Bun sole runtime and package manager | DONE (prebuild) / NOT_RUN (release build) | Lock/scripts/CI/Jest/adapter/export; clean Bun-only PATH proof; generated Gradle uses Bun; no JDK/SDK on VPS |
 | 7.8 | Bun vs Node performance | DONE | Cold readiness and RSS improve; p95 recorded |
-| 7.9 | Playwright full suite | DONE | 20/20 passed in 2.9 min; iPhone 14, Pixel 7, 320-wide |
+| 7.9 | Playwright full suite | DONE | 20/20 passed in 3.2 min; iPhone 14, Pixel 7, 320-wide |
 | 7.10 | PR for issue #1 | DONE | PR #13, candidate head, CI, coverage matrix and screenshots |

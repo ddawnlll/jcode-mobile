@@ -134,6 +134,9 @@ export interface MarkdownDocument {
 
 const MAX_BLOCKS = 900;
 const MAX_INLINE = 20_000;
+const MAX_MATH_BLOCK_LINES = 400;
+const MAX_MATH_BLOCK_CHARS = 64 * 1024;
+const MAX_INLINE_MATH_CHARS = 4096;
 
 function makeMarkdown(): MarkdownIt {
   const md = new MarkdownIt({
@@ -170,10 +173,14 @@ function makeMarkdown(): MarkdownIt {
     let nextLine = startLine + 1;
     const body: string[] = first.trim() ? [first] : [];
     let found = false;
-    for (; nextLine < endLine; nextLine += 1) {
+    let chars = first.length;
+    const lineLimit = Math.min(endLine, startLine + 1 + MAX_MATH_BLOCK_LINES);
+    for (; nextLine < lineLimit; nextLine += 1) {
       const begin = state.bMarks[nextLine] + state.tShift[nextLine];
       const end = state.eMarks[nextLine];
       const text = state.src.slice(begin, end);
+      chars += end - begin;
+      if (chars > MAX_MATH_BLOCK_CHARS) break;
       if (text.trim().endsWith(close)) {
         const trimmed = text.trim();
         body.push(trimmed.slice(0, -close.length));
@@ -198,7 +205,7 @@ function makeMarkdown(): MarkdownIt {
     const src = state.src;
     if (src[start] === '\\' && src[start + 1] === '(') {
       const end = src.indexOf('\\)', start + 2);
-      if (end === -1) return false;
+      if (end === -1 || end - start - 2 > MAX_INLINE_MATH_CHARS) return false;
       const latex = src.slice(start + 2, end).trim();
       if (!latex || silent) return latex.length > 0;
       const token = state.push('math_inline', 'math', 0);
@@ -210,7 +217,8 @@ function makeMarkdown(): MarkdownIt {
     const next = src[start + 1];
     if (!next || /\s/.test(next) || next === '$') return false;
     let end = start + 1;
-    while (end < src.length) {
+    const limit = Math.min(src.length, start + 1 + MAX_INLINE_MATH_CHARS);
+    while (end < limit) {
       if (src[end] === '\\') {
         end += 2;
         continue;
@@ -218,7 +226,7 @@ function makeMarkdown(): MarkdownIt {
       if (src[end] === '$') break;
       end += 1;
     }
-    if (end >= src.length) return false;
+    if (end >= limit) return false;
     const body = src.slice(start + 1, end);
     if (!body.trim() || /\s$/.test(body)) return false;
     if (silent) return true;

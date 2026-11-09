@@ -176,6 +176,16 @@ bash scripts/build-ios-simulator.sh
 
 `bun install` runs the small `expo-modules-jsi@58.0.22` compatibility patch; see [`docs/TOOLCHAIN.md`](docs/TOOLCHAIN.md).
 
+Typecheck and lint run as `bun --bun`, so package shebangs cannot fall back to
+Node. The release scripts prepend `scripts/bun-shims` and set `NODE_BINARY`;
+`plugins/withBunGradle` rewrites the React Native Gradle plugin's default
+`node` invocations to `bun --bun` on every prebuild. A native build still needs
+its JDK and Android SDK, which are separate from the JavaScript runtime.
+
+Android uses `softwareKeyboardLayoutMode: 'resize'`; the conversation screen
+only applies its measured keyboard inset on iOS, so the composer is not padded
+twice.
+
 The bundle identifier is provisional (`com.jcodemobile.app`). Change it before producing signed distribution builds.
 
 ## How it works

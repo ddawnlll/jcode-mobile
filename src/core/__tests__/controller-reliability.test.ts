@@ -1086,3 +1086,100 @@ describe('review race regressions', () => {
     ).toBe('New');
   });
 });
+
+describe('new-session setup ownership', () => {
+  it('does not apply a delayed A configuration over the open B session', async () => {
+    fakeConfig.sessions = [
+      { session_id: 'A', title: 'A', working_dir: '/a', live_state: 'ready' },
+      { session_id: 'B', title: 'B', working_dir: '/b', live_state: 'ready' },
+    ];
+    const controller = makeController();
+    await connect(controller);
+    const client = fakeClients[0];
+    const pending = deferred<Record<string, unknown>>();
+    const original = client.request.bind(client);
+    client.request = (request, timeoutMs) =>
+      request.req === 'set_model' ? pending.promise : original(request, timeoutMs);
+
+    store.setState({
+      conversation: resetConversation({
+        sessionId: 'A',
+        session: { session_id: 'A', title: 'A', working_dir: '/a' },
+      }),
+    });
+    const configuring = controller.configureSessionFor('A', { model: 'model-a' });
+    await flush();
+    store.setState({
+      conversation: resetConversation({
+        sessionId: 'B',
+        session: { session_id: 'B', title: 'B', working_dir: '/b' },
+      }),
+    });
+    pending.resolve({ ev: 'ok' });
+    const result = await configuring;
+    await flush();
+
+    expect(result.ok).toBe(false);
+    expect(store.get().conversation.sessionId).toBe('B');
+    expect(store.get().conversation.config.model).toBeNull();
+    expect(store.get().conversation.config.applying).toBe(false);
+  });
+
+  it('refuses to send the first instruction after switching sessions', async () => {
+    fakeConfig.sessions = [
+      { session_id: 'A', title: 'A', working_dir: '/a', live_state: 'ready' },
+      { session_id: 'B', title: 'B', working_dir: '/b', live_state: 'ready' },
+    ];
+    const controller = makeController();
+    await connect(controller);
+    const client = fakeClients[0];
+    store.setState({
+      conversation: resetConversation({
+        sessionId: 'A',
+        session: { session_id: 'A', title: 'A', working_dir: '/a' },
+      }),
+    });
+    store.setState({
+      conversation: resetConversation({
+        sessionId: 'B',
+        session: { session_id: 'B', title: 'B', working_dir: '/b' },
+      }),
+    });
+
+    const result = await controller.sendToSession('A', 'instruction for A');
+    expect(result.ok).toBe(false);
+    expect(client.requests.some((request) => request.req === 'send_message')).toBe(false);
+    expect(store.get().conversation.sessionId).toBe('B');
+  });
+
+  it('keeps the server model when defaults are requested explicitly', async () => {
+    fakeConfig.sessions = [
+      { session_id: 'A', title: 'A', working_dir: '/a', live_state: 'ready' },
+    ];
+    const controller = makeController();
+    await connect(controller);
+    const client = fakeClients[0];
+    store.setState({
+      conversation: {
+        ...resetConversation({
+          sessionId: 'A',
+          session: { session_id: 'A', title: 'A', working_dir: '/a' },
+        }),
+        config: {
+          ...resetConversation({
+            sessionId: 'A',
+            session: { session_id: 'A', title: 'A', working_dir: '/a' },
+          }).config,
+          model: 'server-model',
+          modelConfirmed: true,
+        },
+      },
+    });
+
+    const result = await controller.configureSessionFor('A', { model: null, effort: null });
+    expect(result.ok).toBe(true);
+    expect(client.requests.some((request) => request.req === 'set_model')).toBe(false);
+    expect(client.requests.some((request) => request.req === 'set_effort')).toBe(false);
+    expect(store.get().conversation.config.model).toBe('server-model');
+  });
+});

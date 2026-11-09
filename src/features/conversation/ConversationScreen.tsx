@@ -90,7 +90,10 @@ export function ConversationScreen() {
   const capabilities = useAppStore((state) => state.connection.capabilities);
   const reasoningDisplay = useAppStore((state) => state.reasoningDisplay);
   const demo = useAppStore((state) => state.demo);
-  const keyboardInset = useKeyboardInset();
+  const measuredKeyboardInset = useKeyboardInset();
+  // Android uses softwareKeyboardLayoutMode=resize (one owner). iOS needs the
+  // measured inset because the window itself does not resize.
+  const keyboardInset = Platform.OS === 'ios' ? measuredKeyboardInset : 0;
 
   const listRef = useRef<FlatList<ConversationItem>>(null);
   const nearBottomRef = useRef(true);

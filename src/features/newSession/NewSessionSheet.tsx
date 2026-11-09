@@ -94,11 +94,38 @@ export function NewSessionSheet({
     setNotice('Session created. Confirm model and effort before the first instruction.');
   };
 
-  const finish = async (sessionId: string) => {
+  const finish = async (
+    sessionId: string,
+    options: {
+      model?: string | null;
+      effort?: string | null;
+      useDefaults?: boolean;
+    } = {},
+  ) => {
     setConfiguring(true);
     setError(null);
-    if (model || effort) {
-      const applied = await controller.configureSession({ model, effort });
+    if (!controller.isCurrentSession(sessionId)) {
+      setConfiguring(false);
+      setError(
+        'The open session changed. Reopen the created session before confirming its configuration.',
+      );
+      return;
+    }
+    const chosenModel = options.useDefaults
+      ? null
+      : options.model !== undefined
+        ? options.model
+        : model;
+    const chosenEffort = options.useDefaults
+      ? null
+      : options.effort !== undefined
+        ? options.effort
+        : effort;
+    if (!options.useDefaults && (chosenModel || chosenEffort)) {
+      const applied = await controller.configureSessionFor(sessionId, {
+        model: chosenModel,
+        effort: chosenEffort,
+      });
       if (!applied.ok) {
         setConfiguring(false);
         setError(
@@ -106,9 +133,16 @@ export function NewSessionSheet({
         );
         return;
       }
+      if (!controller.isCurrentSession(sessionId)) {
+        setConfiguring(false);
+        setError(
+          'The open session changed while configuration was pending. Reopen the created session to continue.',
+        );
+        return;
+      }
     }
     if (instruction.trim()) {
-      const sent = await controller.send(instruction.trim());
+      const sent = await controller.sendToSession(sessionId, instruction.trim());
       if (!sent.ok) {
         setConfiguring(false);
         setError(
@@ -116,6 +150,13 @@ export function NewSessionSheet({
         );
         return;
       }
+    }
+    if (!controller.isCurrentSession(sessionId)) {
+      setConfiguring(false);
+      setError(
+        'The session changed during setup. The created session is safe in Sessions; reopen it to continue.',
+      );
+      return;
     }
     setConfiguring(false);
     await controller.rememberFolder(folder);
@@ -287,7 +328,7 @@ export function NewSessionSheet({
                 onPress={() => {
                   setModel(null);
                   setEffort(null);
-                  void finish(created);
+                  void finish(created, { useDefaults: true });
                 }}
                 color="muted"
               />

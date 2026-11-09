@@ -34,6 +34,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: 'com.jcodemobile.app',
     versionCode: 2,
+    softwareKeyboardLayoutMode: 'resize',
     predictiveBackGestureEnabled: true,
     adaptiveIcon: {
       backgroundColor: '#F3F6F5',
@@ -43,6 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     './plugins/withLocalCleartext',
+    './plugins/withBunGradle',
     'expo-secure-store',
     'expo-sqlite',
     'expo-font',

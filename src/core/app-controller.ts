@@ -1791,9 +1791,19 @@ export class AppController {
   async send(
     content: string,
     images: ComposerImage[] = [],
+    options: { expectedSessionId?: string } = {},
   ): Promise<{ ok: boolean; error?: string }> {
     const state = store.get();
     const conversation = state.conversation;
+    if (
+      options.expectedSessionId &&
+      conversation.sessionId !== options.expectedSessionId
+    ) {
+      return {
+        ok: false,
+        error: 'The open session changed before this message was sent.',
+      };
+    }
     if (state.demo) return this.sendDemo(content.trim(), images);
     if (!this.profile || !conversation.sessionId) return { ok: false, error: 'No session is open.' };
     const trimmed = content.trim();
@@ -1805,6 +1815,9 @@ export class AppController {
 
     const profileId = this.profile.id;
     const sessionId = conversation.sessionId;
+    if (options.expectedSessionId && sessionId !== options.expectedSessionId) {
+      return { ok: false, error: 'The open session changed before this message was sent.' };
+    }
     const client = this.client;
     const generation = this.clientGeneration;
     const owns = () =>
@@ -1892,6 +1905,17 @@ export class AppController {
       });
       return { ok: false, error: 'Delivery unconfirmed. Check the conversation before sending again.' };
     }
+  }
+
+  async sendToSession(
+    sessionId: string,
+    content: string,
+    images: ComposerImage[] = [],
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!this.isCurrentSession(sessionId)) {
+      return { ok: false, error: 'The open session changed before this message was sent.' };
+    }
+    return this.send(content, images, { expectedSessionId: sessionId });
   }
 
   private async sendGuidance(
@@ -2637,7 +2661,28 @@ export class AppController {
     model?: string | null;
     effort?: string | null;
   }): Promise<{ ok: boolean; error?: string }> {
+    const sessionId = store.get().conversation.sessionId;
+    if (!sessionId) return { ok: false, error: 'No session is open.' };
+    return this.configureSessionFor(sessionId, input);
+  }
+
+  isCurrentSession(sessionId: string): boolean {
+    return store.get().conversation.sessionId === sessionId;
+  }
+
+  /**
+   * Configure one exact session. Ownership is checked after every await so a
+   * delayed confirmation for a previous setup cannot mutate the session the
+   * user switched to.
+   */
+  async configureSessionFor(
+    sessionId: string,
+    input: { model?: string | null; effort?: string | null },
+  ): Promise<{ ok: boolean; error?: string }> {
     if (store.get().demo) {
+      if (!this.isCurrentSession(sessionId)) {
+        return { ok: false, error: 'The open session changed before configuration.' };
+      }
       store.setState((state) => ({
         conversation: {
           ...state.conversation,
@@ -2655,11 +2700,20 @@ export class AppController {
     }
     const client = this.client;
     const conversation = store.get().conversation;
-    const sessionId = conversation.sessionId;
-    if (!client?.isOpen || !sessionId) return { ok: false, error: 'Reconnect to change configuration.' };
+    if (conversation.sessionId !== sessionId) {
+      return { ok: false, error: 'The open session changed before configuration.' };
+    }
+    if (!client?.isOpen) return { ok: false, error: 'Reconnect to change configuration.' };
     if (conversation.execution.kind === 'working') {
       return { ok: false, error: 'This turn is running. Configuration applies to the next turn.' };
     }
+    const profileId = this.profile?.id ?? null;
+    const generation = this.clientGeneration;
+    const owns = () =>
+      this.client === client &&
+      this.clientGeneration === generation &&
+      (this.profile?.id ?? null) === profileId &&
+      store.get().conversation.sessionId === sessionId;
     const model = input.model ?? conversation.config.model;
     const effort = input.effort ?? conversation.config.effort;
     store.setState((state) => ({
@@ -2676,13 +2730,23 @@ export class AppController {
       },
     }));
     try {
-      if (input.model !== undefined && input.model !== conversation.config.model) {
+      if (
+        input.model !== undefined &&
+        input.model !== null &&
+        input.model !== conversation.config.model
+      ) {
         const reply = await client.request(
           { req: 'set_model', session_id: sessionId, model: input.model ?? '' },
           15_000,
           { suppressEvent: true },
         );
         if (reply.ev === 'error') throw new Error(reply.message);
+      }
+      if (!owns()) {
+        return {
+          ok: false,
+          error: 'The open session changed while configuration was pending.',
+        };
       }
       if (input.effort !== undefined && input.effort !== null) {
         const reply = await client.request(
@@ -2691,6 +2755,12 @@ export class AppController {
           { suppressEvent: true },
         );
         if (reply.ev === 'error') throw new Error(reply.message);
+      }
+      if (!owns()) {
+        return {
+          ok: false,
+          error: 'The open session changed while configuration was pending.',
+        };
       }
       store.setState((state) => ({
         conversation: {
@@ -2712,12 +2782,14 @@ export class AppController {
       return { ok: true };
     } catch (error) {
       const message = errorMessage(error);
-      store.setState((state) => ({
-        conversation: {
-          ...state.conversation,
-          config: { ...state.conversation.config, applying: false, error: message },
-        },
-      }));
+      if (owns()) {
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            config: { ...state.conversation.config, applying: false, error: message },
+          },
+        }));
+      }
       return { ok: false, error: message };
     }
   }

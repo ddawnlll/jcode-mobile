@@ -147,6 +147,11 @@ export const motion = {
   /** Reduced Motion replaces travel with a brief crossfade. */
   reduced: 100,
   welcome: 600,
+  welcomeReveal: 1_600,
+  welcomeCopyDelay: 1_040,
+  welcomeCopyIn: 400,
+  welcomeSeamDelay: 1_360,
+  welcomeSeamIn: 240,
   loaderOrbit: 1_400,
   loaderRevealDelay: 180,
   loaderExit: 160,

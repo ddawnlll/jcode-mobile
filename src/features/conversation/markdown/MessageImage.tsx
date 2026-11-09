@@ -14,11 +14,19 @@ function sourceFor(image: MessageImageData): string | null {
   return null;
 }
 
+type SourceKind = 'embedded' | 'external' | 'unsupported';
+
+function classifySource(source: string): SourceKind {
+  if (/^(data:image\/|file:\/\/|blob:)/i.test(source)) return 'embedded';
+  if (/^(https?:\/\/|\/\/)/i.test(source)) return 'external';
+  return 'unsupported';
+}
+
 export function MessageImage({ image }: { image: MessageImageData }) {
   const { colors } = useTheme();
   const source = sourceFor(image);
-  const external = !!source && /^https?:/i.test(source);
-  const [allowed, setAllowed] = useState(!external);
+  const kind = source ? classifySource(source) : 'unsupported';
+  const [allowed, setAllowed] = useState(kind !== 'external');
   const [failed, setFailed] = useState(false);
   const alt = image.alt || image.label || 'Attached image';
   if (!source) {
@@ -29,6 +37,18 @@ export function MessageImage({ image }: { image: MessageImageData }) {
         </Text>
         <Text variant="caption" color="muted">
           Image data unavailable
+        </Text>
+      </View>
+    );
+  }
+  if (kind === 'unsupported') {
+    return (
+      <View style={[styles.placeholder, { borderColor: colors.line, backgroundColor: colors.raised }]}>
+        <Text variant="small" color="muted">
+          {alt}
+        </Text>
+        <Text variant="caption" color="muted">
+          Image source not supported
         </Text>
       </View>
     );
@@ -57,7 +77,7 @@ export function MessageImage({ image }: { image: MessageImageData }) {
         accessibilityRole="button"
         accessibilityLabel={`Image unavailable: ${alt}. Open source`}
         onPress={() => {
-          if (source && /^https?:/i.test(source)) void Linking.openURL(source).catch(() => undefined);
+          if (kind === 'external') void Linking.openURL(source).catch(() => undefined);
         }}
         style={[styles.placeholder, { borderColor: colors.error, backgroundColor: colors.raised }]}
       >

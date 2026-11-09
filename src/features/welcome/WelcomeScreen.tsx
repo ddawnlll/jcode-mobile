@@ -16,11 +16,12 @@ import type { RootStackParamList } from '../../shell/navigation';
 import { Button, TextAction } from '../../design/controls';
 import { JCodeMark } from '../../design/icons';
 import { useTheme } from '../../design/theme';
-import { radius, space, target, type } from '../../design/tokens';
+import { motion, radius, space, target, type } from '../../design/tokens';
 import { themeFamilies } from '../../design/themes';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
 import { useAppStore } from '../../core/state/store';
+import { AsciiWelcome } from './AsciiWelcome';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Welcome'>;
 
@@ -34,39 +35,34 @@ export function WelcomeScreen() {
   const [previewFamily, setPreviewFamily] = useState(familyId);
   const compact = width < 380;
   const textScale = Math.min(Math.max(fontScale, 1), 2);
+  const asciiSize = width < 340 ? 10 : width < 380 ? 11 : 13;
 
-  const markIn = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
-  const titleIn = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
+  const copyIn = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
   const seamIn = useRef(new Animated.Value(reduceMotion ? 1 : 0)).current;
 
   useEffect(() => {
     if (reduceMotion) {
-      markIn.setValue(1);
-      titleIn.setValue(1);
+      copyIn.setValue(1);
       seamIn.setValue(1);
       return;
     }
-    Animated.sequence([
-      Animated.timing(markIn, {
+    Animated.parallel([
+      Animated.timing(copyIn, {
         toValue: 1,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(titleIn, {
-        toValue: 1,
-        duration: 260,
-        easing: Easing.out(Easing.cubic),
+        delay: motion.welcomeCopyDelay,
+        duration: motion.welcomeCopyIn,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(seamIn, {
         toValue: 1,
-        duration: 200,
-        easing: Easing.out(Easing.cubic),
+        delay: motion.welcomeSeamDelay,
+        duration: motion.welcomeSeamIn,
+        easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [markIn, reduceMotion, seamIn, titleIn]);
+  }, [copyIn, reduceMotion, seamIn]);
 
   const chooseFamily = async (id: string) => {
     setPreviewFamily(id);
@@ -102,29 +98,9 @@ export function WelcomeScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View
-          style={{
-            opacity: markIn,
-            transform: [
-              {
-                translateY: markIn.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }),
-              },
-            ],
-          }}
-        >
-          <JCodeMark size={compact ? 52 : 64} color={colors.brand} />
-        </Animated.View>
+        <AsciiWelcome fontSize={asciiSize} />
 
-        <Animated.View
-          style={{
-            opacity: titleIn,
-            transform: [
-              {
-                translateY: titleIn.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }),
-              },
-            ],
-          }}
-        >
+        <Animated.View style={{ opacity: copyIn }}>
           <Text
             variant="welcome"
             accessibilityRole="header"

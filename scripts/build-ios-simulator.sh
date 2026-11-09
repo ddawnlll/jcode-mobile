@@ -3,6 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export BUN_BIN="${BUN_BIN:-$(command -v bun)}"
+export NODE_BINARY="$BUN_BIN"
+export PATH="$ROOT/scripts/bun-shims:$PATH"
 cd "$ROOT"
 
 mkdir -p artifacts

@@ -69,4 +69,21 @@ describe('parseMarkdown', () => {
     const huge = Array.from({ length: 2000 }, (_, index) => `paragraph ${index}`).join('\n\n');
     expect(parseMarkdown(huge).blocks.length).toBeLessThanOrEqual(900);
   });
+
+  it('bounds malformed display math scans', () => {
+    // 4,000 block starts with no closing delimiter: the old scan walked to
+    // end-of-document from each one, roughly 16 million line reads for 20 KB.
+    const malformed = '$$(\n\n'.repeat(4000);
+    const started = Date.now();
+    const document = parseMarkdown(malformed);
+    expect(Date.now() - started).toBeLessThan(2500);
+    expect(document.blocks.length).toBeLessThanOrEqual(900);
+  });
+
+  it('stops a display math scan at the bounded block size', () => {
+    const within = parseMarkdown(`$$(\n${'x\n'.repeat(40)}$$`);
+    expect(within.blocks.some((block) => block.type === 'math_block')).toBe(true);
+    const beyond = parseMarkdown(`$$(\n${'x\n'.repeat(450)}$$`);
+    expect(beyond.blocks.some((block) => block.type === 'math_block')).toBe(false);
+  });
 });

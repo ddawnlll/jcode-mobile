@@ -1,6 +1,6 @@
 # Build state
 
-Updated: 2026-11-08
+Updated: 2026-11-09
 
 ## Current state
 
@@ -22,7 +22,7 @@ Updated: 2026-11-08
 
 - The project root is this directory (named `jcode-mobile-app`); the GitHub repository is `jcode-mobile`.
 - `src/shell/` holds the app root and native stack. It is intentionally not `src/app/` because Expo tooling treats that as an Expo Router routes directory.
-- The adapter is TypeScript on Node 22 (type stripping), not a Rust patch. It reuses the daemon runtime, persisted history, the curated harness bridge for control reads, and JCode's own `devices.json` pairing registry.
+- The adapter is TypeScript running on Bun 1.4.4, not a Rust patch. It reuses the daemon runtime, persisted history, the curated harness bridge for control reads, and JCode's own `devices.json` pairing registry.
 - Session attachment always uses the raw daemon socket with `continue_on_disconnect: true`; the curated bridge is never used to attach.
 - Delivery receipts use the daemon `ack` plus a bounded adapter ledger keyed by client message id.
 - Identity fencing is adapter-normalized: `attachment_id` per attach and a monotonic `turn_id` per attachment.
@@ -41,20 +41,27 @@ Updated: 2026-11-08
 
 The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
 
-## Commands that pass
+## Commands verified for v0.2.0
 
 ```sh
-npx tsc --noEmit            # pass
-npx eslint .                # pass
-npm test                    # 34/34 pass
-node --test integration/jcode-adapter/test/*.test.ts   # 7/7 pass
-npm run e2e                 # 7/7 Playwright tests pass (isolated staging)
-bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts  # PASS
-bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts # PASS
-npx expo run:ios --device "iPhone 17 Pro"  # dev build + launch, pass
-bash scripts/build-android-release.sh        # release APK, pass
-bash scripts/build-ios-simulator.sh          # release Simulator .app, pass
-gh workflow run check.yml --ref main         # Android 36 build, pass
+bun run typecheck           # pass, including a Bun-only PATH
+bun run lint                # pass (one pre-existing warning in registry.ts)
+bun run test                # 10 suites / 75 tests
+bun run adapter:test        # 16 tests
+bun run e2e                 # 20/20 Playwright tests, isolated staging
+bunx --bun expo export -p web
+bunx --bun expo prebuild --platform android --no-install  # Bun Gradle config generated
+```
+
+Historical native artifact commands below were run on the v0.1.3 host. They
+are not re-certified for v0.2.0 on this VPS (no JDK/Android SDK or macOS):
+
+```sh
+bun run ios --device "iPhone 17 Pro"
+bun run android
+bash scripts/build-android-release.sh
+bash scripts/build-ios-simulator.sh
+gh workflow run check.yml --ref main
 ```
 
 ## v0.1.4 reliability patch
@@ -86,8 +93,8 @@ in `docs/V0_2_0_VERIFICATION.md`.
 | Web server | `scripts/serve-web.mjs`, or the adapter with `JCODE_ADAPTER_WEB_DIR` |
 | Playwright | 1.65 / Chromium, iPhone 14 and Pixel 7 profiles |
 | E2E environment | isolated `.staging/jcode` daemon, adapter 7645, web 8091 |
-| E2E coverage | Connect, sessions, conversation reply, Work activity, Plan, New session |
-| Result | `npm run e2e`: 7 passed |
+| E2E coverage | Connect, sessions, conversation reply, Work/Plan, rich content, themes, context, Find, Changes, New session, 320-wide |
+| Result | `bun run e2e`: 20 passed (2026-11-09) |
 | Live deployment | Caddy `https://dawnll.duckdns.org` proxies to adapter `127.0.0.1:7644` |
 | Rootless browsers | Chromium libraries extracted under `~/playwright-deps` |
 
