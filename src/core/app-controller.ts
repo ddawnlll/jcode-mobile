@@ -1252,6 +1252,7 @@ export class AppController {
     this.attachedSessionId = null;
     this.lastTurnId = 0;
     this.nearBottom = true;
+    if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
     await setPref(LAST_SESSION, session.session_id);
 
     const cached = await loadCachedMessages(serverId, session.session_id, 120);
@@ -2530,6 +2531,7 @@ export class AppController {
 
     // Persist asynchronously; a big transcript must not block the frame loop.
     setTimeout(() => {
+      if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
       void upsertMessages(serverId, sessionId, frame.messages);
     }, 0);
   }

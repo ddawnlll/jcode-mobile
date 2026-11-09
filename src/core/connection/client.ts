@@ -148,7 +148,10 @@ export class MobileClient {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
-        retire(error, true);
+        // The caller still owns this client and classifies the failure.
+        // Emitting `closed` here would make the controller drop the reference
+        // before it can distinguish unsupported_version from a network drop.
+        retire(error, false);
         reject(error);
       };
 

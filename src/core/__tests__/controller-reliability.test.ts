@@ -8,6 +8,7 @@
 import type { SessionInfo } from '../protocol/frames';
 import { resetConversation, store } from '../state/store';
 import { AppController } from '../app-controller';
+import { TransportError } from '../connection/client';
 import { listServers, saveServer, updateSessionTitle } from '../persistence/db';
 import { saveToken } from '../persistence/credentials';
 
@@ -432,6 +433,17 @@ describe('connection ownership and recovery', () => {
     const requests = fakeClients.flatMap((client) => client.requests);
     expect(requests.filter((request) => request.req === 'send_message')).toHaveLength(0);
     expect(requests.filter((request) => request.req === 'attach_session').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('classifies an unsupported protocol handshake without scheduling a retry', async () => {
+    fakeConfig.connect = async () => {
+      throw new TransportError('No shared protocol version.', 'unsupported_version');
+    };
+    const controller = makeController();
+    await controller.connectNow();
+    await flush();
+    expect(store.get().connection.state).toBe('incompatible');
+    expect((controller as unknown as { reconnectTimer: unknown }).reconnectTimer).toBeNull();
   });
 
   it('does not let a stale A failure change the replacement B authorization state', async () => {

@@ -17,7 +17,7 @@ socket and the live adapter on 7644 were not restarted or used by tests.
 
 | Command | Result |
 | --- | --- |
-| `npm run check` | pass: `tsc --noEmit`, ESLint 0 errors, Jest 52/52 |
+| `npm run check` | pass: `tsc --noEmit`, ESLint 0 errors, Jest 53/53 |
 | `npm run adapter:test` | 11/11 pass |
 | `npm run e2e` | 10/10 pass (1.3 min) |
 | `bash scripts/check-platform.sh` | Debian/Ubuntu host detected; rootless browser libraries present |
