@@ -22,7 +22,7 @@ test.describe('forget navigation', () => {
     await expect(page.getByRole('heading', { name: 'Forget this server?' })).toBeVisible();
     await page.getByRole('button', { name: 'Forget server' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Bring your server.' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /Your work\./ })).toBeVisible({
       timeout: 15_000,
     });
 

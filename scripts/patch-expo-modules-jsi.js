@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Xcode 26.1 / Swift 6.2 rejects expo-modules-jsi 58.0.22 in one place:
  * `JavaScriptObject.swift` sends a task-isolated pointer into a

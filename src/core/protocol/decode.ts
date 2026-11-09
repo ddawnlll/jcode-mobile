@@ -9,6 +9,8 @@ import {
   PROTOCOL_VERSION,
   type ErrorCode,
   type HistoryMessage,
+  type MessageImage,
+  type DirectoryEntry,
   type ServerEvent,
   type SessionInfo,
   type TodoSnapshot,
@@ -101,6 +103,7 @@ function decodeHistoryMessage(value: unknown, fallbackIndex: number): HistoryMes
     index: index !== undefined ? index : fallbackIndex,
     role,
     content,
+    ...(str(record.reasoning) ? { reasoning: str(record.reasoning) } : null),
     ...(Array.isArray(record.tool_calls)
       ? { tool_calls: stringArray(record.tool_calls) }
       : null),
@@ -124,6 +127,40 @@ function decodeHistoryMessage(value: unknown, fallbackIndex: number): HistoryMes
         }
       : null),
   };
+}
+
+function decodeImages(value: unknown): MessageImage[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = asRecord(item);
+    if (!record) return [];
+    const media_type = str(record.media_type);
+    const data = str(record.data);
+    if (!media_type || !data) return [];
+    const anchor = asRecord(record.anchor);
+    const anchorKind = anchor ? str(anchor.kind) : undefined;
+    return [
+      {
+        media_type,
+        data,
+        label: optionalStr(record.label) ?? null,
+        alt: optionalStr(record.alt) ?? null,
+        source: str(record.source),
+        ...(anchorKind
+          ? {
+              anchor: {
+                kind: anchorKind,
+                ordinal: num(anchor?.ordinal),
+                id: str(anchor?.id),
+              },
+            }
+          : null),
+        ...(num(record.history_message_index) !== undefined
+          ? { history_message_index: num(record.history_message_index) }
+          : null),
+      },
+    ];
+  });
 }
 
 function decodeTodoSnapshot(value: unknown): TodoSnapshot {
@@ -263,6 +300,7 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           tail_fingerprint: str(record.tail_fingerprint) ?? '',
           accepted_client_ids: stringArray(record.accepted_client_ids),
           interrupted_at_attach: bool(record.interrupted_at_attach) ?? false,
+          images: decodeImages(record.images),
           ...(typeof record.has_older === 'boolean' ? { has_older: record.has_older } : null),
           ...(decodeRecovery(record.recovery) ? { recovery: decodeRecovery(record.recovery) } : null),
           ...base,
@@ -289,7 +327,19 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
       if (!identity || text === undefined) break;
       return { ok: true, frame: { ev, ...identity, text, ...base } };
     }
-    case 'reasoning_done':
+    case 'reasoning_done': {
+      const identity = session();
+      if (!identity) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          ...identity,
+          ...(num(record.duration_secs) !== undefined ? { duration_secs: num(record.duration_secs) } : null),
+          ...base,
+        },
+      };
+    }
     case 'text_done': {
       const identity = session();
       if (!identity) break;
@@ -432,6 +482,102 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           session_id: id,
           models: stringArray(record.models),
           current: optionalStr(record.current) ?? null,
+          efforts: stringArray(record.efforts),
+          current_effort: optionalStr(record.current_effort) ?? null,
+          ...base,
+        },
+      };
+    }
+    case 'context_snapshot': {
+      const id = str(record.session_id);
+      const attachment = str(record.attachment_id);
+      if (!id || !attachment) break;
+      const basis = str(record.basis);
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          attachment_id: attachment,
+          used_tokens: num(record.used_tokens) ?? null,
+          limit_tokens: num(record.limit_tokens) ?? null,
+          basis:
+            basis === 'last_request' || basis === 'current_prompt' ? basis : 'unknown',
+          model: optionalStr(record.model) ?? null,
+          observed_at_ms: num(record.observed_at_ms) ?? Date.now(),
+          ...base,
+        },
+      };
+    }
+    case 'session_config': {
+      const id = str(record.session_id);
+      if (!id) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          model: optionalStr(record.model) ?? null,
+          effort: optionalStr(record.effort) ?? null,
+          efforts: stringArray(record.efforts),
+          confirmed: bool(record.confirmed) ?? false,
+          source: str(record.source) ?? 'unknown',
+          ...base,
+        },
+      };
+    }
+    case 'directory': {
+      const path = str(record.path);
+      const canonical = str(record.canonical_path);
+      if (!path || !canonical) break;
+      const entries: DirectoryEntry[] = Array.isArray(record.entries)
+        ? record.entries.flatMap((item) => {
+            const entry = asRecord(item);
+            if (!entry) return [];
+            const name = str(entry.name);
+            const entryPath = str(entry.path);
+            const kind = str(entry.kind);
+            if (!name || !entryPath) return [];
+            return [
+              {
+                name,
+                path: entryPath,
+                kind:
+                  kind === 'directory' || kind === 'file' || kind === 'symlink'
+                    ? kind
+                    : 'other',
+                hidden: bool(entry.hidden),
+                readable: bool(entry.readable),
+              },
+            ];
+          })
+        : [];
+      return {
+        ok: true,
+        frame: {
+          ev,
+          path,
+          canonical_path: canonical,
+          parent: optionalStr(record.parent) ?? null,
+          entries,
+          cursor: optionalStr(record.cursor) ?? null,
+          roots: stringArray(record.roots),
+          error: optionalStr(record.error) ?? null,
+          ...base,
+        },
+      };
+    }
+    case 'image_ack': {
+      const id = str(record.session_id);
+      const clientMessageId = str(record.client_message_id);
+      if (!id || !clientMessageId) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          client_message_id: clientMessageId,
+          accepted: bool(record.accepted) ?? false,
           ...base,
         },
       };

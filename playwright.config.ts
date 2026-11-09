@@ -22,6 +22,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'off',
+    permissions: ['clipboard-read', 'clipboard-write'],
   },
   projects: [
     {
@@ -31,11 +32,16 @@ export default defineConfig({
       use: { ...devices['iPhone 14'], browserName: 'chromium' },
     },
     {
-      // A narrow Android width exercises the same screens without repeating
-      // the live session-writing flow.
+      // A narrow Android width exercises the new Tidal Glass surfaces and the
+      // connection flow. Narrow/short stress remains in narrow.spec.ts.
       name: 'pixel-7',
-      testMatch: /connect\.spec\.ts/,
+      testMatch: /(connect|v020)\.spec\.ts/,
       use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'compact-320',
+      testMatch: /narrow\.spec\.ts/,
+      use: { ...devices['iPhone 14'], browserName: 'chromium', viewport: { width: 320, height: 720 } },
     },
   ],
 });

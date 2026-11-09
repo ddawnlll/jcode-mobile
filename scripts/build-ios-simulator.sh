@@ -3,6 +3,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export BUN_BIN="${BUN_BIN:-$(command -v bun)}"
+export NODE_BINARY="$BUN_BIN"
+export PATH="$ROOT/scripts/bun-shims:$PATH"
 cd "$ROOT"
 
 mkdir -p artifacts
@@ -23,7 +26,7 @@ if [ ! -d "$APP" ]; then
   echo "Release .app not found at $APP" >&2
   exit 1
 fi
-VERSION="$(node -p "require('./package.json').version")"
+VERSION="$(bun -p "require('./package.json').version")"
 rm -f "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip"
 ditto -c -k --norsrc --keepParent "$APP" "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip"
 shasum -a 256 "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip" | tee "artifacts/jcode-mobile-$VERSION-ios-simulator.app.zip.sha256"

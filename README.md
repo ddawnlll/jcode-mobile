@@ -148,31 +148,43 @@ There is no password login after pairing. The device token does not expire. The 
 
 | Platform | File | Notes |
 | --- | --- | --- |
-| Android | [APK](https://github.com/ddawnlll/jcode-mobile/releases/latest) | Release build, debug-signed, sideload with `adb install -r` |
-| iOS Simulator | [`.app.zip`](https://github.com/ddawnlll/jcode-mobile/releases/latest) | Simulator only, no signed IPA |
+| Android | [APK](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.0) | v0.2.0 release build, embedded JS, debug-signed for sideloading |
+| iOS Simulator | [`.app.zip`](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.1.3) | v0.1.3 artifact; v0.2.0 iOS build pending macOS |
 
 Checksums and install commands are in [`docs/BUILD_STATE.md`](docs/BUILD_STATE.md). Correctness fixes in this release: [`docs/REVIEW_FIXES.md`](docs/REVIEW_FIXES.md).
 
 ## Build from source
 
-Requirements: Node 22.12+, Xcode for iOS, JDK 17 and Android SDK 36 for Android.
+Requirements: Bun 1.4.4+, Xcode for iOS, JDK 17 and Android SDK 36 for Android.
+The repository has one authoritative `bun.lock`; npm and npx are not part of
+the workflow.
 
 ```sh
-npm ci
-npm run check
+bun install --frozen-lockfile
+bun run check
 
 # iOS dev build
-npx expo run:ios --device "iPhone 17 Pro"
+bun run ios --device "iPhone 17 Pro"
 
 # Android dev build
-npx expo run:android
+bun run android
 
 # Release artifacts
 bash scripts/build-android-release.sh
 bash scripts/build-ios-simulator.sh
 ```
 
-`npm ci` applies a small compatibility patch for `expo-modules-jsi@58.0.22`; see [`docs/TOOLCHAIN.md`](docs/TOOLCHAIN.md).
+`bun install` runs the small `expo-modules-jsi@58.0.22` compatibility patch; see [`docs/TOOLCHAIN.md`](docs/TOOLCHAIN.md).
+
+Typecheck and lint run as `bun --bun`, so package shebangs cannot fall back to
+Node. The release scripts prepend `scripts/bun-shims` and set `NODE_BINARY`;
+`plugins/withBunGradle` rewrites the React Native Gradle plugin's default
+`node` invocations to `bun --bun` on every prebuild. A native build still needs
+its JDK and Android SDK, which are separate from the JavaScript runtime.
+
+Android uses `softwareKeyboardLayoutMode: 'resize'`; the conversation screen
+only applies its measured keyboard inset on iOS, so the composer is not padded
+twice.
 
 The bundle identifier is provisional (`com.jcodemobile.app`). Change it before producing signed distribution builds.
 
@@ -209,7 +221,7 @@ Continuity and daemon-death proofs:
 ```sh
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts
 bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts
-node --test integration/jcode-adapter/test/*.test.ts
+bun run adapter:test
 ```
 
 ## Verification

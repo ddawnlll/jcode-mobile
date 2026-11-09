@@ -1,14 +1,14 @@
 # Build state
 
-Updated: 2026-11-08
+Updated: 2026-11-09
 
 ## Current state
 
 | Item | Value |
 | --- | --- |
-| Branch | `main` |
+| Branch | `feature/v0.2.0-tidal-glass` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.1.4 |
+| App version | 0.2.0 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -22,7 +22,7 @@ Updated: 2026-11-08
 
 - The project root is this directory (named `jcode-mobile-app`); the GitHub repository is `jcode-mobile`.
 - `src/shell/` holds the app root and native stack. It is intentionally not `src/app/` because Expo tooling treats that as an Expo Router routes directory.
-- The adapter is TypeScript on Node 22 (type stripping), not a Rust patch. It reuses the daemon runtime, persisted history, the curated harness bridge for control reads, and JCode's own `devices.json` pairing registry.
+- The adapter is TypeScript running on Bun 1.4.4, not a Rust patch. It reuses the daemon runtime, persisted history, the curated harness bridge for control reads, and JCode's own `devices.json` pairing registry.
 - Session attachment always uses the raw daemon socket with `continue_on_disconnect: true`; the curated bridge is never used to attach.
 - Delivery receipts use the daemon `ack` plus a bounded adapter ledger keyed by client message id.
 - Identity fencing is adapter-normalized: `attachment_id` per attach and a monotonic `turn_id` per attachment.
@@ -36,30 +36,56 @@ Updated: 2026-11-08
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
+| `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
 | `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
 | `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
 
-The APK is a release build (embedded Hermes bundle, debug signing for local install only). The iOS artifact is a Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed; they are attached to the private draft release.
+The 0.2.0 APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. It is attached to release `v0.2.0`. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
 
-## Commands that pass
+## Commands verified for v0.2.0
 
 ```sh
-npx tsc --noEmit            # pass
-npx eslint .                # pass
-npm test                    # 34/34 pass
-node --test integration/jcode-adapter/test/*.test.ts   # 7/7 pass
-npm run e2e                 # 7/7 Playwright tests pass (isolated staging)
-bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts  # PASS
-bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts # PASS
-npx expo run:ios --device "iPhone 17 Pro"  # dev build + launch, pass
-bash scripts/build-android-release.sh        # release APK, pass
-bash scripts/build-ios-simulator.sh          # release Simulator .app, pass
-gh workflow run check.yml --ref main         # Android 36 build, pass
+bun run typecheck           # pass, including a Bun-only PATH
+bun run lint                # pass (one pre-existing warning in registry.ts)
+bun run test                # 10 suites / 75 tests
+bun run adapter:test        # 16 tests
+bun run e2e                 # 20/20 Playwright tests, isolated staging
+bunx --bun expo export -p web
+bunx --bun expo prebuild --platform android --no-install  # Bun Gradle config generated
+gh workflow run check.yml --ref feature/v0.2.0-tidal-glass -f release=true  # release APK
+```
+
+Historical native artifact commands below were run on the v0.1.3 host. They
+are not re-certified for v0.2.0 on this VPS (no JDK/Android SDK or macOS):
+
+```sh
+bun run ios --device "iPhone 17 Pro"
+bun run android
+bash scripts/build-android-release.sh
+bash scripts/build-ios-simulator.sh
+gh workflow run check.yml --ref main
 ```
 
 ## v0.1.4 reliability patch
 
 Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`, followed by nine review-round race fixes. Full evidence is in `docs/V0_1_4_VERIFICATION.md`. Current checks under Node 22.21.1: `npm run check` (62 Jest tests), `npm run adapter:test` (12 tests), `npm run e2e` (10 tests, Expo web/Chromium). Native Android/iOS checks remain NOT_RUN on this host.
+
+## v0.2.0 Tidal Glass and Bun
+
+Bun 1.4.4 is the sole host runtime and package manager. `bun.lock` is the one
+lockfile; CI uses `oven-sh/setup-bun` and `bun install --frozen-lockfile`.
+Adapter, typecheck, lint, Jest/RNTL, Playwright, and Expo web export run under
+Bun. Full evidence, coverage matrix, and the Bun/Node performance comparison are
+in `docs/V0_2_0_VERIFICATION.md`.
+
+| Item | Value |
+| --- | --- |
+| Theme families | 11 families / 22 Light+Night palettes; Tidal preserved |
+| Rich content | CommonMark/GFM + footnotes + math, highlight.js, native LaTeX |
+| Images | bounded prompt images + controlled Markdown image loading |
+| Adapter additions | directory browse, config/effort, context snapshot, images, changes |
+| Web e2e | iPhone 14, Pixel 7, and 320-wide projects |
+| Native v0.2 gates | Android debug CI PASS (`assembleDebug`); device release NOT_RUN |
 
 ## Web target (verified 2026-11-09 on Debian 13)
 
@@ -69,8 +95,8 @@ Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`,
 | Web server | `scripts/serve-web.mjs`, or the adapter with `JCODE_ADAPTER_WEB_DIR` |
 | Playwright | 1.65 / Chromium, iPhone 14 and Pixel 7 profiles |
 | E2E environment | isolated `.staging/jcode` daemon, adapter 7645, web 8091 |
-| E2E coverage | Connect, sessions, conversation reply, Work activity, Plan, New session |
-| Result | `npm run e2e`: 7 passed |
+| E2E coverage | Connect, sessions, conversation reply, Work/Plan, rich content, themes, context, Find, Changes, New session, 320-wide |
+| Result | `bun run e2e`: 20 passed (2026-11-09) |
 | Live deployment | Caddy `https://dawnll.duckdns.org` proxies to adapter `127.0.0.1:7644` |
 | Rootless browsers | Chromium libraries extracted under `~/playwright-deps` |
 

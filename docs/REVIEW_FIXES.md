@@ -43,3 +43,13 @@ This release does not change the visual direction. It adds ownership, protocol-e
 - F20 cannot coordinate with an unrelated JCode writer; only atomicity and safe failure are fixed.
 - F22 focus restoration is not wired through every trigger; manual TalkBack/VoiceOver and reduced-motion native checks remain unrun.
 - Live VPS, physical devices, and iOS release over TLS remain blocked/unrun as recorded in `docs/VERIFICATION.md`.
+
+## v0.2.0 review round (PR #13 at `3abd67d`)
+
+| ID | Status | Change | Evidence |
+| --- | --- | --- | --- |
+| P1 session ownership | Fixed | Configuration is bound to the created session id. Client generation, profile and exact session are rechecked after every await. The first instruction uses `expectedSessionId`. Use server defaults skips rejected model/effort choices instead of resubmitting them. | `controller-reliability.test.ts`: delayed A confirmation, switched send refusal, null-default no-op |
+| P1 Bun subprocesses | Fixed for scripts and generated Gradle; Android debug + release CI PASS; Node-free host proof NOT_RUN | `bun --bun` for typecheck/lint; `scripts/bun-shims` and `NODE_BINARY` in native build scripts; `plugins/withBunGradle` rewrites Expo's direct `node` calls. | Bun-only PATH typecheck/lint/Jest/adapter; fresh Android prebuild inspection; CI `assembleDebug` and `assembleRelease`. A Node-free host proof still needs a JDK/SDK host without Node. |
+| P2 Android IME | Fixed in source; device check NOT_RUN | `softwareKeyboardLayoutMode: 'resize'`; measured inset is iOS-only. | Generated manifest; typecheck. |
+| P2 math/image bounds | Fixed | 400-line / 64 KiB block scan, 4 KiB inline scan; URL classification for `data:`, `file:`, `blob:`, `http(s)`, `//`, and rejected schemes. | `markdown.test.ts` 20 KB/4,000-block fixture and deterministic 400-line bound; `message-image.test.tsx` |
+| Welcome motion | Fixed | 1.6 s ASCII character-grid torus assembly, idle turn, paused offscreen, Reduce Motion settled frame. | `asciiTorus.test.ts`; welcome evidence images |

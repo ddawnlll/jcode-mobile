@@ -26,6 +26,11 @@ export interface AdapterConfig {
   /** Test-only fault injection; disabled unless explicitly set. */
   faultAfterSend: boolean;
   /**
+   * Canonical directories the authenticated folder picker may browse. Never
+   * an unbounded filesystem walk; a path outside every root is rejected.
+   */
+  workspaceRoots: string[];
+  /**
    * Browser origins allowed to call the HTTP endpoints and open a WebSocket.
    * Native clients send no Origin and are unaffected. Loopback origins are
    * allowed by default so the web preview can pair with a local adapter.
@@ -75,13 +80,18 @@ export function loadConfig(): AdapterConfig {
     stateDir,
     devicesPath: join(jcodeHome, 'devices.json'),
     ledgerPath: join(stateDir, 'delivery-ledger.json'),
-    maxFrameBytes: numberFrom(process.env.JCODE_ADAPTER_MAX_FRAME, 4 * 1024 * 1024),
+    // Large enough for a bounded four-image prompt; every image is validated
+    // independently and totals are capped below this frame limit.
+    maxFrameBytes: numberFrom(process.env.JCODE_ADAPTER_MAX_FRAME, 24 * 1024 * 1024),
     maxHistoryMessages: numberFrom(process.env.JCODE_ADAPTER_MAX_HISTORY, 5000),
     historyWindow: numberFrom(process.env.JCODE_ADAPTER_HISTORY_WINDOW, 60),
     maxHistoryBytes: numberFrom(process.env.JCODE_ADAPTER_HISTORY_BYTES, 3 * 1024 * 1024),
     renameTimeoutMs: numberFrom(process.env.JCODE_ADAPTER_RENAME_TIMEOUT, 8_000),
     logLevel: (process.env.JCODE_ADAPTER_LOG as AdapterConfig['logLevel']) ?? 'info',
     faultAfterSend: process.env.JCODE_ADAPTER_FAULT === 'drop_after_send',
+    workspaceRoots: listFrom(process.env.JCODE_ADAPTER_ROOTS).length
+      ? listFrom(process.env.JCODE_ADAPTER_ROOTS)
+      : [process.env.HOME ?? homedir()],
     allowedOrigins: listFrom(process.env.JCODE_ADAPTER_ALLOWED_ORIGINS),
     webDir: process.env.JCODE_ADAPTER_WEB_DIR,
   };

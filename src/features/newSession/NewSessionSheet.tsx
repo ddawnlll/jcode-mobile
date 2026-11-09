@@ -5,49 +5,69 @@ import { BottomSheet } from '../../design/BottomSheet';
 import { Button, Divider, Field, TextAction } from '../../design/controls';
 import { ChevronRightIcon, FolderIcon } from '../../design/icons';
 import { useTheme } from '../../design/theme';
-import { space, target } from '../../design/tokens';
+import { radius, space, target } from '../../design/tokens';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
 import { useAppStore } from '../../core/state/store';
+import { DirectoryBrowser } from './DirectoryBrowser';
 
 export function NewSessionSheet({
   visible,
   onClose,
   onStarted,
+  initialFolder,
 }: {
   visible: boolean;
   onClose: () => void;
   onStarted: (sessionId: string) => void;
+  initialFolder?: string;
 }) {
   const { colors } = useTheme();
   const headingRef = useRef<React.ComponentRef<typeof View> | null>(null);
   const [folder, setFolder] = useState('');
   const [instruction, setInstruction] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>([]);
+  const [model, setModel] = useState<string | null>(null);
+  const [effort, setEffort] = useState<string | null>(null);
+  const [created, setCreated] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
+  const [browserVisible, setBrowserVisible] = useState(false);
   const serverLabel = useAppStore((state) => state.connection.serverLabel);
   const serverHost = useAppStore((state) => state.connection.host);
   const connectionState = useAppStore((state) => state.connection.state);
+  const config = useAppStore((state) => state.conversation.config);
 
   useEffect(() => {
     if (!visible) return;
     setError(null);
-    void controller.lastFolder().then((value) => {
-      setFolder((current) => current || value);
-    });
+    setNotice(null);
+    setCreated(null);
+    setStarting(false);
+    setConfiguring(false);
+    if (initialFolder) setFolder(initialFolder);
+    else {
+      void controller.lastFolder().then((value) => {
+        setFolder((current) => current || value);
+      });
+    }
     void controller.recentFolders().then(setRecent);
-  }, [visible]);
+  }, [initialFolder, visible]);
 
   useEffect(() => {
     if (!visible) {
       setInstruction('');
       setStarting(false);
+      setCreated(null);
     }
   }, [visible]);
 
   const start = async () => {
     setError(null);
+    setNotice(null);
     if (!folder.trim().startsWith('/')) {
       setError('Enter an absolute folder path on the server, starting with /.');
       return;
@@ -56,19 +76,96 @@ export function NewSessionSheet({
       setError('Reconnect before starting a session.');
       return;
     }
+    if (created) {
+      await finish(created);
+      return;
+    }
     setStarting(true);
-    const result = await controller.createSession(folder, instruction);
+    const result = await controller.createSession(folder, '');
     setStarting(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
+    setCreated(result.sessionId);
+    const catalog = await controller.refreshModels();
+    setModels(catalog.models);
+    setModel(catalog.current);
+    setNotice('Session created. Confirm model and effort before the first instruction.');
+  };
+
+  const finish = async (
+    sessionId: string,
+    options: {
+      model?: string | null;
+      effort?: string | null;
+      useDefaults?: boolean;
+    } = {},
+  ) => {
+    setConfiguring(true);
+    setError(null);
+    if (!controller.isCurrentSession(sessionId)) {
+      setConfiguring(false);
+      setError(
+        'The open session changed. Reopen the created session before confirming its configuration.',
+      );
+      return;
+    }
+    const chosenModel = options.useDefaults
+      ? null
+      : options.model !== undefined
+        ? options.model
+        : model;
+    const chosenEffort = options.useDefaults
+      ? null
+      : options.effort !== undefined
+        ? options.effort
+        : effort;
+    if (!options.useDefaults && (chosenModel || chosenEffort)) {
+      const applied = await controller.configureSessionFor(sessionId, {
+        model: chosenModel,
+        effort: chosenEffort,
+      });
+      if (!applied.ok) {
+        setConfiguring(false);
+        setError(
+          `Session created. Model change needs attention. ${applied.error ?? ''} Retry configuration, choose another model, or use server defaults.`,
+        );
+        return;
+      }
+      if (!controller.isCurrentSession(sessionId)) {
+        setConfiguring(false);
+        setError(
+          'The open session changed while configuration was pending. Reopen the created session to continue.',
+        );
+        return;
+      }
+    }
+    if (instruction.trim()) {
+      const sent = await controller.sendToSession(sessionId, instruction.trim());
+      if (!sent.ok) {
+        setConfiguring(false);
+        setError(
+          `Session created, but the first instruction was not confirmed. ${sent.error ?? ''}`,
+        );
+        return;
+      }
+    }
+    if (!controller.isCurrentSession(sessionId)) {
+      setConfiguring(false);
+      setError(
+        'The session changed during setup. The created session is safe in Sessions; reopen it to continue.',
+      );
+      return;
+    }
+    setConfiguring(false);
     await controller.rememberFolder(folder);
     setInstruction('');
-    onStarted(result.sessionId);
+    onStarted(sessionId);
   };
 
   const offline = connectionState !== 'current' && connectionState !== 'reconciling';
+  const confirmed = config.modelConfirmed && config.model !== null;
 
   return (
     <BottomSheet visible={visible} onClose={onClose} headingRef={headingRef} accessibilityLabel="New session">
@@ -99,6 +196,7 @@ export function NewSessionSheet({
           </Text>
         </View>
         <Divider />
+
         <Field
           label="Folder on server"
           value={folder}
@@ -110,6 +208,13 @@ export function NewSessionSheet({
           returnKeyType="next"
           leading={<FolderIcon size={20} color={colors.muted} />}
           helper="An absolute path on the server, not on this phone."
+          editable={!created}
+        />
+        <TextAction
+          label="Browse server folders"
+          onPress={() => setBrowserVisible(true)}
+          color="brand"
+          disabled={!!created}
         />
         {recent.length > 0 ? (
           <View style={styles.recent}>
@@ -135,37 +240,163 @@ export function NewSessionSheet({
             ))}
           </View>
         ) : null}
+
+        <View style={[styles.configCard, { borderColor: colors.line }]}>
+          <View style={styles.configHeader}>
+            <Text variant="small" weight="semibold">
+              Model & effort
+            </Text>
+            <Text variant="caption" color={confirmed ? 'success' : 'muted'}>
+              {created
+                ? confirmed
+                  ? 'Server confirmed'
+                  : 'Pending confirmation'
+                : 'Server default until the session exists'}
+            </Text>
+          </View>
+          {created ? (
+            models.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.modelRow}>
+                {models.slice(0, 12).map((entry) => (
+                  <Pressable
+                    key={entry}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: model === entry, checked: model === entry }}
+                    aria-checked={model === entry}
+                    accessibilityLabel={`Model ${entry}`}
+                    onPress={() => {
+                      setModel(entry);
+                      setEffort(null);
+                    }}
+                    style={[
+                      styles.chip,
+                      {
+                        borderColor: model === entry ? colors.brand : colors.line,
+                        backgroundColor: model === entry ? colors.raised : colors.surface,
+                      },
+                    ]}
+                    testID={`new-session-model-${entry}`}
+                  >
+                    <Text variant="caption" numberOfLines={1}>
+                      {entry}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text variant="caption" color="muted">
+                No model catalog was reported by this server.
+              </Text>
+            )
+          ) : (
+            <Text variant="caption" color="muted">
+              The returned session identity is used to read the real catalog.
+            </Text>
+          )}
+          {created && config.efforts.length > 0 ? (
+            <View style={styles.modelRow}>
+              {config.efforts.map((entry) => (
+                <Pressable
+                  key={entry}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: effort === entry, checked: effort === entry }}
+                  aria-checked={effort === entry}
+                  accessibilityLabel={`Effort ${entry}`}
+                  onPress={() => setEffort(entry)}
+                  style={[
+                    styles.chip,
+                    {
+                      borderColor: effort === entry ? colors.brand : colors.line,
+                      backgroundColor: effort === entry ? colors.raised : colors.surface,
+                    },
+                  ]}
+                  testID={`new-session-effort-${entry}`}
+                >
+                  <Text variant="caption">{entry}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : created ? (
+            <Text variant="caption" color="muted">
+              Effort options are unavailable for this route.
+            </Text>
+          ) : null}
+          {created ? (
+            <View style={styles.configActions}>
+              <TextAction
+                label="Use server defaults"
+                onPress={() => {
+                  setModel(null);
+                  setEffort(null);
+                  void finish(created, { useDefaults: true });
+                }}
+                color="muted"
+              />
+            </View>
+          ) : null}
+        </View>
+
         <Field
-          label="Instruction"
+          label="First instruction"
           value={instruction}
           onChangeText={setInstruction}
           placeholder="What should JCode do first?"
           multiline
           minHeight={96}
           textAlignVertical="top"
-          helper="Optional. Sent to the returned session, never to a guessed one."
+          helper="Optional. Sent only after the returned session and configuration are confirmed."
         />
+        {notice ? (
+          <Text variant="small" color="success" accessibilityLiveRegion="polite" style={{ marginTop: space.sm }}>
+            {notice}
+          </Text>
+        ) : null}
         {error ? (
           <Text variant="small" color="error" accessibilityLiveRegion="polite" style={{ marginTop: space.sm }}>
             {error}
           </Text>
         ) : null}
         <Button
-          label={starting ? 'Starting…' : 'Start session'}
-          onPress={start}
-          loading={starting}
+          label={
+            created
+              ? configuring
+                ? 'Confirming configuration…'
+                : 'Confirm and send'
+              : starting
+                ? 'Starting…'
+                : 'Start session'
+          }
+          onPress={() => void start()}
+          loading={starting || configuring}
           fullWidth
           disabled={offline}
           reason={offline ? 'Reconnect to start a session.' : undefined}
           style={{ marginTop: space.md }}
           testID="new-session-start"
         />
-        <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
-          The server validates the folder. A created session keeps its returned identity even if this
-          request looks slow.
-        </Text>
+        {created ? (
+          <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
+            Session {created.slice(0, 18)}… is already created. Closing this sheet keeps it in
+            Sessions; starting again will not create a duplicate.
+          </Text>
+        ) : (
+          <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
+            The server validates the folder. A created session keeps its returned identity even if
+            configuration or delivery needs attention.
+          </Text>
+        )}
         <View style={{ height: space.xl }} />
       </ScrollView>
+
+      <DirectoryBrowser
+        visible={browserVisible}
+        initialPath={folder}
+        onClose={() => setBrowserVisible(false)}
+        onSelect={(path) => {
+          setFolder(path);
+          setBrowserVisible(false);
+        }}
+      />
     </BottomSheet>
   );
 }
@@ -193,4 +424,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space.xs,
   },
+  configCard: { borderWidth: 1, borderRadius: radius.control, padding: space.sm, gap: space.xs },
+  configHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  modelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xxs, marginTop: space.xxs },
+  chip: {
+    minHeight: target,
+    paddingHorizontal: space.sm,
+    borderWidth: 1,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: 220,
+  },
+  configActions: { flexDirection: 'row', justifyContent: 'flex-end' },
 });

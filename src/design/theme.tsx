@@ -7,22 +7,39 @@ import React, {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { AccessibilityInfo, useColorScheme, type TextStyle } from 'react-native';
+import { AccessibilityInfo, Platform, useColorScheme, type TextStyle } from 'react-native';
 
 import {
-  palettes,
   type AppearancePreference,
   type ColorScheme,
+  type EffectsPreference,
   type Palette,
   type TypeStyle,
   type TypeToken,
   type,
 } from './tokens';
+import { paletteFor, resolveScheme, themeFamily, type ThemeFamily } from './themes';
+
+export interface GlassValue {
+  /** False means the opaque fallback must be used. */
+  blurEnabled: boolean;
+  tint: string;
+  tintAlpha: number;
+  fallback: string;
+  edge: string;
+  text: string;
+  textPlate: string;
+}
 
 interface ThemeValue {
   scheme: ColorScheme;
   colors: Palette;
+  familyId: string;
+  family: ThemeFamily;
+  effects: EffectsPreference;
   reduceMotion: boolean;
+  reduceTransparency: boolean;
+  glass: GlassValue;
   typeStyle: (token: TypeToken) => TextStyle;
   platformGutter: (width: number) => number;
 }
@@ -32,9 +49,16 @@ const ThemeContext = createContext<ThemeValue | null>(null);
 export function ThemeProvider({
   children,
   preference = 'system',
-}: PropsWithChildren<{ preference?: AppearancePreference }>) {
+  family = 'tidal',
+  effects = 'auto',
+}: PropsWithChildren<{
+  preference?: AppearancePreference;
+  family?: string;
+  effects?: EffectsPreference;
+}>) {
   const systemScheme = useColorScheme();
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [reduceTransparency, setReduceTransparency] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -47,14 +71,31 @@ export function ThemeProvider({
       'reduceMotionChanged',
       setReduceMotion,
     );
+    const transparency = AccessibilityInfo.isReduceTransparencyEnabled?.();
+    if (transparency && typeof transparency.then === 'function') {
+      transparency
+        .then((enabled) => {
+          if (mounted) setReduceTransparency(enabled);
+        })
+        .catch(() => undefined);
+    }
+    const transparencySubscription = AccessibilityInfo.addEventListener(
+      'reduceTransparencyChanged',
+      setReduceTransparency,
+    );
     return () => {
       mounted = false;
       subscription.remove();
+      transparencySubscription.remove();
     };
   }, []);
 
-  const scheme: ColorScheme =
-    preference === 'system' ? (systemScheme === 'dark' ? 'night' : 'light') : preference;
+  const scheme: ColorScheme = resolveScheme(
+    preference,
+    systemScheme === 'dark' ? 'night' : 'light',
+  );
+  const resolvedFamily = themeFamily(family);
+  const colors = paletteFor(resolvedFamily.id, scheme);
 
   const typeStyle = useCallback(
     (token: TypeToken): TextStyle => {
@@ -75,14 +116,42 @@ export function ThemeProvider({
   );
 
   const value = useMemo<ThemeValue>(
-    () => ({
+    () => {
+      // Web preview and an explicit Reduced effects choice keep the same
+      // geometry but paint the opaque material sibling.
+      const blurEnabled =
+        effects !== 'reduced' && !reduceTransparency && Platform.OS !== 'web';
+      return {
+        scheme,
+        colors,
+        familyId: resolvedFamily.id,
+        family: resolvedFamily,
+        effects,
+        reduceMotion,
+        reduceTransparency,
+        glass: {
+          blurEnabled,
+          tint: colors.glassTint,
+          tintAlpha: colors.glassTintAlpha,
+          fallback: colors.glassFallback,
+          edge: colors.glassEdge,
+          text: colors.glassText,
+          textPlate: colors.glassTextPlate,
+        },
+        typeStyle,
+        platformGutter,
+      };
+    },
+    [
       scheme,
-      colors: palettes[scheme],
+      colors,
+      resolvedFamily,
+      effects,
       reduceMotion,
+      reduceTransparency,
       typeStyle,
       platformGutter,
-    }),
-    [scheme, reduceMotion, typeStyle, platformGutter],
+    ],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

@@ -9,8 +9,23 @@
  * this file.
  */
 
-export type AppearancePreference = 'system' | 'light' | 'night';
-export type ColorScheme = 'light' | 'night';
+import {
+  DEFAULT_APPEARANCE,
+  DEFAULT_REASONING_DISPLAY,
+  DEFAULT_THEME_FAMILY,
+  paletteFor,
+  type ColorScheme,
+  type ThemePalette,
+} from './themes';
+
+export type {
+  AppearancePreference,
+  ColorScheme,
+  EffectsPreference,
+  ReasoningDisplay,
+} from './themes';
+
+export type Palette = ThemePalette;
 
 export const fonts = {
   display: 'BricolageGrotesque-SemiBold',
@@ -22,63 +37,15 @@ export const fonts = {
 
 export type FontFamily = (typeof fonts)[keyof typeof fonts];
 
-export interface Palette {
-  bg: string;
-  surface: string;
-  raised: string;
-  ink: string;
-  muted: string;
-  line: string;
-  control: string;
-  brand: string;
-  onBrand: string;
-  accent: string;
-  accentSoft: string;
-  onAccent: string;
-  success: string;
-  warning: string;
-  error: string;
-  focus: string;
-}
-
+/** Tidal is the default family; screen files never define their own palette. */
 export const palettes: Record<ColorScheme, Palette> = {
-  light: {
-    bg: '#F3F6F5',
-    surface: '#FFFFFF',
-    raised: '#E8EFEC',
-    ink: '#173B3A',
-    muted: '#536B65',
-    line: '#D5E0DB',
-    control: '#718981',
-    brand: '#164F49',
-    onBrand: '#F4F8F5',
-    accent: '#E56F4D',
-    accentSoft: '#FFE4D8',
-    onAccent: '#542211',
-    success: '#276554',
-    warning: '#81502A',
-    error: '#A23C2D',
-    focus: '#316E68',
-  },
-  night: {
-    bg: '#111F20',
-    surface: '#192C2B',
-    raised: '#223735',
-    ink: '#E5F0EB',
-    muted: '#A0B6AD',
-    line: '#344D48',
-    control: '#69867E',
-    brand: '#B5D6C5',
-    onBrand: '#18392E',
-    accent: '#F2B09A',
-    accentSoft: '#432E27',
-    onAccent: '#F7C1AA',
-    success: '#A8D6BF',
-    warning: '#E7C39D',
-    error: '#F0A698',
-    focus: '#B5D6C5',
-  },
+  light: paletteFor(DEFAULT_THEME_FAMILY, 'light'),
+  night: paletteFor(DEFAULT_THEME_FAMILY, 'night'),
 };
+
+export const defaultThemeFamily = DEFAULT_THEME_FAMILY;
+export const defaultAppearance = DEFAULT_APPEARANCE;
+export const defaultReasoningDisplay = DEFAULT_REASONING_DISPLAY;
 
 /** Allowed spacing scale. 4-unit base. */
 export const space = {
@@ -127,6 +94,7 @@ export type TypeToken =
   | 'title'
   | 'screen'
   | 'display'
+  | 'welcome'
   | 'button'
   | 'code'
   | 'codeSmall';
@@ -157,6 +125,12 @@ export const type: Record<TypeToken, TypeStyle> = {
     fontFamily: fonts.display,
     letterSpacing: -0.8,
   },
+  welcome: {
+    fontSize: 56,
+    lineHeight: 60,
+    fontFamily: fonts.display,
+    letterSpacing: -1.4,
+  },
   button: { fontSize: 16, lineHeight: 20, fontFamily: fonts.bodyMedium },
   code: { fontSize: 13, lineHeight: 20, fontFamily: fonts.mono },
   codeSmall: { fontSize: 12, lineHeight: 18, fontFamily: fonts.mono },
@@ -172,10 +146,33 @@ export const motion = {
   maxReturn: 320,
   /** Reduced Motion replaces travel with a brief crossfade. */
   reduced: 100,
+  welcome: 600,
+  welcomeReveal: 1_600,
+  welcomeCopyDelay: 1_040,
+  welcomeCopyIn: 400,
+  welcomeSeamDelay: 1_360,
+  welcomeSeamIn: 240,
+  loaderOrbit: 1_400,
+  loaderRevealDelay: 180,
+  loaderExit: 160,
+  toolReveal: 180,
   easeOut: [0.22, 1, 0.36, 1] as const,
   easeMove: [0.4, 0, 0.2, 1] as const,
   easeExit: [0.4, 0, 1, 1] as const,
   spring: { mass: 1, stiffness: 360, damping: 38, overshootClamping: true },
+} as const;
+
+/**
+ * Tidal Glass material. Live blur is bounded to two visible chrome regions;
+ * every surface keeps an opaque fallback for Reduce Transparency, effects off,
+ * web preview, or a platform where blur is unavailable.
+ */
+export const glass = {
+  blurRadiusCss: 24,
+  maxVisibleRegions: 2,
+  edgeWidth: 1,
+  light: { tintAlpha: 0.84 },
+  night: { tintAlpha: 0.88 },
 } as const;
 
 /** Performance and cache budgets from PRODUCT_SPEC §14. */

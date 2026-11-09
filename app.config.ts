@@ -10,7 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'JCode Mobile',
   slug: 'jcode-mobile',
-  version: '0.1.4',
+  version: '0.2.0',
   orientation: 'portrait',
   scheme: 'jcodemobile',
   userInterfaceStyle: 'automatic',
@@ -18,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.jcodemobile.app',
-    buildNumber: '1',
+    buildNumber: '2',
     infoPlist: {
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: false,
@@ -26,12 +26,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
       NSCameraUsageDescription:
         'Scan a JCode pairing code shown on your own server.',
+      NSPhotoLibraryUsageDescription:
+        'Attach a screenshot or image to a message for JCode on your server.',
       NSFaceIDUsageDescription: undefined,
     },
   },
   android: {
     package: 'com.jcodemobile.app',
-    versionCode: 1,
+    versionCode: 2,
+    softwareKeyboardLayoutMode: 'resize',
     predictiveBackGestureEnabled: true,
     adaptiveIcon: {
       backgroundColor: '#F3F6F5',
@@ -41,9 +44,18 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     './plugins/withLocalCleartext',
+    './plugins/withBunGradle',
     'expo-secure-store',
     'expo-sqlite',
     'expo-font',
+    'expo-image',
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'Attach a screenshot or image to a message for JCode on your server.',
+      },
+    ],
     [
       'expo-splash-screen',
       {

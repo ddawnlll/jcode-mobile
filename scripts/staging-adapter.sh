@@ -12,4 +12,4 @@ export JCODE_ADAPTER_PORT="${JCODE_ADAPTER_PORT:-7643}"
 export JCODE_ADAPTER_HOST="${JCODE_ADAPTER_HOST:-127.0.0.1}"
 export JCODE_ADAPTER_LOG="${JCODE_ADAPTER_LOG:-info}"
 
-exec node "$(dirname "$0")/../integration/jcode-adapter/src/main.ts"
+exec bun "$(dirname "$0")/../integration/jcode-adapter/src/main.ts"

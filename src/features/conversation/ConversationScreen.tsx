@@ -3,11 +3,9 @@ import {
   ActivityIndicator,
   FlatList,
   Keyboard,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   StyleSheet,
-  TextInput,
   useWindowDimensions,
   View,
   type NativeScrollEvent,
@@ -21,25 +19,35 @@ import * as Clipboard from 'expo-clipboard';
 
 import type { RootStackParamList } from '../../shell/navigation';
 import { BottomSheet } from '../../design/BottomSheet';
+import { Composer } from '../../design/Composer';
 import { Button, Field, IconButton, TextAction } from '../../design/controls';
 import {
   BackIcon,
-  CheckIcon,
   ChevronDownIcon,
-  ChevronRightIcon,
   FolderIcon,
   MoreIcon,
-  SendIcon,
-  StopIcon,
-  WorkIcon,
 } from '../../design/icons';
 import { useTheme } from '../../design/theme';
 import { budgets, geometry, radius, space, target } from '../../design/tokens';
+import { useKeyboardInset } from '../../design/useKeyboardInset';
+import { PendingMark, useDelayedPending, useLongWait } from '../../design/PendingMark';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
-import { useAppStore, type DeliveryRecord } from '../../core/state/store';
+import {
+  useAppStore,
+  type ComposerImage,
+  type DeliveryRecord,
+} from '../../core/state/store';
 import type { HistoryMessage } from '../../core/protocol/frames';
-import { Markdown } from './Markdown';
+import { RichMarkdown } from './RichMarkdown';
+import { MessageImage } from './markdown/MessageImage';
+import { MessageActions } from './MessageActions';
+import { ThinkingView } from './ThinkingView';
+import { ContextSheet } from './ContextSheet';
+import { ConfigurationSheet } from './ConfigurationSheet';
+import { ChangesSheet } from './ChangesSheet';
+import { FindBar } from './FindBar';
+import { WorkRail } from './WorkRail';
 import { WorkSheet } from '../work/WorkSheet';
 import { SessionSwitcherSheet } from '../sessions/SessionSwitcherSheet';
 
@@ -79,17 +87,31 @@ export function ConversationScreen() {
   const conversation = useAppStore((state) => state.conversation);
   const connection = useAppStore((state) => state.connection);
   const sessions = useAppStore((state) => state.inventory.sessions);
+  const capabilities = useAppStore((state) => state.connection.capabilities);
+  const reasoningDisplay = useAppStore((state) => state.reasoningDisplay);
+  const demo = useAppStore((state) => state.demo);
+  const measuredKeyboardInset = useKeyboardInset();
+  // Android uses softwareKeyboardLayoutMode=resize (one owner). iOS needs the
+  // measured inset because the window itself does not resize.
+  const keyboardInset = Platform.OS === 'ios' ? measuredKeyboardInset : 0;
 
   const listRef = useRef<FlatList<ConversationItem>>(null);
-  const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const nearBottomRef = useRef(true);
   const draggingRef = useRef(false);
   const anchorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredScroll = useRef(false);
   const [draft, setDraft] = useState('');
+  const [images, setImages] = useState<ComposerImage[]>([]);
   const [workVisible, setWorkVisible] = useState(false);
+  const [workTab, setWorkTab] = useState<'activity' | 'plan'>('activity');
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [contextVisible, setContextVisible] = useState(false);
+  const [configVisible, setConfigVisible] = useState(false);
+  const [changesVisible, setChangesVisible] = useState(false);
+  const [findVisible, setFindVisible] = useState(false);
+  const [findQuery, setFindQuery] = useState('');
+  const [findIndex, setFindIndex] = useState(0);
   const [decision, setDecision] = useState<DeliveryRecord | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [renameVisible, setRenameVisible] = useState(false);
@@ -123,6 +145,41 @@ export function ConversationScreen() {
       ),
     [conversation.messages],
   );
+
+  const findMatches = useMemo(() => {
+    const needle = findQuery.trim().toLowerCase();
+    if (!needle) return [] as number[];
+    return messages
+      .filter((message) => message.content.toLowerCase().includes(needle))
+      .map((message) => message.index);
+  }, [findQuery, messages]);
+
+  const pending =
+    conversation.historyFreshness.status === 'none' &&
+    (connection.state === 'connecting' || connection.state === 'reconciling');
+  const showPending = useDelayedPending(pending);
+  const longWait = useLongWait(pending);
+
+  const railRows = useMemo(() => {
+    const live = new Map(conversation.tools.map((row) => [row.callId, row]));
+    const rows = conversation.messages.flatMap((message) => {
+      if (!message.tool_data) return [];
+      const existing = live.get(message.tool_data.id);
+      if (existing) return [existing];
+      return [
+        {
+          callId: message.tool_data.id,
+          name: message.tool_data.name,
+          input: message.tool_data.input,
+          state: 'done' as const,
+          startedAt: 0,
+          historical: true,
+        },
+      ];
+    });
+    const placed = new Set(rows.map((row) => row.callId));
+    return [...rows, ...conversation.tools.filter((row) => !placed.has(row.callId))].slice(-80);
+  }, [conversation.messages, conversation.tools]);
 
   const items = useMemo<ConversationItem[]>(() => {
     const result: ConversationItem[] = [];
@@ -173,6 +230,26 @@ export function ConversationScreen() {
   }, []);
 
   useEffect(() => {
+    setFindIndex(0);
+  }, [findQuery]);
+
+  const jumpToFind = useCallback(
+    (target: number) => {
+      if (findMatches.length === 0) return;
+      const bounded = ((target % findMatches.length) + findMatches.length) % findMatches.length;
+      const messageIndex = findMatches[bounded];
+      const itemIndex = items.findIndex(
+        (item) => item.kind === 'message' && item.message.index === messageIndex,
+      );
+      if (itemIndex >= 0) {
+        listRef.current?.scrollToIndex({ index: itemIndex, animated: true, viewPosition: 0.3 });
+      }
+      setFindIndex(bounded);
+    },
+    [findMatches, items],
+  );
+
+  useEffect(() => {
     if (!restoredScroll.current && messages.length > 0) {
       restoredScroll.current = true;
       const bookmark = conversation.seam?.index ?? null;
@@ -219,14 +296,15 @@ export function ConversationScreen() {
 
   const send = async () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text && images.length === 0) return;
     setComposerError(null);
-    const result = await controller.send(text);
+    const result = await controller.send(text, images);
     if (!result.ok) {
       setComposerError(result.error ?? 'Could not send this message.');
       return;
     }
     setDraft('');
+    setImages([]);
     controller.setNearBottom(true);
     nearBottomRef.current = true;
     scrollToEnd(true);
@@ -239,7 +317,6 @@ export function ConversationScreen() {
   };
 
   const working = conversation.execution.kind === 'working';
-  const stopping = working && conversation.execution.label === 'Stopping…';
   const sendGate = controller.canSend();
   const disabledReason =
     connection.state !== 'current' && connection.state !== 'reconciling'
@@ -247,22 +324,6 @@ export function ConversationScreen() {
       : !sendGate.ok
         ? sendGate.reason
         : undefined;
-  const hasHistoricalTools = conversation.messages.some((message) => message.tool_data);
-  const showDock =
-    conversation.tools.length > 0 ||
-    hasHistoricalTools ||
-    working ||
-    conversation.execution.kind === 'stopped' ||
-    conversation.pendingSoftInterrupts > 0 ||
-    conversation.plan !== null;
-  const dockLabel = working
-    ? conversation.execution.label
-    : conversation.execution.kind === 'stopped'
-      ? conversation.execution.label
-      : conversation.tools.length > 0 || hasHistoricalTools
-        ? 'View work'
-        : 'Ready';
-
   const title = conversation.title || 'Session';
   const statusLabel =
     conversation.execution.kind === 'working'
@@ -328,7 +389,7 @@ export function ConversationScreen() {
           <Text variant="caption" color="muted" style={{ marginBottom: space.xxs }}>
             jcode
           </Text>
-          <Markdown content={conversation.provisionalText} />
+          <RichMarkdown content={conversation.provisionalText} streaming />
         </View>
       );
     }
@@ -370,6 +431,52 @@ export function ConversationScreen() {
         </IconButton>
       </View>
 
+      {demo ? (
+        <View style={[styles.previewBanner, { backgroundColor: colors.accentSoft }]} testID="preview-banner">
+          <Text variant="caption" style={{ color: colors.onAccent, flex: 1 }}>
+            Preview · sample data. Nothing is sent to a server.
+          </Text>
+          <TextAction
+            label="Exit preview"
+            color="onAccent"
+            onPress={() => {
+              controller.exitDemo();
+              navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+            }}
+          />
+        </View>
+      ) : null}
+
+      {findVisible ? (
+        <FindBar
+          value={findQuery}
+          onChange={(value) => {
+            setFindQuery(value);
+            if (value.trim()) {
+              const next = messages.filter((message) =>
+                message.content.toLowerCase().includes(value.trim().toLowerCase()),
+              );
+              if (next[0]) {
+                const itemIndex = items.findIndex(
+                  (item) => item.kind === 'message' && item.message.index === next[0].index,
+                );
+                if (itemIndex >= 0) {
+                  listRef.current?.scrollToIndex({ index: itemIndex, animated: true, viewPosition: 0.3 });
+                }
+              }
+            }
+          }}
+          count={findMatches.length}
+          index={findIndex}
+          onPrevious={() => jumpToFind(findIndex - 1)}
+          onNext={() => jumpToFind(findIndex + 1)}
+          onClose={() => {
+            setFindVisible(false);
+            setFindQuery('');
+          }}
+        />
+      ) : null}
+
       {conversation.interrupted ? (
         <View style={[styles.interrupted, { backgroundColor: colors.accentSoft }]}>
           <Text variant="small" style={{ color: colors.onAccent }}>
@@ -400,10 +507,8 @@ export function ConversationScreen() {
         </View>
       ) : null}
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
+      <View
+        style={[styles.body, keyboardInset > 0 ? { paddingBottom: keyboardInset } : null]}
       >
         <FlatList
           ref={listRef}
@@ -466,11 +571,38 @@ export function ConversationScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyTranscript}>
-              <Text variant="body" color="muted" style={{ textAlign: 'center' }}>
-                {conversation.historyFreshness.status === 'none'
-                  ? 'This session isn’t saved on this phone yet.'
-                  : 'No messages yet.'}
-              </Text>
+              {showPending ? (
+                <View style={{ width: '100%' }} testID="conversation-loading">
+                  <PendingMark
+                    label={
+                      connection.state === 'reconciling'
+                        ? 'Catching up with the server'
+                        : 'Opening this session'
+                    }
+                    detail={longWait ? 'Still connecting. Your server keeps working.' : undefined}
+                  />
+                  {longWait ? (
+                    <View style={styles.pendingActions}>
+                      <Button
+                        label="Retry"
+                        variant="secondary"
+                        onPress={() => void controller.reconnect()}
+                      />
+                      <Button
+                        label="Back"
+                        variant="secondary"
+                        onPress={() => navigation.goBack()}
+                      />
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <Text variant="body" color="muted" style={{ textAlign: 'center' }}>
+                  {conversation.historyFreshness.status === 'none'
+                    ? 'This session isn’t saved on this phone yet.'
+                    : 'No messages yet.'}
+                </Text>
+              )}
             </View>
           }
         />
@@ -494,153 +626,96 @@ export function ConversationScreen() {
           </Pressable>
         ) : null}
 
-        {showDock ? (
-          <View style={[styles.workDock, { borderTopColor: colors.line }]}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${dockLabel}. Open session work`}
-              onPress={() => {
-                setWorkVisible(true);
-                void controller.loadPlan();
-              }}
-              style={({ pressed }) => [styles.workDockText, pressed && { opacity: 0.7 }]}
-            >
-              {working ? (
-                <WorkIcon size={20} color={colors.success} />
-              ) : conversation.execution.kind === 'stopped' ? (
-                <StopIcon size={18} color={colors.error} />
-              ) : (
-                <CheckIcon size={20} color={colors.muted} />
-              )}
-              <View style={{ flex: 1, marginLeft: space.xs }}>
-                <Text variant="small" numberOfLines={2} color={working ? 'ink' : 'muted'}>
-                  {dockLabel}
-                </Text>
-                {conversation.execution.phase && working ? (
-                  <Text variant="caption" color="muted" numberOfLines={1}>
-                    {conversation.execution.phase}
-                  </Text>
-                ) : null}
-              </View>
-              <ChevronRightIcon size={18} color={colors.muted} />
-            </Pressable>
-            {working ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Stop this turn"
-                onPress={() => void stop()}
-                disabled={stopping}
-                style={({ pressed }) => [
-                  styles.stopTarget,
-                  pressed && { backgroundColor: colors.raised },
-                  stopping && { opacity: 0.5 },
-                ]}
-              >
-                <StopIcon size={20} color={colors.error} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.thinkingHost}>
+          <ThinkingView
+            phase={conversation.reasoningPhase}
+            reasoning={conversation.reasoning}
+            display={reasoningDisplay}
+            durationSecs={conversation.reasoningDurationSecs}
+          />
+        </View>
+        <WorkRail
+          rows={railRows}
+          working={working}
+          onOpen={() => {
+            setWorkVisible(true);
+            void controller.loadPlan();
+          }}
+          onStop={() => void stop()}
+        />
 
         <View
           style={[
             styles.composer,
-            {
-              borderBottomColor: colors.bg,
-              paddingBottom: Math.max(insets.bottom, space.xs),
-            },
+            { paddingBottom: Math.max(insets.bottom, space.xs) },
           ]}
         >
-          <Text variant="small" color="muted" style={{ marginBottom: space.xxs }}>
-            {working ? 'Add instruction' : 'Message'}
-          </Text>
-          <View
-            style={[
-              styles.composerField,
-              {
-                borderColor: colors.control,
-                backgroundColor: colors.surface,
-                minHeight: Math.max(geometry.composerMin, 44 + 16 * textScale),
-              },
-            ]}
-          >
-            <TextInput
-              ref={inputRef}
-              allowFontScaling={false}
-              accessibilityLabel={working ? 'Add an instruction' : 'Message'}
-              value={draft}
-              onChangeText={(value) => {
-                setDraft(value);
-                if (conversation.sessionId) controller.setDraftText(conversation.sessionId, value);
-                if (composerError) setComposerError(null);
-              }}
-              onBlur={() => controller.flushDraft()}
-              placeholder={
-                textScale > 1.35
-                  ? working
-                    ? 'Instruct…'
-                    : 'Write…'
-                  : working
-                    ? 'A thought, a question, a direction…'
-                    : 'Write a message'
-              }
-              placeholderTextColor={colors.muted}
-              selectionColor={colors.focus}
-              multiline
-              maxLength={32_000}
-              textAlignVertical="top"
-              style={[
-                styles.input,
-                {
-                  color: colors.ink,
-                  fontSize: 16 * textScale,
-                  lineHeight: 24 * textScale,
-                  minHeight: 26 * textScale + 20,
-                  maxHeight: (geometry.composerMax - 16) * Math.min(textScale, 1.7),
-                },
-              ]}
-              onKeyPress={(event) => {
-                const native = event.nativeEvent as unknown as { key?: string; modifiers?: string[] };
-                if (native.key === 'Enter' && native.modifiers?.some((value) => value === 'meta' || value === 'ctrl')) {
-                  void send();
-                }
-              }}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={working ? 'Add instruction to this turn' : 'Send message'}
-              accessibilityState={{ disabled: !!disabledReason || !draft.trim() }}
-              disabled={!!disabledReason || !draft.trim()}
-              onPress={() => void send()}
-              style={({ pressed }) => [
-                styles.sendTarget,
-                {
-                  backgroundColor:
-                    !!disabledReason || !draft.trim() ? colors.raised : colors.brand,
-                },
-                pressed && { opacity: 0.85 },
-              ]}
-            >
-              <SendIcon
-                size={20}
-                color={!!disabledReason || !draft.trim() ? colors.muted : colors.onBrand}
+          <Composer
+            value={draft}
+            onChangeText={(value) => {
+              setDraft(value);
+              if (conversation.sessionId) controller.setDraftText(conversation.sessionId, value);
+              if (composerError) setComposerError(null);
+            }}
+            onSend={() => void send()}
+            onBlur={() => controller.flushDraft()}
+            images={images}
+            onImagesChange={setImages}
+            working={working}
+            disabledReason={composerError ?? disabledReason}
+            placeholder={
+              textScale > 1.35
+                ? working
+                  ? 'Instruct…'
+                  : 'Write…'
+                : working
+                  ? 'A thought, a question, a direction…'
+                  : 'Write a message'
+            }
+            configStrip={
+              <ConfigStrip
+                model={conversation.config.model}
+                effort={conversation.config.effort}
+                confirmed={conversation.config.modelConfirmed}
+                context={conversation.context}
+                onModel={() => setConfigVisible(true)}
+                onContext={() => {
+                  setContextVisible(true);
+                  void controller.refreshContext();
+                }}
               />
-            </Pressable>
-          </View>
-          <Text variant="caption" color="muted" style={{ marginTop: space.xxs }}>
-            {composerError ??
-              disabledReason ??
-              (working
-                ? `Your server runs the work.${conversation.pendingSoftInterrupts > 0 ? ` ${conversation.pendingSoftInterrupts} queued.` : ''}`
-                : 'Your server runs the work.')}
-          </Text>
+            }
+          />
         </View>
-      </KeyboardAvoidingView>
+      </View>
+
+      <ContextSheet
+        visible={contextVisible}
+        onClose={() => setContextVisible(false)}
+        snapshot={conversation.context}
+        model={conversation.config.model}
+        onNewSession={() => {
+          setContextVisible(false);
+          navigation.navigate('Sessions');
+        }}
+      />
+
+      <ConfigurationSheet
+        visible={configVisible}
+        onClose={() => setConfigVisible(false)}
+      />
+
+      <ChangesSheet
+        visible={changesVisible}
+        onClose={() => setChangesVisible(false)}
+        changes={conversation.changes}
+      />
 
       <WorkSheet
         visible={workVisible}
         onClose={() => setWorkVisible(false)}
         onStop={() => void stop()}
+        initialTab={workTab}
       />
 
       <SessionSwitcherSheet
@@ -667,6 +742,78 @@ export function ConversationScreen() {
             Session
           </Text>
           <View style={{ marginTop: space.md }}>
+            <MenuRow
+              label="Switch session"
+              onPress={() => {
+                setMenuVisible(false);
+                setSwitcherVisible(true);
+              }}
+            />
+            <MenuRow
+              label="Find in conversation"
+              onPress={() => {
+                setMenuVisible(false);
+                setFindVisible(true);
+              }}
+            />
+            <MenuRow
+              label="Context"
+              onPress={() => {
+                setMenuVisible(false);
+                setContextVisible(true);
+                void controller.refreshContext();
+              }}
+            />
+            <MenuRow
+              label={`Model & effort${conversation.config.model ? ` · ${conversation.config.model}` : ''}`}
+              onPress={() => {
+                setMenuVisible(false);
+                setConfigVisible(true);
+              }}
+            />
+            <MenuRow
+              label={`Thinking: ${reasoningDisplay === 'hidden' ? 'Hidden' : reasoningDisplay === 'compact' ? 'Compact' : 'Expanded'}`}
+              onPress={() => {
+                setMenuVisible(false);
+                const order = ['hidden', 'compact', 'expanded'] as const;
+                const next = order[(order.indexOf(reasoningDisplay) + 1) % order.length];
+                void controller.setReasoningDisplay(next);
+              }}
+            />
+            <MenuRow
+              label="Work"
+              onPress={() => {
+                setMenuVisible(false);
+                setWorkTab('activity');
+                setWorkVisible(true);
+                void controller.loadPlan();
+              }}
+            />
+            {(conversation.plan?.state.todos.length ?? 0) > 0 ? (
+              <MenuRow
+                label="Plan"
+                onPress={() => {
+                  setMenuVisible(false);
+                  setWorkTab('plan');
+                  setWorkVisible(true);
+                  void controller.loadPlan();
+                }}
+              />
+            ) : null}
+            <MenuRow
+              label={`Changes${conversation.changes.length ? ` · ${conversation.changes.length}` : ''}`}
+              onPress={() => {
+                setMenuVisible(false);
+                setChangesVisible(true);
+              }}
+            />
+            <MenuRow
+              label="Appearance"
+              onPress={() => {
+                setMenuVisible(false);
+                navigation.navigate('Appearance');
+              }}
+            />
             <MenuRow
               label="Rename"
               onPress={() => {
@@ -705,17 +852,19 @@ export function ConversationScreen() {
                 navigation.navigate('ServerDetails');
               }}
             />
-            <MenuRow
-              label="Archive session"
-              onPress={async () => {
-                setMenuVisible(false);
-                if (conversation.session) {
-                  const result = await controller.archiveSession(conversation.session);
-                  if (result.ok) navigation.goBack();
-                  else setComposerError(result.error ?? 'Archive failed.');
-                }
-              }}
-            />
+            {capabilities.includes('archive_restore') ? (
+              <MenuRow
+                label="Archive session"
+                onPress={async () => {
+                  setMenuVisible(false);
+                  if (conversation.session) {
+                    const result = await controller.archiveSession(conversation.session);
+                    if (result.ok) navigation.goBack();
+                    else setComposerError(result.error ?? 'Archive failed.');
+                  }
+                }}
+              />
+            ) : null}
           </View>
           <View style={{ height: space.lg }} />
         </View>
@@ -792,19 +941,83 @@ function SeamRow({ count, onSeen, onViewWork }: { count: number | null; onSeen: 
   );
 }
 
+function ConfigStrip({
+  model,
+  effort,
+  confirmed,
+  context,
+  onModel,
+  onContext,
+}: {
+  model: string | null;
+  effort: string | null;
+  confirmed: boolean;
+  context: import('../../core/state/store').ContextSnapshot | null;
+  onModel: () => void;
+  onContext: () => void;
+}) {
+  const { colors } = useTheme();
+  const used = context?.usedTokens ?? null;
+  const limit = context?.limitTokens ?? null;
+  const percent =
+    used !== null && limit !== null && limit > 0 ? Math.round((used / limit) * 100) : null;
+  return (
+    <View style={styles.configStrip} testID="config-strip">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Model and effort: ${model ?? 'unavailable'}`}
+        onPress={onModel}
+        style={styles.configButton}
+        testID="model-button"
+      >
+        <Text variant="caption" color="muted" numberOfLines={1}>
+          {confirmed && model ? model : model ? `${model} · pending` : 'Model unavailable'}
+        </Text>
+        {effort ? (
+          <Text variant="caption" color="muted">
+            {` · ${effort}`}
+          </Text>
+        ) : null}
+        <ChevronDownIcon size={14} color={colors.muted} />
+      </Pressable>
+      <View style={{ flex: 1 }} />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          percent !== null ? `Context ${percent} percent used` : 'Context unavailable'
+        }
+        onPress={onContext}
+        style={styles.configButton}
+        testID="context-button"
+      >
+        <Text variant="caption" color="muted">
+          Context
+        </Text>
+        <Text variant="caption" color={percent !== null && percent >= 90 ? 'error' : 'brand'}>
+          {percent !== null ? `${percent}%` : 'Unknown'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function UserMessage({ message }: { message: HistoryMessage }) {
   const { colors } = useTheme();
   return (
-    <View
-      style={styles.userRow}
-      accessible
-      accessibilityLabel={`You said: ${message.content}`}
-    >
+    <View style={styles.userRow} testID={`user-message-${message.index}`}>
       <View style={[styles.userBubble, { backgroundColor: colors.raised }]}>
         <Text variant="caption" color="muted" style={{ marginBottom: space.xxs }}>
           You
         </Text>
-        <Text variant="body">{message.content}</Text>
+        {message.content ? (
+          <Text variant="body" accessibilityLabel={`You said: ${message.content}`}>
+            {message.content}
+          </Text>
+        ) : null}
+        {message.images?.map((image, index) => (
+          <MessageImage key={index} image={image} />
+        ))}
+        <MessageActions content={message.content} role="user" testID="user-message-actions" />
       </View>
     </View>
   );
@@ -817,14 +1030,24 @@ const AssistantMessage = React.memo(function AssistantMessage({
   message: HistoryMessage;
   showRole: boolean;
 }) {
+  const display = useAppStore((state) => state.reasoningDisplay);
   return (
-    <View style={styles.assistantBlock} accessible accessibilityLabel={`jcode said: ${message.content}`}>
+    <View style={styles.assistantBlock} testID={`assistant-message-${message.index}`}>
       {showRole ? (
         <Text variant="caption" color="muted" style={{ marginBottom: space.xxs }}>
           jcode
         </Text>
       ) : null}
-      <Markdown content={message.content} />
+      {message.reasoning ? (
+        <ThinkingView
+          phase="none"
+          reasoning={message.reasoning}
+          display={display}
+          durationSecs={null}
+        />
+      ) : null}
+      <RichMarkdown content={message.content} extraImages={message.images} />
+      <MessageActions content={message.content} role="assistant" testID="assistant-message-actions" />
     </View>
   );
 });
@@ -955,6 +1178,37 @@ function MenuRow({ label, onPress }: { label: string; onPress: () => void }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  body: { flex: 1 },
+  previewBanner: {
+    marginHorizontal: geometry.gutterCompact,
+    marginBottom: space.xs,
+    borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  thinkingHost: { paddingHorizontal: geometry.gutterCompact },
+  configStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 32,
+    marginBottom: space.xxs,
+  },
+  configButton: {
+    minHeight: target,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: space.xxs,
+  },
+  pendingActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: space.sm,
+    marginTop: space.md,
+  },
   appBar: {
     height: geometry.appBar,
     paddingHorizontal: space.xs,

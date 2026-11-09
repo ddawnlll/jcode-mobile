@@ -55,6 +55,21 @@ const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 const MAX_HISTORY_MESSAGE_BYTES = 256 * 1024;
 const MAX_RECOVERY_MESSAGE_BYTES = 8 * 1024;
 const BOOTSTRAP_QUEUE_LIMIT = 2000;
+const MAX_HISTORY_IMAGE_BYTES = 20 * 1024 * 1024;
+
+interface TokenUsageSnapshot {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheCreate: number;
+  at: number;
+}
+
+interface ConfigWaiter {
+  kind: 'model' | 'effort';
+  resolve: (value: { error?: string; effort?: string | null; model?: string | null; contextWindow?: number | null }) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 export class Attachment {
   readonly attachmentId = newId('att');
@@ -80,6 +95,16 @@ export class Attachment {
   private closed = false;
   private createdAt = Date.now();
   private daemonVersion: string | null = null;
+  private historyImages: Array<Record<string, unknown>> = [];
+  private historyImageBytes = 0;
+  private emptyHistorySeen = false;
+  private tokenUsage: TokenUsageSnapshot | null = null;
+  private contextWindow: number | null = null;
+  private providerName: string | null = null;
+  private modelName: string | null = null;
+  private currentEffort: string | null = null;
+  private modelsList: string[] = [];
+  private configWaiters = new Map<number, ConfigWaiter>();
 
   constructor(options: AttachmentOptions) {
     this.options = options;
@@ -190,7 +215,22 @@ export class Attachment {
         ev: 'attached',
         session: sessionInfo,
         attachment_id: this.attachmentId,
-        capabilities: ['mobile_continuation', 'bounded_history', 'identity_fencing', 'delivery_receipts', 'soft_interrupt_ids', 'todo_state', 'file_read', 'archive_restore', 'models'],
+        capabilities: [
+          'mobile_continuation',
+          'bounded_history',
+          'identity_fencing',
+          'delivery_receipts',
+          'soft_interrupt_ids',
+          'todo_state',
+          'file_read',
+          'archive_restore',
+          'models',
+          'directory_browse',
+          'session_config',
+          'context_snapshot',
+          'image_input',
+          'changes',
+        ],
         continuation: true,
       },
       this.options.replyTo,
@@ -244,6 +284,7 @@ export class Attachment {
       total_messages: this.historyTotal,
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
+      ...(this.historyImages.length ? { images: this.historyImages } : null),
       ...(interrupted ? { interrupted_at_attach: true } : null),
       ...(recovery ? { recovery } : null),
     });
@@ -353,6 +394,13 @@ export class Attachment {
       case 'error': {
         const id = typeof event.id === 'number' ? event.id : -1;
         const message = typeof event.message === 'string' ? event.message : 'The server rejected the request.';
+        const configWaiter = this.configWaiters.get(id);
+        if (configWaiter) {
+          this.configWaiters.delete(id);
+          clearTimeout(configWaiter.timer);
+          configWaiter.resolve({ error: message });
+          return;
+        }
         if (this.completedRenameIds.delete(id)) return;
         if (this.orphanedRename?.id === id) {
           this.orphanedRename = null;
@@ -670,8 +718,68 @@ export class Attachment {
         this.closeConnection();
         return;
       }
+      case 'tokens': {
+        const input = typeof event.input === 'number' ? event.input : 0;
+        const output = typeof event.output === 'number' ? event.output : 0;
+        const cacheRead =
+          typeof event.cache_read_input === 'number' ? event.cache_read_input : 0;
+        const cacheCreate =
+          typeof event.cache_creation_input === 'number' ? event.cache_creation_input : 0;
+        this.tokenUsage = {
+          input,
+          output,
+          cacheRead,
+          cacheCreate,
+          at: Date.now(),
+        };
+        this.emitContextSnapshot();
+        return;
+      }
+      case 'model_changed': {
+        const id = typeof event.id === 'number' ? event.id : -1;
+        const model = typeof event.model === 'string' ? event.model : this.modelName;
+        this.modelName = model ?? this.modelName;
+        if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
+        if (typeof event.context_window === 'number') this.contextWindow = event.context_window;
+        this.currentEffort =
+          typeof event.reasoning_effort === 'string' ? event.reasoning_effort : null;
+        const waiter = this.configWaiters.get(id);
+        if (waiter) {
+          this.configWaiters.delete(id);
+          clearTimeout(waiter.timer);
+          waiter.resolve({
+            model: this.modelName,
+            contextWindow: this.contextWindow,
+            ...(typeof event.error === 'string' ? { error: event.error } : null),
+          });
+        }
+        this.emitConfig();
+        this.emitContextSnapshot();
+        return;
+      }
+      case 'reasoning_effort_changed': {
+        const id = typeof event.id === 'number' ? event.id : -1;
+        this.currentEffort =
+          typeof event.effort === 'string' ? event.effort : null;
+        const waiter = this.configWaiters.get(id);
+        if (waiter) {
+          this.configWaiters.delete(id);
+          clearTimeout(waiter.timer);
+          waiter.resolve({
+            effort: this.currentEffort,
+            ...(typeof event.error === 'string' ? { error: event.error } : null),
+          });
+        }
+        this.emitConfig();
+        return;
+      }
+      case 'side_pane_images': {
+        this.requestHistory();
+        return;
+      }
       case 'available_models_updated': {
         if (this.handleAuxEvent(event)) return;
+        this.emitConfig();
         return;
       }
       default:
@@ -733,6 +841,49 @@ export class Attachment {
     if (typeof event.server_version === 'string' && event.server_version) {
       this.daemonVersion = event.server_version;
     }
+    if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
+    if (typeof event.provider_model === 'string') this.modelName = event.provider_model;
+    if (typeof event.reasoning_effort === 'string' || event.reasoning_effort === null) {
+      this.currentEffort =
+        typeof event.reasoning_effort === 'string' ? event.reasoning_effort : null;
+    }
+    if (Array.isArray(event.available_models)) {
+      this.modelsList = event.available_models.filter(
+        (value): value is string => typeof value === 'string',
+      );
+    }
+    if (Array.isArray(event.images)) {
+      const bounded: Array<Record<string, unknown>> = [];
+      let bytes = 0;
+      for (const image of event.images) {
+        if (!image || typeof image !== 'object') continue;
+        const record = image as Record<string, unknown>;
+        const mediaType = typeof record.media_type === 'string' ? record.media_type : '';
+        const data = typeof record.data === 'string' ? record.data : '';
+        if (!mediaType || !data) continue;
+        const size = data.length;
+        if (size > 8 * 1024 * 1024 || bytes + size > MAX_HISTORY_IMAGE_BYTES) continue;
+        bytes += size;
+        bounded.push({
+          media_type: mediaType,
+          data,
+          label: typeof record.label === 'string' ? record.label : null,
+          alt: typeof record.alt === 'string' ? record.alt : null,
+          source:
+            record.source && typeof record.source === 'object'
+              ? (record.source as Record<string, unknown>).kind ?? 'tool_result'
+              : 'tool_result',
+          ...(record.anchor && typeof record.anchor === 'object'
+            ? { anchor: record.anchor }
+            : null),
+          ...(typeof record.history_message_index === 'number'
+            ? { history_message_index: record.history_message_index }
+            : null),
+        });
+      }
+      this.historyImages = bounded;
+      this.historyImageBytes = bytes;
+    }
     const messages = Array.isArray(event.messages) ? event.messages : [];
     const parsed = messages
       .map((message, index) => {
@@ -741,6 +892,7 @@ export class Attachment {
         const role = typeof record.role === 'string' ? record.role : '';
         const content = typeof record.content === 'string' ? record.content : '';
         if (!role) return null;
+        const split = role === 'assistant' ? splitReasoningMarkup(content) : null;
         const toolCalls = Array.isArray(record.tool_calls)
           ? record.tool_calls.filter((value): value is string => typeof value === 'string')
           : undefined;
@@ -754,7 +906,8 @@ export class Attachment {
         return {
           index,
           role,
-          content,
+          content: split?.content ?? content,
+          ...(split?.reasoning ? { reasoning: split.reasoning } : null),
           ...(toolCalls && toolCalls.length ? { tool_calls: toolCalls.slice(0, 20) } : null),
           ...(toolId && toolName
             ? {
@@ -772,6 +925,27 @@ export class Attachment {
       .filter((message): message is NonNullable<typeof message> => message !== null);
 
     const total = parsed.length;
+    // Some daemon paths emit an empty history frame after the authoritative
+    // one while an attachment is still settling. Never let that erase a
+    // transcript the server already delivered.
+    if (total === 0) {
+      if (this.history.length > 0) {
+        this.historyReceived = true;
+        return;
+      }
+      if (!this.emptyHistorySeen) {
+        // Attach can observe a transient empty history before the daemon has
+        // loaded the persisted transcript. Ask once more instead of publishing
+        // an empty authoritative window that hides readable history.
+        this.emptyHistorySeen = true;
+        this.historyReceived = true;
+        setTimeout(() => {
+          if (!this.closed && this.history.length === 0) this.requestHistory();
+        }, 300).unref?.();
+        return;
+      }
+    }
+    if (total > 0) this.emptyHistorySeen = false;
     const keep = Math.min(total, this.options.config.maxHistoryMessages);
     this.historyOffset = total - keep;
     // Parsed indexes are already absolute. Do not add the offset twice.
@@ -816,14 +990,31 @@ export class Attachment {
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
       has_older: bounded.baseIndex > 0,
+      ...(this.historyImages.length
+        ? {
+            images: this.historyImages.filter((image) => {
+              const boundary = image.history_message_index;
+              return typeof boundary !== 'number' || boundary >= bounded.baseIndex;
+            }),
+          }
+        : null),
     };
   }
 
-  sendMessage(content: string, clientMessageId: string): { accepted: boolean } {
+  sendMessage(
+    content: string,
+    clientMessageId: string,
+    images: Array<[string, string]> = [],
+  ): { accepted: boolean } {
     if (!this.connection.isOpen) return { accepted: false };
     const id = this.nextId();
     this.pending.set(id, { clientMessageId, sentAt: Date.now(), status: 'pending' });
-    this.connection.send({ type: 'message', id, content });
+    this.connection.send({
+      type: 'message',
+      id,
+      content,
+      ...(images.length ? { images } : null),
+    });
     if (this.options.config.faultAfterSend) {
       // Deterministic A05 harness: drop the attachment after the prompt is
       // written but before the daemon ack can be delivered to the phone.
@@ -832,9 +1023,19 @@ export class Attachment {
     return { accepted: true };
   }
 
-  softInterrupt(content: string, clientId: string): void {
+  softInterrupt(
+    content: string,
+    clientId: string,
+    images: Array<[string, string]> = [],
+  ): void {
     if (!this.connection.isOpen) return;
-    this.connection.send({ type: 'soft_interrupt', id: this.nextId(), content, client_id: clientId });
+    this.connection.send({
+      type: 'soft_interrupt',
+      id: this.nextId(),
+      content,
+      client_id: clientId,
+      ...(images.length ? { images } : null),
+    });
   }
 
   cancelSoftInterrupts(clientIds: string[]): void {
@@ -907,19 +1108,33 @@ export class Attachment {
     });
   }
 
-  models(): Promise<{ models: string[]; current: string | null }> {
+  models(): Promise<{
+    models: string[];
+    current: string | null;
+    efforts: string[];
+    currentEffort: string | null;
+  }> {
     return new Promise((resolve) => {
       if (!this.connection.isOpen) {
-        resolve({ models: [], current: null });
+        resolve({ models: [], current: null, efforts: [], currentEffort: null });
         return;
       }
       const id = this.nextId();
-      const timer = setTimeout(() => resolve({ models: [], current: null }), 4000);
+      const done = () =>
+        resolve({
+          models: this.modelsList,
+          current: this.modelName,
+          efforts: inferredEfforts(this.providerName, this.modelName),
+          currentEffort: this.currentEffort,
+        });
+      const timer = setTimeout(done, 4000);
       const previous = this.modelWaiter;
       this.modelWaiter = (models, current) => {
         clearTimeout(timer);
+        this.modelsList = models;
+        this.modelName = current;
         this.modelWaiter = previous;
-        resolve({ models, current });
+        done();
       };
       this.connection.send({ type: 'get_model_catalog', id, subscribe_usage_updates: false });
     });
@@ -927,9 +1142,111 @@ export class Attachment {
 
   private modelWaiter: ((models: string[], current: string | null) => void) | null = null;
 
-  setModel(model: string): void {
-    if (!this.connection.isOpen) return;
-    this.connection.send({ type: 'set_model', id: this.nextId(), model });
+  setModel(model: string): Promise<{
+    model: string | null;
+    effort: string | null;
+    contextWindow: number | null;
+    error?: string;
+  }> {
+    return new Promise((resolve) => {
+      if (!this.connection.isOpen) {
+        resolve({ model: null, effort: null, contextWindow: null, error: 'The session connection is not open.' });
+        return;
+      }
+      const id = this.nextId();
+      const timer = setTimeout(() => {
+        this.configWaiters.delete(id);
+        resolve({
+          model: this.modelName,
+          effort: this.currentEffort,
+          contextWindow: this.contextWindow,
+          error: 'The server did not confirm the model change.',
+        });
+      }, 12_000);
+      this.configWaiters.set(id, {
+        kind: 'model',
+        timer,
+        resolve: (value) => {
+          resolve({
+            model: value.model ?? this.modelName,
+            effort: value.effort ?? this.currentEffort,
+            contextWindow: value.contextWindow ?? this.contextWindow,
+            ...(value.error ? { error: value.error } : null),
+          });
+        },
+      });
+      this.connection.send({ type: 'set_model', id, model });
+    });
+  }
+
+  setEffort(effort: string | null): Promise<{ effort: string | null; error?: string }> {
+    return new Promise((resolve) => {
+      if (!effort) {
+        resolve({ effort: this.currentEffort });
+        return;
+      }
+      if (!this.connection.isOpen) {
+        resolve({ effort: this.currentEffort, error: 'The session connection is not open.' });
+        return;
+      }
+      const id = this.nextId();
+      const timer = setTimeout(() => {
+        this.configWaiters.delete(id);
+        resolve({
+          effort: this.currentEffort,
+          error: 'The server did not confirm the effort change.',
+        });
+      }, 12_000);
+      this.configWaiters.set(id, {
+        kind: 'effort',
+        timer,
+        resolve: (value) => {
+          resolve({
+            effort: value.effort ?? this.currentEffort,
+            ...(value.error ? { error: value.error } : null),
+          });
+        },
+      });
+      this.connection.send({
+        type: 'set_reasoning_effort',
+        id,
+        ...(effort ? { effort } : null),
+      });
+    });
+  }
+
+  contextSnapshot(): Record<string, unknown> {
+    const usage = this.tokenUsage;
+    const used = usage
+      ? usage.input + usage.cacheRead + usage.cacheCreate
+      : null;
+    return {
+      ev: 'context_snapshot',
+      ...this.identity(),
+      used_tokens: used,
+      limit_tokens: this.contextWindow,
+      basis: usage ? 'last_request' : 'unknown',
+      model: this.modelName,
+      observed_at_ms: usage?.at ?? Date.now(),
+    };
+  }
+
+  private emitContextSnapshot(): void {
+    if (!this.ready || !this.historyReceived) return;
+    this.options.emit(this.contextSnapshot());
+  }
+
+  private emitConfig(): void {
+    if (!this.ready || !this.historyReceived) return;
+    this.options.emit({
+      ev: 'session_config',
+      session_id: this.sessionId,
+      model: this.modelName,
+      effort: this.currentEffort,
+      efforts: inferredEfforts(this.providerName, this.modelName),
+      confirmed: true,
+      source: 'server',
+    });
   }
 
   /** Handle the model catalog event that the generic switch ignores. */
@@ -939,6 +1256,8 @@ export class Attachment {
         ? event.available_models.filter((value): value is string => typeof value === 'string')
         : [];
       const current = typeof event.provider_model === 'string' ? event.provider_model : null;
+      if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
+      if (typeof event.reasoning_effort === 'string') this.currentEffort = event.reasoning_effort;
       this.modelWaiter(models, current);
       return true;
     }
@@ -948,6 +1267,8 @@ export class Attachment {
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
+    for (const waiter of this.configWaiters.values()) clearTimeout(waiter.timer);
+    this.configWaiters.clear();
     // Closing the transport is not cancellation: the daemon keeps the turn
     // because the subscribe opted into continuation.
     this.connection.close();
@@ -959,12 +1280,78 @@ export class Attachment {
   }
 }
 
+/**
+ * Same ordered ladder JCode exposes to its own remote TUI. The adapter only
+ * reports a substrate; undefined stays an empty ladder, never a guess.
+ */
+function inferredEfforts(
+  providerName: string | null,
+  modelName: string | null,
+): string[] {
+  const provider = (providerName ?? '').toLowerCase();
+  const model = (modelName ?? '').toLowerCase();
+  const openai = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'swarm'];
+  if (provider.includes('openrouter')) {
+    return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'swarm'];
+  }
+  if (provider.includes('deepseek') || model.includes('deepseek')) {
+    return ['none', 'low', 'medium', 'high', 'max', 'swarm'];
+  }
+  if (provider.includes('z.ai') || provider === 'zai' || model.startsWith('glm-')) {
+    return openai;
+  }
+  const openaiModel =
+    model.startsWith('gpt-') ||
+    model.startsWith('o1') ||
+    model.startsWith('o3') ||
+    model.startsWith('o4') ||
+    model.startsWith('o5');
+  const anthropic =
+    provider.includes('anthropic') || provider.includes('claude') || model.startsWith('claude-');
+  if (anthropic) {
+    return ['none', 'low', 'medium', 'high', 'xml', 'max', 'swarm'].filter(
+      (value) => value !== 'xml',
+    );
+  }
+  if (provider.includes('openai') || provider.includes('codex') || openaiModel) {
+    return openai;
+  }
+  return [];
+}
+
 function safeParse(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown;
   } catch {
     return raw;
   }
+}
+
+/**
+ * JCode persists provider reasoning as `*\u2063line\u2063*` emphasis runs. The
+ * mobile UI styles reasoning itself, so recover the text and keep it out of
+ * normal prose, Copy and Hidden surfaces.
+ */
+export function splitReasoningMarkup(content: string): {
+  content: string;
+  reasoning: string;
+} {
+  const kept: string[] = [];
+  const reasoning: string[] = [];
+  for (const line of content.split('\n')) {
+    const match = /^\*\u2063([\s\S]*)\u2063\*\s*$/.exec(line.trimEnd());
+    if (!match) {
+      kept.push(line);
+      continue;
+    }
+    reasoning.push(
+      match[1].replace(/\\([*_`\[\]<>&~|$])/g, (_whole, char: string) => char),
+    );
+  }
+  return {
+    content: kept.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+    reasoning: reasoning.join('\n').trim(),
+  };
 }
 
 function parseToolInput(raw: string): unknown {

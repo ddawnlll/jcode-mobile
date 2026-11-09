@@ -27,12 +27,15 @@ test.describe('paired mobile app', () => {
 
     // The reply is a real provider turn against the isolated staging daemon.
     await expect(
-      page.locator('[aria-label^="jcode said:"]').filter({ hasText: 'E2E-OK' }).first(),
+      page.locator('[data-testid^="assistant-message-"]').filter({ hasText: 'E2E-OK' }).first(),
     ).toBeVisible({ timeout: 120_000 });
 
     // The user instruction is committed to authoritative history with the turn.
     await expect(
-      page.locator('[aria-label^="You said:"]').filter({ hasText: 'E2E-OK' }).first(),
+      page
+        .locator('[data-testid^="user-message-"]')
+        .first()
+        .getByText('Reply with exactly E2E-OK', { exact: false }),
     ).toBeVisible({ timeout: 30_000 });
 
     await screenshot(page, 'conversation');
@@ -69,10 +72,19 @@ test.describe('paired mobile app', () => {
     await page.goto('/');
     await expectSessions(page);
 
-    // The plan session is the most recent one and has recorded tool activity.
-    const firstSession = page.locator('[data-testid^="session-"]').first();
-    await expect(firstSession).toBeVisible();
-    await firstSession.click();
+    // The app restores the last exact session on launch. Give that restore a
+    // moment to win; only click the row if the list is still showing.
+    await page.waitForTimeout(2_000);
+    if (
+      await page
+        .getByRole('heading', { name: 'Your sessions' })
+        .isVisible()
+        .catch(() => false)
+    ) {
+      const firstSession = page.locator('[data-testid^="session-"]').first();
+      await expect(firstSession).toBeVisible();
+      await firstSession.click();
+    }
     await expectConversation(page);
 
     const dock = page.getByRole('button', { name: /Open session work/ });

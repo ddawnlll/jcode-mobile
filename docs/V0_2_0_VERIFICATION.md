@@ -1,0 +1,179 @@
+# v0.2.0 verification
+
+Updated: 2026-11-09. This file records only commands that actually ran. A native
+gate is not closed by a browser or Playwright result.
+
+## Candidate
+
+| Item | Value |
+| --- | --- |
+| Branch | `feature/v0.2.0-tidal-glass` |
+| Base | `cac75d0` (PR #12 merge) |
+| Candidate SHA | `97f6f77` (review fixes tested; final commit is docs-only) |
+| Pull request | https://github.com/ddawnlll/jcode-mobile/pull/13 |
+| Bun | 1.4.4 (`/home/quant/local/bun/bin/bun`) |
+| Host | Debian 13 x86_64 VPS, Chromium headless shell 1254 |
+| JCode | 0.99.1 (`7206efd0c`) |
+| Staging | `.staging/jcode`, adapter `127.0.0.1:7645`, web `127.0.0.1:8091` |
+
+## Implementation decisions
+
+- `src/design/themes.json` is the complete 11-family record copied from the
+  public v0.2.0 snapshot. `src/design/themes.ts` validates it; `tokens.ts`
+  derives the executable Tidal palettes from it. Screen files define no palette.
+- Theme family, System/Light/Night, Effects, and reasoning display persist
+  independently in SQLite prefs. Reasoning visibility is presentation only.
+- Tidal Glass uses `expo-blur` on native and an opaque sibling on web, Effects:
+  Reduced, or Reduce Transparency. Chrome use is bounded to composer, menus,
+  context, and inspectors.
+- The rich renderer is `markdown-it` + `markdown-it-footnote` + a typed AST
+  adapter. GFM tables, task lists, nested lists, quotes, footnotes, links,
+  images, literal fenced code, and inline/display math are parsed as data.
+  `highlight.js` core registers an explicit language set. Math is rendered
+  natively with fraction/root/sup/sub/matrix/aligned/cases support and a
+  source fallback; no WebView or network asset is used.
+- Message actions provide exact Markdown and readable-text Copy. Hidden
+  reasoning is excluded from both.
+- Images are bounded `[media_type, base64]` tuples on the daemon wire. The
+  composer sends at most four images (8 MiB base64 each, 20 MiB total). Markdown
+  images load external URLs only on intent; attached and demo images render
+  directly.
+- New session is a create → configure → confirm → first-instruction
+  transaction. The returned session is retained on partial failure; a second
+  Start reuses it instead of creating a duplicate.
+- Directory browsing is adapter-side, realpath-scoped to configured roots, with
+  paging, hidden-folder toggle, canonical paths, and typed errors. No shell.
+- The adapter is additive: `directory_browse`, `session_config`,
+  `context_snapshot`, `image_input`, `changes`, model-specific effort, and
+  bounded images. Existing continuation, fencing, delivery, and rename
+  behavior is unchanged.
+- Bun is the sole host runtime and package manager for this repository. The
+  adapter runs under Bun; `typecheck` and `lint` run as `bun --bun`, so tool
+  shebangs cannot select Node. CI uses `oven-sh/setup-bun` with
+  `bun install --frozen-lockfile`.
+- The welcome is a 1.6-second character-grid assembly: an ASCII halftone
+  torus, contour field and opening noise share one monospaced lattice, then the
+  torus keeps a slow turn while focused. Reduce Motion gets the settled frame.
+- Android uses `softwareKeyboardLayoutMode: 'resize'`. The conversation screen
+  applies its measured IME inset on iOS only, so there is one inset owner.
+
+## Commands and results
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Frozen install | `bun install --frozen-lockfile` | PASS |
+| Types | `bun run typecheck` | PASS |
+| Lint | `bun run lint` | PASS (one pre-existing warning in `registry.ts`) |
+| Unit/RNTL | `bun run test` | PASS, 10 suites / 75 tests |
+| Adapter contract | `bun run adapter:test` | PASS, 16 tests |
+| Web export | `CI=1 bunx --bun expo export -p web` | PASS |
+| Playwright | `bun run e2e -- --reporter=line --timeout=90000` | PASS, 20/20 tests (3.1 m) |
+| Clean environment | `bun install --frozen-lockfile` + check + adapter + export in a copied tree without `node_modules` | PASS; install 1.9 s, check 154.8 s, adapter 3.0 s, export 8.2 s |
+| Bun-only PATH | `PATH` contains Bun and core system binaries only | PASS; no `node`/`npm`; typecheck, lint, 10 Jest suites / 75 tests, 16 adapter tests |
+| Expo Android prebuild | `bunx --bun expo prebuild --platform android --no-install` | PASS; generated `nodeExecutableAndArgs.set(["bun", "--bun"])`, five direct `node` calls rewritten, manifest `adjustResize` |
+| CI | GitHub Actions `check.yml` run `42629879571` | PASS (`js`); `android-build` skipped by workflow design |
+| Android release APK | CI `check.yml` dispatch `42634192446` | PASS; 63 MiB, `arm64-v8a` + `armeabi-v7a`, embedded JS, debug-signed |
+| Android debug CI | `gh workflow run check.yml` at `56f13c9` | PASS; `assembleDebug`, 15 m 52 s, generated Gradle uses Bun |
+| Android release APK | `gh workflow run check.yml -f release=true` at `9fe0c7a` | PASS; 63 MiB, SHA-256 `016890e4…2351`, embedded `assets/index.android.bundle` |
+| iOS release | `bash scripts/build-ios-simulator.sh` | NOT_RUN (macOS gate) |
+
+### Bun vs Node adapter baseline
+
+Same host, same adapter source, disposable state, `/health` on loopback. Three
+runs after one warmup; install time reported separately from runtime metrics.
+
+| Runtime | Version | Cold readiness | Idle RSS | p50 | p95 |
+| --- | --- | --- | --- | --- | --- |
+| Bun | 1.4.4 | 197–331 ms | ~44.1 MB | 0.54–0.82 ms | 1.96–6.31 ms |
+| Node | v26.3.0 | 765–952 ms | ~114 MB | 0.82 ms | 1.21–7.17 ms |
+
+Bun cuts cold readiness by roughly 60–70% and idle RSS by roughly 60%, with no
+material steady-state p95 regression in this fixture. The measurement is an
+HTTP readiness/latency fixture, not a provider streaming benchmark. Rollback is
+the previous release: `cac75d0` with `npm ci` and the Node adapter command.
+
+## Playwright coverage
+
+## Review round: PR #13 at `3abd67d`
+
+| Finding | Change | Evidence |
+| --- | --- | --- |
+| P1 first instruction could reach another session | `configureSessionFor(sessionId, …)` rechecks client generation, profile and exact session after every await. `sendToSession` passes `expectedSessionId`. New Session finishes against the created id, and Use server defaults skips rejected choices instead of resubmitting them. | `controller-reliability.test.ts`: delayed A confirmation cannot mutate B; switched send is refused; null defaults send no `set_model` |
+| P1 Bun subprocess could fall back to Node | Package scripts use `bun --bun`. `scripts/bun-shims` plus `NODE_BINARY` cover Gradle/Expo subprocesses. `plugins/withBunGradle` sets `nodeExecutableAndArgs` and rewrites the five direct `node` calls in Expo's generated `react {}` block. | Clean Bun-only PATH check; fresh Android prebuild inspection; full release build NOT_RUN (no SDK/JDK) |
+| P2 Android keyboard inset applied twice | Android declares `softwareKeyboardLayoutMode: 'resize'`; the conversation screen applies its measured IME inset on iOS only. | Generated manifest `adjustResize`; native keyboard check NOT_RUN |
+| P2 malformed math and protocol-relative image | Display/inline math scans are capped at 400 lines, 64 KiB blocks and 4 KiB inline spans. Images classify `data:`/`file:`/`blob:` as embedded, `http(s)` and `//` as tap-to-load, and reject other schemes. | 20 KB / 4,000-block regression; deterministic 400-line bound test; `message-image.test.tsx` |
+| Welcome was still fade-and-slide | The v0.2.1 character-grid prototype is integrated as a 1.6 s ASCII torus assembly, with a settled Reduce Motion frame and a paused offscreen/idle loop. | `asciiTorus.test.ts`; `welcome-ascii-opening`, `welcome-ascii-reveal`, `welcome-light`, `welcome-night-dracula`, `welcome-reduced-motion` |
+
+Reports, traces, and screenshots live under `.staging/e2e/`:
+
+- report: `.staging/e2e/report/index.html`
+- traces: `.staging/e2e/results/**/trace.zip`
+- screenshots: `.staging/e2e/screens/`
+- failure screenshots: `.staging/e2e/results/**/test-failed-1.png`
+
+Committed visual evidence from the running web build:
+
+- `docs/evidence/v020/welcome-light.png`
+- `docs/evidence/v020/welcome-night-dracula.png`
+- `docs/evidence/v020/sessions-night.png`
+- `docs/evidence/v020/conversation-rich-night.png`
+- `docs/evidence/v020/conversation-math-code.png`
+- `docs/evidence/v020/conversation-work-rail.png`
+- `docs/evidence/v020/context-sheet.png`
+- `docs/evidence/v020/appearance-screen.png`
+- `docs/evidence/v020/changes-sheet.png`
+- `docs/evidence/v020/welcome-ascii-opening.png`
+- `docs/evidence/v020/welcome-ascii-reveal.png`
+- `docs/evidence/v020/welcome-reduced-motion.png`
+
+The suite covers iPhone 14 (390-wide Chromium), Pixel 7 (412-wide), and a
+320-wide compact project. Viewport and keyboard-focus assertions are web
+coverage, not native IME evidence.
+
+Final run: 20 passed (3.1 m). It includes the real staging daemon/provider smoke
+(session creation, E2E-OK reply, todo Plan tab), connect/retry/Forget/recovery,
+title persistence offline, the v0.2 demo/theme/thinking/context/work/find/
+changes/copy/image/math flows on both mobile widths, and the 320-wide reflow.
+
+| Requirement | Evidence |
+| --- | --- |
+| Welcome, live theme preview, Connect/Preview | `v020.spec.ts` welcome flow; `connect.spec.ts` unpaired fields and setup disclosure |
+| Pairing rejected/retry, switching, offline recovery, Forget | `connect.spec.ts`, `recovery.spec.ts`, `navigation.spec.ts` |
+| Pinned/recent projects and sessions, search, quick switch | `v020.spec.ts` project scope and pinned preview session |
+| Folder browsing, canonical path, recent, permission/error | `directory-images.test.ts`; `DirectoryBrowser` through the real adapter |
+| New session model/effort/first instruction, partial failure | `helpers.createSession`, `title.spec.ts`, `v020.spec.ts` configuration sheet |
+| Shared composer, draft/selection, short viewport | `v020.spec.ts` composer flow and short viewport |
+| Loading/cache/reconnect/exact session | `recovery.spec.ts`, `title.spec.ts`, pending loader assertions |
+| Context used/limit/remaining/basis/freshness | `v020.spec.ts` context sheet (`48,600 / 128,000 / 38% / 79,400`) |
+| Hidden/Compact/Expanded reasoning | `v020.spec.ts` thinking modes; Hidden excludes reasoning text |
+| CommonMark/GFM tables, tasks, footnotes, code, math | `markdown.test.ts`; `v020.spec.ts` table, footnote, code, math blocks |
+| Malformed math bound | `markdown.test.ts`: 20 KB / 4,000 unclosed blocks; close beyond 400 lines is not math |
+| External image intent | `message-image.test.tsx`: `//` requires tap; unsupported schemes do not load |
+| 1.6 s ASCII welcome | `asciiTorus.test.ts`; `welcome-ascii-*` evidence; Reduce Motion still frame |
+| Copy message text and exact Markdown | `v020.spec.ts` clipboard read; `MessageActions` |
+| Images in messages and Markdown | `v020.spec.ts` `message-image`; embedded demo PNG data |
+| Code Copy/Wrap/Full view | `v020.spec.ts` code block controls |
+| Inline Work rail and Work detail | `v020.spec.ts` work rail and Work sheet; `app.spec.ts` historical work |
+| Menus, Find, Changes | `v020.spec.ts` session menu, find next/close, changes diff evidence |
+| 22 palettes, independent appearance persistence | `v020.spec.ts` eleven-family loop, Light/Night, reload persistence |
+| 320-wide and 200% text | `narrow.spec.ts`; 200% text remains a native/manual gate |
+| Reduced motion/transparency | ASCII settled still frame in Playwright `reduce`; native Reduce Motion/Transparency NOT_RUN |
+
+## Unresolved gates
+
+- Real Android/iOS IME, edge-to-edge, safe-area, keyboard dismissal, and
+  TalkBack/VoiceOver passes are NOT_RUN. They require physical/emulated devices
+  and are not claimed from web results.
+- Native release-build scroll/frame-time/peak-memory results are NOT_RUN.
+- Glass compositing contrast on varied native backdrops is NOT_RUN; opaque
+  token contrast is recorded by the design source, not re-certified here.
+- The Android prebuild configuration is verified. Both `assembleDebug` and
+  `assembleRelease` pass in CI with the Bun Gradle configuration; the release
+  APK contains an embedded Hermes bundle and both phone ABIs. A Node-free host
+  proof, APK install smoke test, and native device checks remain NOT_RUN; the
+  iOS build remains a macOS gate.
+- F16 Work-memory/virtualization, F20 registry coordination, and F22 native
+  focus/accessibility are characterized by existing tests but not fully closed
+  for 0.2.0.
+- Playwright results are web coverage at mobile viewports. They do not certify
+  native behavior.

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * Test-only second client for multi-client checks (reading anchor, guidance
  * bursts). Pairs once with a short-lived code, stores the token outside the

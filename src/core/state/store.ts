@@ -1,6 +1,15 @@
 import { create } from 'zustand';
 
-import type { HistoryMessage, SessionInfo, TodoSnapshot } from '../protocol/frames';
+import type {
+  HistoryMessage,
+  SessionInfo,
+  TodoSnapshot,
+} from '../protocol/frames';
+import type {
+  AppearancePreference,
+  EffectsPreference,
+  ReasoningDisplay,
+} from '../../design/themes';
 
 export type ConnectionState =
   | 'cached'
@@ -30,6 +39,7 @@ export interface DeliveryRecord {
   error?: string;
   createdAt: number;
   guidance?: boolean;
+  images?: ComposerImage[];
 }
 
 export interface ToolRow {
@@ -56,6 +66,60 @@ export interface ExecutionState {
   phase?: string;
 }
 
+export interface ProjectRecord {
+  id: string;
+  serverId: string;
+  path: string;
+  name: string;
+  pinned: boolean;
+  addedAt: number;
+  lastUsedAt: number;
+}
+
+export interface SessionConfigState {
+  model: string | null;
+  effort: string | null;
+  efforts: string[];
+  modelConfirmed: boolean;
+  effortConfirmed: boolean;
+  source: 'server' | 'default' | 'pending' | 'unknown';
+  pendingModel: string | null;
+  pendingEffort: string | null;
+  applying: boolean;
+  error: string | null;
+  observedAt: number;
+}
+
+export interface ContextSnapshot {
+  usedTokens: number | null;
+  limitTokens: number | null;
+  basis: 'last_request' | 'current_prompt' | 'unknown';
+  model: string | null;
+  observedAt: number;
+  freshness: 'current' | 'stale' | 'unknown';
+  source: 'adapter' | 'cached';
+}
+
+export interface ChangeRecord {
+  key: string;
+  callId: string;
+  path: string;
+  operation: 'edit' | 'write' | 'delete' | 'rename' | 'unknown';
+  added?: number;
+  removed?: number;
+  diff?: string;
+  evidence: 'diff' | 'path';
+}
+
+export interface ComposerImage {
+  id: string;
+  uri: string;
+  mediaType: string;
+  name: string;
+  base64?: string;
+  alt?: string;
+}
+
 export interface ConversationState {
   serverId: string | null;
   sessionId: string | null;
@@ -71,7 +135,14 @@ export interface ConversationState {
   hasOlder: boolean;
   provisionalText: string;
   reasoning: string;
+  /** Evidenced thinking phase; separate from ordinary tool work. */
+  reasoningPhase: 'none' | 'thinking' | 'working';
+  reasoningStartedAt: number | null;
+  reasoningDurationSecs: number | null;
   tools: ToolRow[];
+  changes: ChangeRecord[];
+  config: SessionConfigState;
+  context: ContextSnapshot | null;
   execution: ExecutionState;
   delivery: DeliveryRecord[];
   pendingSoftInterrupts: number;
@@ -94,6 +165,8 @@ export interface InventoryState {
   partial: boolean;
   limit: number;
   includeArchived: boolean;
+  pinnedSessionIds: string[];
+  projects: ProjectRecord[];
   /** Archived session ids recently restored, for undo. */
   pendingRestore: { session: SessionInfo; at: number } | null;
 }
@@ -119,7 +192,11 @@ export interface AppState {
   };
   inventory: InventoryState;
   conversation: ConversationState;
-  appearance: 'system' | 'light' | 'night';
+  appearance: AppearancePreference;
+  themeFamily: string;
+  effects: EffectsPreference;
+  reasoningDisplay: ReasoningDisplay;
+  demo: boolean;
   privacyPreview: boolean;
   /** A pairing deep link awaiting consumption by the Connect screen. */
   pendingPairLink: string | null;
@@ -127,6 +204,12 @@ export interface AppState {
     setBootstrap: (value: AppState['bootstrap'], error?: string | null) => void;
     setProfile: (profileId: string | null, deviceName: string) => void;
     setAppearance: (value: AppState['appearance']) => void;
+    setThemeFamily: (value: string) => void;
+    setEffects: (value: AppState['effects']) => void;
+    setReasoningDisplay: (value: AppState['reasoningDisplay']) => void;
+    setDemo: (value: boolean) => void;
+    setProjects: (value: ProjectRecord[]) => void;
+    setPinnedSessions: (value: string[]) => void;
     setPrivacyPreview: (value: boolean) => void;
     setPendingPairLink: (value: string | null) => void;
   };
@@ -146,7 +229,25 @@ const emptyConversation: ConversationState = {
   hasOlder: false,
   provisionalText: '',
   reasoning: '',
+  reasoningPhase: 'none',
+  reasoningStartedAt: null,
+  reasoningDurationSecs: null,
   tools: [],
+  changes: [],
+  config: {
+    model: null,
+    effort: null,
+    efforts: [],
+    modelConfirmed: false,
+    effortConfirmed: false,
+    source: 'unknown',
+    pendingModel: null,
+    pendingEffort: null,
+    applying: false,
+    error: null,
+    observedAt: 0,
+  },
+  context: null,
   execution: { kind: 'unknown', label: 'Status unavailable', observedAt: 0, turnId: 0 },
   delivery: [],
   pendingSoftInterrupts: 0,
@@ -185,16 +286,29 @@ export const useAppStore = create<AppState>()((set) => ({
     partial: false,
     limit: 50,
     includeArchived: false,
+    pinnedSessionIds: [],
+    projects: [],
     pendingRestore: null,
   },
   conversation: emptyConversation,
   appearance: 'system',
+  themeFamily: 'tidal',
+  effects: 'auto',
+  reasoningDisplay: 'compact',
+  demo: false,
   privacyPreview: true,
   pendingPairLink: null,
   actions: {
     setBootstrap: (value, error = null) => set({ bootstrap: value, bootstrapError: error }),
     setProfile: (profileId, deviceName) => set({ profileId, deviceName }),
     setAppearance: (value) => set({ appearance: value }),
+    setThemeFamily: (value) => set({ themeFamily: value }),
+    setEffects: (value) => set({ effects: value }),
+    setReasoningDisplay: (value) => set({ reasoningDisplay: value }),
+    setDemo: (value) => set({ demo: value }),
+    setProjects: (value) => set((state) => ({ inventory: { ...state.inventory, projects: value } })),
+    setPinnedSessions: (value) =>
+      set((state) => ({ inventory: { ...state.inventory, pinnedSessionIds: value } })),
     setPrivacyPreview: (value) => set({ privacyPreview: value }),
     setPendingPairLink: (value) => set({ pendingPairLink: value }),
   },
