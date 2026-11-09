@@ -1001,7 +1001,7 @@ function ConfigStrip({
 function UserMessage({ message }: { message: HistoryMessage }) {
   const { colors } = useTheme();
   return (
-    <View style={styles.userRow}>
+    <View style={styles.userRow} testID={`user-message-${message.index}`}>
       <View style={[styles.userBubble, { backgroundColor: colors.raised }]}>
         <Text variant="caption" color="muted" style={{ marginBottom: space.xxs }}>
           You

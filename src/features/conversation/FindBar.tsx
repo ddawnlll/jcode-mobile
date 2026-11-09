@@ -26,53 +26,57 @@ export function FindBar({
   const { colors } = useTheme();
   return (
     <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.line }]} testID="find-bar">
-      <SearchIcon size={18} color={colors.muted} />
-      <TextInput
-        accessibilityLabel="Find in conversation"
-        value={value}
-        onChangeText={onChange}
-        placeholder="Find in conversation"
-        placeholderTextColor={colors.muted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={[styles.input, { color: colors.ink }]}
-        testID="find-input"
-      />
-      <Text variant="caption" color="muted" style={{ minWidth: 58, textAlign: 'right' }}>
-        {value.trim() ? `${count === 0 ? 0 : index + 1} of ${count}` : 'Loaded'}
-      </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Previous match"
-        onPress={onPrevious}
-        disabled={count === 0}
-        style={styles.action}
-        testID="find-previous"
-      >
-        <Text variant="caption" color={count === 0 ? 'muted' : 'brand'}>
-          Prev
+      <View style={styles.row}>
+        <SearchIcon size={18} color={colors.muted} />
+        <TextInput
+          accessibilityLabel="Find in conversation"
+          value={value}
+          onChangeText={onChange}
+          placeholder="Find in conversation"
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[styles.input, { color: colors.ink }]}
+          testID="find-input"
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close find"
+          onPress={onClose}
+          style={styles.action}
+        >
+          <CloseIcon size={18} color={colors.muted} />
+        </Pressable>
+      </View>
+      <View style={styles.row}>
+        <Text variant="caption" color="muted" style={{ flex: 1 }}>
+          {value.trim() ? `${count === 0 ? 0 : index + 1} of ${count}` : 'Loaded history'}
         </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Next match"
-        onPress={onNext}
-        disabled={count === 0}
-        style={styles.action}
-        testID="find-next"
-      >
-        <Text variant="caption" color={count === 0 ? 'muted' : 'brand'}>
-          Next
-        </Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close find"
-        onPress={onClose}
-        style={styles.action}
-      >
-        <CloseIcon size={18} color={colors.muted} />
-      </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous match"
+          onPress={onPrevious}
+          disabled={count === 0}
+          style={styles.action}
+          testID="find-previous"
+        >
+          <Text variant="caption" color={count === 0 ? 'muted' : 'brand'}>
+            Prev
+          </Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next match"
+          onPress={onNext}
+          disabled={count === 0}
+          style={styles.action}
+          testID="find-next"
+        >
+          <Text variant="caption" color={count === 0 ? 'muted' : 'brand'}>
+            Next
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -80,15 +84,16 @@ export function FindBar({
 const styles = StyleSheet.create({
   bar: {
     minHeight: target,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xxs,
+    flexDirection: 'column',
+    gap: 0,
     borderWidth: 1,
     borderRadius: radius.control,
     marginHorizontal: space.lg,
     marginBottom: space.xs,
     paddingHorizontal: space.sm,
+    paddingVertical: space.xxs,
   },
+  row: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: space.xxs },
   input: { flex: 1, minHeight: target, fontSize: 16, fontFamily: 'HankenGrotesk-Regular' },
   action: { minWidth: 44, minHeight: target, alignItems: 'center', justifyContent: 'center' },
 });

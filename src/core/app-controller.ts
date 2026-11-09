@@ -2665,7 +2665,7 @@ export class AppController {
         );
         if (reply.ev === 'error') throw new Error(reply.message);
       }
-      if (input.effort !== undefined) {
+      if (input.effort !== undefined && input.effort !== null) {
         const reply = await client.request(
           { req: 'set_effort', session_id: sessionId, effort: input.effort },
           15_000,

@@ -1159,6 +1159,10 @@ export class Attachment {
 
   setEffort(effort: string | null): Promise<{ effort: string | null; error?: string }> {
     return new Promise((resolve) => {
+      if (!effort) {
+        resolve({ effort: this.currentEffort });
+        return;
+      }
       if (!this.connection.isOpen) {
         resolve({ effort: this.currentEffort, error: 'The session connection is not open.' });
         return;

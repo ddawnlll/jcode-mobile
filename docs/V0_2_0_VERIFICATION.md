@@ -9,7 +9,7 @@ gate is not closed by a browser or Playwright result.
 | --- | --- |
 | Branch | `feature/v0.2.0-tidal-glass` |
 | Base | `cac75d0` (PR #12 merge) |
-| Candidate SHA | filled at handoff |
+| Candidate SHA | `b9cfa0d` (updated if follow-up commits land) |
 | Bun | 1.4.4 (`/home/quant/local/bun/bin/bun`) |
 | Host | Debian 13 x86_64 VPS, Chromium headless shell 1254 |
 | JCode | 0.99.1 (`7206efd0c`) |
@@ -58,10 +58,11 @@ gate is not closed by a browser or Playwright result.
 | Types | `bun run typecheck` | PASS |
 | Lint | `bun run lint` | PASS (one pre-existing warning in `registry.ts`) |
 | Unit/RNTL | `bun run test` | PASS, 8 suites / 64 tests |
-| Adapter contract | `bun run adapter:test` | PASS, 15 tests |
+| Adapter contract | `bun run adapter:test` | PASS, 16 tests |
 | Web export | `CI=1 bunx --bun expo export -p web` | PASS |
 | Playwright | `bun run e2e` | see latest section |
-| Clean environment | `bun install --frozen-lockfile` + check + adapter + export in a copied tree without `node_modules` | see `clean-verify.log` |
+| Clean environment | `bun install --frozen-lockfile` + check + adapter + export in a copied tree without `node_modules` | PASS; install 1.9 s, check 154.8 s, adapter 3.0 s, export 8.2 s |
+| Bun-only PATH | same checks with `PATH` excluding Node/npm/npx | PASS; check 154.4 s, adapter 16 tests, export 6.3 s |
 | Android release | `bash scripts/build-android-release.sh` | NOT_RUN this session (no SDK/JDK on VPS) |
 | iOS release | `bash scripts/build-ios-simulator.sh` | NOT_RUN (macOS gate) |
 
@@ -88,6 +89,18 @@ Reports, traces, and screenshots live under `.staging/e2e/`:
 - traces: `.staging/e2e/results/**/trace.zip`
 - screenshots: `.staging/e2e/screens/`
 - failure screenshots: `.staging/e2e/results/**/test-failed-1.png`
+
+Committed visual evidence from the running web build:
+
+- `docs/evidence/v020/welcome-light.png`
+- `docs/evidence/v020/welcome-night-dracula.png`
+- `docs/evidence/v020/sessions-night.png`
+- `docs/evidence/v020/conversation-rich-night.png`
+- `docs/evidence/v020/conversation-math-code.png`
+- `docs/evidence/v020/conversation-work-rail.png`
+- `docs/evidence/v020/context-sheet.png`
+- `docs/evidence/v020/appearance-screen.png`
+- `docs/evidence/v020/changes-sheet.png`
 
 The suite covers iPhone 14 (390-wide Chromium), Pixel 7 (412-wide), and a
 320-wide compact project. Viewport and keyboard-focus assertions are web

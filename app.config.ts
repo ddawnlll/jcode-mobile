@@ -18,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.jcodemobile.app',
-    buildNumber: '1',
+    buildNumber: '2',
     infoPlist: {
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: false,
@@ -33,7 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.jcodemobile.app',
-    versionCode: 1,
+    versionCode: 2,
     predictiveBackGestureEnabled: true,
     adaptiveIcon: {
       backgroundColor: '#F3F6F5',

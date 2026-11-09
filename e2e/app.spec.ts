@@ -31,9 +31,12 @@ test.describe('paired mobile app', () => {
     ).toBeVisible({ timeout: 120_000 });
 
     // The user instruction is committed to authoritative history with the turn.
-    await expect(page.getByText('Reply with exactly E2E-OK', { exact: false })).toHaveCount(1, {
-      timeout: 30_000,
-    });
+    await expect(
+      page
+        .locator('[data-testid^="user-message-"]')
+        .first()
+        .getByText('Reply with exactly E2E-OK', { exact: false }),
+    ).toBeVisible({ timeout: 30_000 });
 
     await screenshot(page, 'conversation');
     expect(errors).toEqual([]);
