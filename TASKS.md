@@ -64,3 +64,20 @@ Status: DONE / DOING / TODO / BLOCKED / FAIL, with `NOT_RUN` and `PARTIAL` for v
 - Live VPS (`v7-remote`) unreachable: SSH resets. Live-VPS acceptance remains BLOCKED; isolated local staging used.
 - Physical iOS device and Samsung A34 not attached: physical performance/battery/manual screen-reader checks NOT_RUN.
 - The manual screen-reader pass remains NOT_RUN; A06, A09, and performance are PARTIAL. A05/A07/A08/A10/A15/A16 are now PASS.
+
+## Phase 6 — v0.1.4 reliability (#2–#11)
+
+Status is DONE only with evidence in `docs/V0_1_4_VERIFICATION.md`.
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 6.1 | Connection ownership, retry intent, attempt deadline (#2, #4) | DONE | Fake-time controller regressions; late A failure cannot mutate B |
+| 6.2 | Foreground health, adapter/daemon distinction, contact timestamps (#3) | DONE | Silent socket retired; inventory failure is not Current |
+| 6.3 | Inventory polling intent across background/resume (#5) | DONE | Timer restored with one owner |
+| 6.4 | Forget resets navigation; Disconnect stays distinct (#6) | DONE | Playwright forget/back flow |
+| 6.5 | Handshake readiness and socket fencing (#7) | DONE | Transport tests for reject, timeout, late callbacks |
+| 6.6 | Exact-session title ownership and cache persist (#8) | DONE | Controller fencing tests; offline reopen Playwright |
+| 6.7 | Authoritative rename confirmation and errors (#9) | DONE | Adapter confirmation/rejection/ambiguous/busy tests |
+| 6.8 | Pairing deadline covers body and is cancellable (#10) | DONE | Timeout and late-success-after-forget tests |
+| 6.9 | Sessions Retry reconnects; Server details recovery (#11) | DONE | RNTL wiring test; Playwright recovery |
+| 6.10 | Batch verification and handoff | DONE | check 52/52, adapter 11/11, e2e 10/10; Android/iOS NOT_RUN |
