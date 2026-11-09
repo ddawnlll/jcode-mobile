@@ -15,6 +15,20 @@ This document describes the root-owned tooling around it:
 | `.github/workflows/marketing.yml` | Manual-only GitHub Pages build/deploy |
 | `package.json` | `marketing:build`, `marketing:serve`, `marketing:test` |
 
+## Verified
+
+On 2026-11-09, against HEAD `c9b37bb` plus this tooling:
+
+- `bun run marketing:build`: 23 files, 4040.1 KiB.
+- `bun test scripts/marketing/*.test.mjs`: 21 pass.
+- `bunx --bun playwright test -c e2e/marketing/playwright.config.ts`: 59 pass
+  at 320/390/768/1440, no-JS, and server projects; no failures.
+- Root visually reviewed desktop 1440 and mobile 390/320: no horizontal
+  overflow, and the 1.5 MB welcome GIF rendered with its "Design preview. Not
+  recorded app footage." label.
+
+The site is not deployed.
+
 ## Source and output contract
 
 ```text
