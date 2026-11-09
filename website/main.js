@@ -79,7 +79,7 @@
       this.ctx = null;
       try {
         this.ctx = canvas.getContext("2d", { alpha: true });
-      } catch (error) {
+      } catch {
         this.ctx = null;
       }
       this.visible = false;
@@ -454,7 +454,7 @@
       motion.preference = saved;
       motion.playing = saved === "playing";
     }
-  } catch (error) {
+  } catch {
     motion.preference = null;
   }
 
@@ -488,7 +488,7 @@
   function savePreference() {
     try {
       if (motion.preference) window.localStorage.setItem(STORAGE_KEY, motion.preference);
-    } catch (error) {
+    } catch {
       /* Storage can be unavailable in private or file contexts. */
     }
   }
