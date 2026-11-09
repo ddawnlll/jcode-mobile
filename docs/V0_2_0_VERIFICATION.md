@@ -9,7 +9,7 @@ gate is not closed by a browser or Playwright result.
 | --- | --- |
 | Branch | `feature/v0.2.0-tidal-glass` |
 | Base | `cac75d0` (PR #12 merge) |
-| Candidate SHA | `7d88e1f` (implementation tested; final commit is docs-only) |
+| Candidate SHA | `97f6f77` (review fixes tested; final commit is docs-only) |
 | Pull request | https://github.com/ddawnlll/jcode-mobile/pull/13 |
 | Bun | 1.4.4 (`/home/quant/local/bun/bin/bun`) |
 | Host | Debian 13 x86_64 VPS, Chromium headless shell 1254 |
@@ -71,7 +71,7 @@ gate is not closed by a browser or Playwright result.
 | Clean environment | `bun install --frozen-lockfile` + check + adapter + export in a copied tree without `node_modules` | PASS; install 1.9 s, check 154.8 s, adapter 3.0 s, export 8.2 s |
 | Bun-only PATH | `PATH` contains Bun and core system binaries only | PASS; no `node`/`npm`; typecheck, lint, 10 Jest suites / 75 tests, 16 adapter tests |
 | Expo Android prebuild | `bunx --bun expo prebuild --platform android --no-install` | PASS; generated `nodeExecutableAndArgs.set(["bun", "--bun"])`, five direct `node` calls rewritten, manifest `adjustResize` |
-| CI | GitHub Actions `check.yml` run `42620508913` | PASS (`js`, 46 s); `android-build` skipped by workflow design |
+| CI | GitHub Actions `check.yml` run `42629879571` | PASS (`js`); `android-build` skipped by workflow design |
 | Android release | `bash scripts/build-android-release.sh` | NOT_RUN this session (no JDK/Android SDK on VPS) |
 | iOS release | `bash scripts/build-ios-simulator.sh` | NOT_RUN (macOS gate) |
 
