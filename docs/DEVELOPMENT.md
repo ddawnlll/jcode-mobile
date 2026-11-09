@@ -45,7 +45,7 @@ These are product correctness rules, not style preferences. A change that breaks
 5. Sending states are distinct: Draft saved, Sending, Sent to server (bridge ACK), Accepted (agent). Lost after write is Delivery unconfirmed. Never auto-resend.
 6. Fence stale output with `attachment_id`, `turn_id`, and `session_id`. A slow response cannot overwrite newer live state.
 7. Daemon death is not phone absence. Show saved history and a source-backed interruption state.
-8. Unknown capability or status stays unknown. No invented percentages, approvals, push toggles, file browsers, or progress.
+8. Unknown capability or status stays unknown. No invented percentages, approvals, push toggles, or progress. Folder browsing exists only through the authenticated, root-scoped picker.
 9. Design tokens come from `src/design/tokens.ts` only. Fonts are bundled locally. Keep the return seam, 48-unit targets, 20/24 gutters, 12/24 radii, and no app drop shadows.
 10. Scope every draft, bookmark, cache, pending send, and reading position by server and session.
 

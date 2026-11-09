@@ -155,7 +155,7 @@ There is no password login after pairing. The device token does not expire. The 
 - **Sending is honest.** `Sending`, `Sent to server`, `Accepted`, and `Delivery unconfirmed` are distinct. An ambiguous delivery is never auto-resent.
 - **Cache is last-known evidence.** Cached history paints first and is labelled as saved on this phone. Only an authoritative reconciliation claims `Current` or `Ready`.
 - **Daemon death is not phone absence.** A reopened session shows saved history plus the server's interruption and recovery directive.
-- **Capabilities gate controls.** No plan tab without reported todos, no fake approvals, no push toggle, no file browser.
+- **Capabilities gate controls.** No plan tab without reported todos, no unreported approvals or progress, and no push toggle when the server does not advertise it.
 - **Exact return.** Reopening restores the exact server and session. A missing target shows a recovery state instead of creating a replacement session.
 
 ## Local staging without touching production
