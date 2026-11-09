@@ -14,6 +14,8 @@
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.0"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>
+  <br />
+  <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the live site</strong></a>
 </p>
 
 <table>
@@ -119,7 +121,7 @@ bun run adapter:test   # Bun contract tests
 bun run e2e            # Playwright against isolated staging
 ```
 
-Bun 1.4.4 only. The web target is a verification surface, not a second product. Website source is in [`website/`](website/).
+Bun 1.4.4 only. The web target is a verification surface, not a second product. Live site: <https://ddawnlll.github.io/jcode-mobile/> · Source: [`website/`](website/).
 
 ## Availability and proof
 
