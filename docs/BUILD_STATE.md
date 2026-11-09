@@ -59,7 +59,7 @@ gh workflow run check.yml --ref main         # Android 36 build, pass
 
 ## v0.1.4 reliability patch
 
-Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`, followed by six review-round race fixes. Full evidence is in `docs/V0_1_4_VERIFICATION.md`. Current checks under Node 22.21.1: `npm run check` (59 Jest tests), `npm run adapter:test` (12 tests), `npm run e2e` (10 tests, Expo web/Chromium). Native Android/iOS checks remain NOT_RUN on this host.
+Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`, followed by nine review-round race fixes. Full evidence is in `docs/V0_1_4_VERIFICATION.md`. Current checks under Node 22.21.1: `npm run check` (62 Jest tests), `npm run adapter:test` (12 tests), `npm run e2e` (10 tests, Expo web/Chromium). Native Android/iOS checks remain NOT_RUN on this host.
 
 ## Web target (verified 2026-11-09 on Debian 13)
 

@@ -17,7 +17,7 @@ socket and the live adapter on 7644 were not restarted or used by tests.
 
 | Command | Result |
 | --- | --- |
-| `npm run check` | pass: `tsc --noEmit`, ESLint 0 errors, Jest 59/59 |
+| `npm run check` | pass: `tsc --noEmit`, ESLint 0 errors, Jest 62/62 |
 | `npm run adapter:test` | 12/12 pass |
 | `npm run e2e` | 10/10 pass (1.3 min) |
 | `bash scripts/check-platform.sh` | Debian/Ubuntu host detected; rootless browser libraries present |
@@ -79,3 +79,15 @@ written first, then the fixes:
 Jest now uses `maxWorkers: 2` so the supported Node 22 line does not starve the
 RNTL suite on this six-core host. The final commands below ran under Node
 22.21.1.
+
+## Review round 3
+
+Three further defects were reproduced at `7d226fc5`:
+
+| Defect | Fix | Test |
+| --- | --- | --- |
+| Cancelled pair cleanup deleted a newer token while its read was pending | Per-profile persistence queue serializes credential writes, reads, and cleanup. New pair writes wait for cleanup, and stale restores cannot land after a newer delete. | "serializes cleanup reads with a newer pair write" |
+| Background during profile switch left the controller without a profile | Interrupted activation is retained as pending and re-run on foreground, then reconnects with the new credential. | "resumes an activation interrupted by background on foreground" |
+| Second rename reverted when the first correction write completed | The correction loop re-reads the latest title revision after each SQLite write and writes the newest title before touching the list or header. | "keeps the newest title when a second rename lands during the correction write" |
+
+The final commands ran under Node 22.21.1: `npm run check` 62/62, adapter 12/12, Playwright 10/10, CI success.
