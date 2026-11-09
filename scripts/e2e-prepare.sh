@@ -39,7 +39,7 @@ if ! curl -sf "http://127.0.0.1:$ADAPTER_PORT/health" >/dev/null; then
     JCODE_ADAPTER_HOST='$JCODE_ADAPTER_HOST' \
     JCODE_ADAPTER_PORT='$JCODE_ADAPTER_PORT' \
     JCODE_ADAPTER_STATE='$JCODE_ADAPTER_STATE' \
-    node '$ROOT/integration/jcode-adapter/src/main.ts'" \
+    bun '$ROOT/integration/jcode-adapter/src/main.ts'" \
     >"$STAGE/adapter.log" 2>&1 </dev/null
 fi
 
@@ -58,14 +58,14 @@ fi
 echo "exporting e2e web bundle"
 (
   cd "$ROOT"
-  EXPO_PUBLIC_E2E=1 CI=1 npx expo export -p web --output-dir "$STAGE/web" \
+  EXPO_PUBLIC_E2E=1 CI=1 bunx --bun expo export -p web --output-dir "$STAGE/web" \
     >"$STAGE/export.log" 2>&1
 )
 
 # 4. Static server. serve-web.mjs adds the COOP/COEP headers expo-sqlite needs.
 if ! curl -sf "http://127.0.0.1:$WEB_PORT/" >/dev/null; then
   echo "starting e2e web server on 127.0.0.1:$WEB_PORT"
-  setsid -f bash -c "echo \$\$ > '$STAGE/web.pid'; exec env PORT=$WEB_PORT HOST=127.0.0.1 node '$ROOT/scripts/serve-web.mjs' '$STAGE/web'" \
+  setsid -f bash -c "echo \$\$ > '$STAGE/web.pid'; exec env PORT=$WEB_PORT HOST=127.0.0.1 bun --bun '$ROOT/scripts/serve-web.mjs' '$STAGE/web'" \
     >"$STAGE/web.log" 2>&1 </dev/null
 fi
 

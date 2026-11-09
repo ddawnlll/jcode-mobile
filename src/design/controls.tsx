@@ -61,7 +61,10 @@ export function IconButton({
         style,
       ]}
     >
-      {children({ size, color: colors[color] })}
+      {children({
+        size,
+        color: typeof colors[color] === 'string' ? (colors[color] as string) : colors.ink,
+      })}
     </Pressable>
   );
 }

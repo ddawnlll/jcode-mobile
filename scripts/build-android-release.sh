@@ -11,7 +11,7 @@ export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-t
 
 cd "$ROOT"
 if [ ! -d android ]; then
-  npx expo prebuild --platform android --no-install
+  bunx --bun expo prebuild --platform android --no-install
 fi
 
 cd android
@@ -20,7 +20,7 @@ cd ..
 
 mkdir -p artifacts
 APK="android/app/build/outputs/apk/release/app-release.apk"
-VERSION="$(node -p "require('./package.json').version")"
+VERSION="$(bun -p "require('./package.json').version")"
 cp "$APK" "artifacts/jcode-mobile-$VERSION-android-release.apk"
 shasum -a 256 "artifacts/jcode-mobile-$VERSION-android-release.apk" | tee "artifacts/jcode-mobile-$VERSION-android-release.apk.sha256"
 ls -lh "artifacts/jcode-mobile-$VERSION-android-release.apk"

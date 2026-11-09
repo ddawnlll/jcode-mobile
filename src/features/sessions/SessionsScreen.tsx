@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -15,7 +16,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../../shell/navigation';
 import { BottomSheet } from '../../design/BottomSheet';
 import { Button, Divider, Field, IconButton, Row, TextAction } from '../../design/controls';
-import { ChevronDownIcon, ChevronRightIcon, JCodeMark, LinkIcon, SearchIcon, CloseIcon } from '../../design/icons';
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  JCodeMark,
+  LinkIcon,
+  MoreIcon,
+  SearchIcon,
+  CloseIcon,
+} from '../../design/icons';
 import { useTheme } from '../../design/theme';
 import { geometry, radius, space, target } from '../../design/tokens';
 import { Text } from '../../design/typography';
@@ -26,9 +35,11 @@ import type { SessionInfo } from '../../core/protocol/frames';
 import { NewSessionSheet } from '../newSession/NewSessionSheet';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Sessions'>;
+type Route = RouteProp<RootStackParamList, 'Sessions'>;
 
 export function SessionsScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<Route>();
   const insets = useSafeAreaInsets();
   const { colors, typeStyle } = useTheme();
   const sessions = useAppStore((state) => state.inventory.sessions);
@@ -38,14 +49,23 @@ export function SessionsScreen() {
   const fetchedAt = useAppStore((state) => state.inventory.fetchedAt);
   const includeArchived = useAppStore((state) => state.inventory.includeArchived);
   const pendingRestore = useAppStore((state) => state.inventory.pendingRestore);
+  const pinnedSessionIds = useAppStore((state) => state.inventory.pinnedSessionIds);
+  const projects = useAppStore((state) => state.inventory.projects);
+  const demo = useAppStore((state) => state.demo);
   const connection = useAppStore((state) => state.connection);
   const serverLabel = useAppStore((state) => state.connection.serverLabel);
   const [search, setSearch] = useState('');
+  const [scope, setScope] = useState<string | null>(null);
+  const [appMenuVisible, setAppMenuVisible] = useState(false);
   const [actionSession, setActionSession] = useState<SessionInfo | null>(null);
   const [newSessionVisible, setNewSessionVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const restored = useRef(false);
   const headingSize = useMemo(() => typeStyle(sessions.length === 0 ? 'screen' : 'display'), [typeStyle, sessions.length]);
+
+  useEffect(() => {
+    if (route.params?.scope) setScope(route.params.scope);
+  }, [route.params?.scope]);
 
   useFocusEffect(
     useCallback(() => {
@@ -61,6 +81,9 @@ export function SessionsScreen() {
     restored.current = true;
     const open = async () => {
       const state = useAppStore.getState();
+      // A labelled preview always starts on the list. An in-progress creation
+      // owns the conversation state until its sheet explicitly confirms.
+      if (state.demo || newSessionVisible) return;
       if (state.conversation.sessionId) {
         const exists = sessions.some((session) => session.session_id === state.conversation.sessionId);
         if (exists) {
@@ -76,12 +99,13 @@ export function SessionsScreen() {
       navigation.navigate('Conversation', { sessionId: target.session_id });
     };
     void open();
-  }, [sessions, navigation]);
+  }, [newSessionVisible, sessions, navigation]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return sessions;
-    return sessions.filter((session) => {
+    const scoped = scope ? sessions.filter((session) => session.working_dir === scope) : sessions;
+    if (!query) return scoped;
+    return scoped.filter((session) => {
       const haystack = [
         session.title ?? '',
         session.save_label ?? '',
@@ -92,17 +116,35 @@ export function SessionsScreen() {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [sessions, search]);
+  }, [scope, sessions, search]);
 
   const groups = useMemo(
-    () =>
-      groupSessions(filtered).map((group) => ({
-        title: group.title,
-        key: group.key,
-        data: group.sessions,
-      })),
-    [filtered],
+    () => {
+      const pinned = filtered.filter((session) => pinnedSessionIds.includes(session.session_id));
+      const rest = filtered.filter((session) => !pinnedSessionIds.includes(session.session_id));
+      const derived: Array<{ key: string; title: string; data: SessionInfo[] }> = groupSessions(
+        rest,
+      ).map((group) => ({ title: group.title, key: group.key, data: group.sessions }));
+      return [
+        ...(pinned.length ? [{ key: 'pinned', title: 'Pinned', data: pinned }] : []),
+        ...derived,
+      ];
+    },
+    [filtered, pinnedSessionIds],
   );
+
+  const scopes = useMemo(() => {
+    const paths = new Set<string>();
+    for (const session of sessions) if (session.working_dir) paths.add(session.working_dir);
+    for (const project of projects) paths.add(project.path);
+    return Array.from(paths)
+      .map((path) => ({
+        path,
+        name: projects.find((project) => project.path === path)?.name ?? basename(path),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 12);
+  }, [projects, sessions]);
 
   const openSession = (session: SessionInfo) => {
     // Show the cached route immediately; attachment reconciles inside it.
@@ -139,24 +181,45 @@ export function SessionsScreen() {
             jcode
           </Text>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Server: ${connectionLabel}. Open server details`}
-          onPress={() => navigation.navigate('ServerDetails')}
-          style={({ pressed }) => [styles.serverSelector, pressed && { opacity: 0.7 }]}
-        >
-          <LinkIcon size={18} color={connection.state === 'current' ? colors.success : colors.muted} />
-          <Text
-            variant="small"
-            color={connection.state === 'current' ? 'ink' : 'muted'}
-            numberOfLines={1}
-            style={{ marginLeft: space.xxs, maxWidth: 140 }}
+        <View style={styles.appBarActions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Server: ${connectionLabel}. Open server details`}
+            onPress={() => navigation.navigate('ServerDetails')}
+            style={({ pressed }) => [styles.serverSelector, pressed && { opacity: 0.7 }]}
           >
-            {connectionLabel}
-          </Text>
-          <ChevronDownIcon size={16} color={colors.muted} />
-        </Pressable>
+            <LinkIcon size={18} color={connection.state === 'current' ? colors.success : colors.muted} />
+            <Text
+              variant="small"
+              color={connection.state === 'current' ? 'ink' : 'muted'}
+              numberOfLines={1}
+              style={{ marginLeft: space.xxs, maxWidth: 120 }}
+            >
+              {connectionLabel}
+            </Text>
+            <ChevronDownIcon size={16} color={colors.muted} />
+          </Pressable>
+          <IconButton label="App menu" onPress={() => setAppMenuVisible(true)} testID="sessions-menu">
+            {({ size, color }) => <MoreIcon size={size} color={color} />}
+          </IconButton>
+        </View>
       </View>
+
+      {demo ? (
+        <View style={[styles.previewBanner, { backgroundColor: colors.accentSoft }]} testID="preview-banner">
+          <Text variant="caption" style={{ color: colors.onAccent, flex: 1 }}>
+            Preview · sample data. Nothing runs.
+          </Text>
+          <TextAction
+            label="Exit preview"
+            color="onAccent"
+            onPress={() => {
+              controller.exitDemo();
+              navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
+            }}
+          />
+        </View>
+      ) : null}
 
       <View style={styles.pageHeader}>
         <Text variant="display" style={[headingSize, { color: colors.ink }]} accessibilityRole="header">
@@ -194,6 +257,32 @@ export function SessionsScreen() {
           ) : null}
         </View>
       ) : null}
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.scopeRow}
+        testID="project-scope"
+      >
+        <ScopeChip
+          label="All projects"
+          selected={scope === null}
+          onPress={() => setScope(null)}
+        />
+        {scopes.map((item) => (
+          <ScopeChip
+            key={item.path}
+            label={item.name}
+            selected={scope === item.path}
+            onPress={() => setScope(scope === item.path ? null : item.path)}
+          />
+        ))}
+        <TextAction
+          label="Projects"
+          onPress={() => navigation.navigate('Projects' as never)}
+          align="center"
+        />
+      </ScrollView>
 
       <View style={styles.searchWrap}>
         <Field
@@ -334,6 +423,66 @@ export function SessionsScreen() {
         }}
       />
 
+      <BottomSheet
+        visible={appMenuVisible}
+        onClose={() => setAppMenuVisible(false)}
+        accessibilityLabel="App menu"
+      >
+        <View style={{ paddingHorizontal: space.lg }} testID="app-menu">
+          <Text variant="title" accessibilityRole="header">
+            Commands
+          </Text>
+          <Text variant="small" color="muted" style={{ marginTop: space.xxs }}>
+            {serverLabel || 'This server'}
+          </Text>
+          <View style={{ marginTop: space.md }}>
+            <ActionRow
+              label="New session"
+              onPress={() => {
+                setAppMenuVisible(false);
+                setNewSessionVisible(true);
+              }}
+            />
+            <ActionRow
+              label="Projects"
+              onPress={() => {
+                setAppMenuVisible(false);
+                navigation.navigate('Projects' as never);
+              }}
+            />
+            <ActionRow
+              label={includeArchived ? 'Hide archived sessions' : 'Archived sessions'}
+              onPress={() => {
+                setAppMenuVisible(false);
+                void controller.refreshSessions({ force: true, includeArchived: !includeArchived });
+              }}
+            />
+            <ActionRow
+              label="Appearance"
+              onPress={() => {
+                setAppMenuVisible(false);
+                navigation.navigate('Appearance');
+              }}
+            />
+            <ActionRow
+              label="Server details"
+              onPress={() => {
+                setAppMenuVisible(false);
+                navigation.navigate('ServerDetails');
+              }}
+            />
+            <ActionRow
+              label="Connect another server"
+              onPress={() => {
+                setAppMenuVisible(false);
+                navigation.navigate('Connect');
+              }}
+            />
+          </View>
+          <View style={{ height: space.lg }} />
+        </View>
+      </BottomSheet>
+
       <SessionActionsSheet
         session={actionSession}
         onClose={() => setActionSession(null)}
@@ -351,6 +500,39 @@ export function SessionsScreen() {
         }}
       />
     </View>
+  );
+}
+
+function ScopeChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected, checked: selected }}
+      aria-checked={selected}
+      accessibilityLabel={`Project ${label}`}
+      onPress={onPress}
+      style={[
+        styles.scopeChip,
+        {
+          borderColor: selected ? colors.brand : colors.line,
+          backgroundColor: selected ? colors.raised : 'transparent',
+        },
+      ]}
+      testID={`scope-${label}`}
+    >
+      <Text variant="caption" weight={selected ? 'semibold' : 'medium'}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -441,6 +623,7 @@ function SessionActionsSheet({
 }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pinned = useAppStore((state) => state.inventory.pinnedSessionIds);
   const headingRef = useRef<React.ComponentRef<typeof View> | null>(null);
 
   useEffect(() => {
@@ -469,6 +652,14 @@ function SessionActionsSheet({
         ) : null}
         <View style={{ marginTop: space.md }}>
           <ActionRow label="Open session" onPress={() => onOpen(session)} />
+          <ActionRow
+            label={pinned.includes(session.session_id) ? 'Unpin session' : 'Pin session'}
+            detail="Keeps it at the top of this list"
+            onPress={() => {
+              void controller.togglePinnedSession(session.session_id);
+              onClose();
+            }}
+          />
           <ActionRow
             label="Copy session ID"
             onPress={async () => {
@@ -556,6 +747,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   brand: { flexDirection: 'row', alignItems: 'center' },
+  appBarActions: { flexDirection: 'row', alignItems: 'center' },
+  previewBanner: {
+    marginHorizontal: geometry.gutterCompact,
+    marginBottom: space.xs,
+    borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+  },
+  scopeRow: {
+    paddingHorizontal: geometry.gutterCompact,
+    gap: space.xs,
+    alignItems: 'center',
+    paddingBottom: space.sm,
+  },
+  scopeChip: {
+    minHeight: 40,
+    paddingHorizontal: space.sm,
+    borderWidth: 1,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   serverSelector: {
     minHeight: target,
     flexDirection: 'row',

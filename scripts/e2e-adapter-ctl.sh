@@ -36,7 +36,7 @@ case "$ACTION" in
       JCODE_ADAPTER_HOST=127.0.0.1 \
       JCODE_ADAPTER_PORT='$PORT' \
       JCODE_ADAPTER_STATE='$STAGE/adapter' \
-      node '$ROOT/integration/jcode-adapter/src/main.ts'" \
+      bun '$ROOT/integration/jcode-adapter/src/main.ts'" \
       >"$STAGE/adapter.log" 2>&1 </dev/null
     for _ in $(seq 1 60); do
       if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null; then echo up; exit 0; fi

@@ -53,10 +53,12 @@ export function WorkSheet({
   visible,
   onClose,
   onStop,
+  initialTab = 'activity',
 }: {
   visible: boolean;
   onClose: () => void;
   onStop: () => void;
+  initialTab?: 'activity' | 'plan';
 }) {
   const { colors } = useTheme();
   const conversation = useAppStore((state) => state.conversation);
@@ -76,9 +78,9 @@ export function WorkSheet({
       setExpandedOutput(false);
       setCurrentFile(null);
       setFileState('idle');
-      setTab('activity');
+      setTab(initialTab);
     }
-  }, [visible]);
+  }, [initialTab, visible]);
 
   const showPlanTab = (conversation.plan?.state.todos.length ?? 0) > 0;
 

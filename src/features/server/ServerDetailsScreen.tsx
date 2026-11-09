@@ -192,7 +192,8 @@ export function ServerDetailsScreen() {
                 <Pressable
                   key={value}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
+                  accessibilityState={{ selected: active, checked: active }}
+                  aria-checked={active}
                   accessibilityLabel={value === 'night' ? 'Night' : value === 'light' ? 'Light' : 'System'}
                   onPress={() => void controller.setAppearance(value)}
                   style={({ pressed }) => [

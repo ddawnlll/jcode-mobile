@@ -29,6 +29,8 @@ const FONT_MAP = {
 export default function AppRoot() {
   const [fontsLoaded, fontError] = useFonts(FONT_MAP);
   const appearance = useAppStore((state) => state.appearance);
+  const themeFamily = useAppStore((state) => state.themeFamily);
+  const effects = useAppStore((state) => state.effects);
   const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function AppRoot() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         {ready ? (
-          <ThemeProvider preference={appearance}>
+          <ThemeProvider preference={appearance} family={themeFamily} effects={effects}>
             <ThemedApp />
           </ThemeProvider>
         ) : (
@@ -64,6 +66,7 @@ function ThemedApp() {
   const { scheme, colors } = useTheme();
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
   const profileId = useAppStore((state) => state.profileId);
+  const demo = useAppStore((state) => state.demo);
   const setPendingPairLink = useAppStore((state) => state.actions.setPendingPairLink);
   const pendingPairLink = useAppStore((state) => state.pendingPairLink);
   const [navReady, setNavReady] = useState(false);
@@ -77,13 +80,13 @@ function ThemedApp() {
       lastProfile.current = profileId;
       return;
     }
-    if (lastProfile.current === profileId) return;
+    if (lastProfile.current === profileId && demo) return;
     lastProfile.current = profileId;
     navigationRef.reset({
       index: 0,
-      routes: [{ name: profileId ? 'Sessions' : 'Connect' }],
+      routes: [{ name: profileId || demo ? 'Sessions' : 'Welcome' }],
     });
-  }, [profileId, navReady, navigationRef]);
+  }, [profileId, demo, navReady, navigationRef]);
 
   useEffect(() => {
     const handle = (url: string) => {

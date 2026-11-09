@@ -13,4 +13,4 @@ export JCODE_STAGING_DIR="$STAGE"
 export ADAPTER_BASE="${ADAPTER_BASE:-http://127.0.0.1:7643}"
 
 cd "$(dirname "$0")/.."
-exec node "$@"
+exec bun "$@"

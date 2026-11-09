@@ -8,6 +8,17 @@ import NetInfo, { type NetInfoState } from '@react-native-community/netinfo';
 
 import { budgets } from '../design/tokens';
 import {
+  DEFAULT_APPEARANCE,
+  DEFAULT_REASONING_DISPLAY,
+  DEFAULT_THEME_FAMILY,
+  isAppearance,
+  isEffects,
+  isReasoningDisplay,
+  isThemeFamily,
+  type EffectsPreference,
+  type ReasoningDisplay,
+} from '../design/themes';
+import {
   MobileClient,
   TransportError,
   httpBase,
@@ -44,7 +55,19 @@ import { deleteToken, loadToken, saveToken } from './persistence/credentials';
 import { importDevPairingFile } from './dev/pairing-import';
 import { importE2ECredentials } from './dev/e2e-seed';
 import {
+  DEMO_SERVER_ID,
+  DEMO_SESSION_ID,
+  demoContext,
+  demoMessages,
+  demoProjects,
+  demoReasoning,
+  demoSessions,
+  demoTools,
+} from './demo/demo-data';
+import {
   deriveSeam,
+  deriveChanges,
+  attachHistoryImages,
   formatClock,
   messageFingerprint,
   newClientId,
@@ -52,20 +75,75 @@ import {
 import {
   resetConversation,
   store,
+  type ComposerImage,
+  type ContextSnapshot,
   type DeliveryRecord,
   type ExecutionState,
+  type ProjectRecord,
   type ToolRow,
 } from './state/store';
 
 const LAST_SERVER = 'lastServerId';
 const LAST_SESSION = 'lastSessionId';
 const APPEARANCE = 'appearance';
+const THEME_FAMILY = 'themeFamily';
+const EFFECTS = 'effects';
+const REASONING_DISPLAY = 'reasoningDisplay';
 const PRIVACY = 'privacyPreview';
+const PROJECTS = 'projects';
+const PINNED_SESSIONS = 'pinnedSessions';
 const DEVICE_ID = 'deviceId';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
 }
+
+function parseStringList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string').slice(0, 24)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseProjects(raw: string | null): ProjectRecord[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((value) => {
+      if (!value || typeof value !== 'object') return [];
+      const record = value as Record<string, unknown>;
+      if (
+        typeof record.id !== 'string' ||
+        typeof record.serverId !== 'string' ||
+        typeof record.path !== 'string' ||
+        typeof record.name !== 'string'
+      ) {
+        return [];
+      }
+      return [
+        {
+          id: record.id,
+          serverId: record.serverId,
+          path: record.path,
+          name: record.name,
+          pinned: record.pinned === true,
+          addedAt: typeof record.addedAt === 'number' ? record.addedAt : Date.now(),
+          lastUsedAt: typeof record.lastUsedAt === 'number' ? record.lastUsedAt : 0,
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+type ProjectLike = ProjectRecord;
 
 interface ConnectionAttempt {
   epoch: number;
@@ -330,18 +408,39 @@ export class AppController {
       await initDatabase();
       await importE2ECredentials();
       await importDevPairingFile();
-      const [appearance, privacy, deviceName] = await Promise.all([
+      const [
+        appearance,
+        themeFamily,
+        effects,
+        reasoningDisplay,
+        privacy,
+        deviceName,
+        projectsRaw,
+        pinnedRaw,
+      ] = await Promise.all([
         getPref(APPEARANCE),
+        getPref(THEME_FAMILY),
+        getPref(EFFECTS),
+        getPref(REASONING_DISPLAY),
         getPref(PRIVACY),
         this.ensureDeviceName(),
+        getPref(PROJECTS),
+        getPref(PINNED_SESSIONS),
       ]);
       store.setState((state) => ({
-        appearance:
-          appearance === 'light' || appearance === 'night' || appearance === 'system'
-            ? appearance
-            : 'system',
+        appearance: isAppearance(appearance) ? appearance : DEFAULT_APPEARANCE,
+        themeFamily: isThemeFamily(themeFamily) ? themeFamily : DEFAULT_THEME_FAMILY,
+        effects: isEffects(effects) ? effects : 'auto',
+        reasoningDisplay: isReasoningDisplay(reasoningDisplay)
+          ? reasoningDisplay
+          : DEFAULT_REASONING_DISPLAY,
         privacyPreview: privacy !== '0',
         deviceName,
+        inventory: {
+          ...state.inventory,
+          projects: parseProjects(projectsRaw),
+          pinnedSessionIds: parseStringList(pinnedRaw),
+        },
       }));
 
       const servers = await listServers();
@@ -1125,6 +1224,7 @@ export class AppController {
   async refreshSessions(
     options: { force?: boolean; includeArchived?: boolean } = {},
   ): Promise<{ ok: boolean; error?: string }> {
+    if (store.get().demo) return { ok: true };
     if (!this.client?.isOpen) {
       const state = store.get();
       if (state.inventory.sessions.length === 0 && this.profile) {
@@ -1455,6 +1555,10 @@ export class AppController {
   /* ------------------------------------------------------------- conversation */
 
   async openSession(session: SessionInfo): Promise<void> {
+    if (store.get().demo) {
+      this.openDemoSession(session.session_id);
+      return;
+    }
     if (!this.profile) return;
     const serverId = this.profile.id;
     const epoch = this.lifecycleEpoch;
@@ -1650,6 +1754,7 @@ export class AppController {
 
   canSend(): { ok: true } | { ok: false; reason: string } {
     const state = store.get();
+    if (state.demo) return { ok: true };
     if (!this.client?.isOpen) return { ok: false, reason: 'Reconnect to send.' };
     if (state.connection.state !== 'current' && state.connection.state !== 'reconciling') {
       return { ok: false, reason: 'Reconnect to send.' };
@@ -1664,14 +1769,18 @@ export class AppController {
     return { ok: true };
   }
 
-  async send(content: string): Promise<{ ok: boolean; error?: string }> {
+  async send(
+    content: string,
+    images: ComposerImage[] = [],
+  ): Promise<{ ok: boolean; error?: string }> {
     const state = store.get();
     const conversation = state.conversation;
     if (!this.profile || !conversation.sessionId) return { ok: false, error: 'No session is open.' };
     const trimmed = content.trim();
-    if (!trimmed) return { ok: false, error: 'Write a message first.' };
+    if (!trimmed && images.length === 0) return { ok: false, error: 'Write a message first.' };
+    if (state.demo) return this.sendDemo(trimmed, images);
     if (!this.client?.isOpen) return { ok: false, error: 'Reconnect to send.' };
-    if (conversation.execution.kind === 'working') return this.sendGuidance(trimmed);
+    if (conversation.execution.kind === 'working') return this.sendGuidance(trimmed, images);
     const gate = this.canSend();
     if (!gate.ok) return { ok: false, error: gate.reason };
 
@@ -1689,6 +1798,7 @@ export class AppController {
       content: trimmed,
       state: 'sending',
       createdAt: Date.now(),
+      ...(images.length ? { images } : null),
     };
     this.addDelivery(record);
     await setDraft(profileId, sessionId, '');
@@ -1716,6 +1826,13 @@ export class AppController {
           session_id: sessionId,
           content: trimmed,
           client_message_id: clientMessageId,
+          ...(images.length
+            ? {
+                images: images
+                  .filter((image) => image.base64)
+                  .map((image) => [image.mediaType, image.base64!] as [string, string]),
+              }
+            : null),
         },
         15_000,
       );
@@ -1758,8 +1875,12 @@ export class AppController {
     }
   }
 
-  private async sendGuidance(content: string): Promise<{ ok: boolean; error?: string }> {
+  private async sendGuidance(
+    content: string,
+    images: ComposerImage[] = [],
+  ): Promise<{ ok: boolean; error?: string }> {
     const conversation = store.get().conversation;
+    if (store.get().demo) return this.sendDemo(content, images);
     if (!this.profile || !conversation.sessionId || !this.client?.isOpen) {
       return { ok: false, error: 'Reconnect to add an instruction.' };
     }
@@ -1785,6 +1906,7 @@ export class AppController {
       state: 'sending',
       createdAt,
       guidance: true,
+      ...(images.length ? { images } : null),
     });
     await setDraft(profileId, sessionId, '');
     await savePendingSend(profileId, sessionId, {
@@ -1800,7 +1922,19 @@ export class AppController {
     }
     try {
       const frame = await client.request(
-        { req: 'soft_interrupt', session_id: sessionId, content, client_id: clientId },
+        {
+          req: 'soft_interrupt',
+          session_id: sessionId,
+          content,
+          client_id: clientId,
+          ...(images.length
+            ? {
+                images: images
+                  .filter((image) => image.base64)
+                  .map((image) => [image.mediaType, image.base64!] as [string, string]),
+              }
+            : null),
+        },
         10_000,
       );
       if (frame.ev === 'error') {
@@ -1841,6 +1975,63 @@ export class AppController {
       });
       return { ok: false, error: 'Instruction delivery unconfirmed.' };
     }
+  }
+
+  private async sendDemo(
+    content: string,
+    images: ComposerImage[],
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!store.get().demo) return { ok: false, error: 'Preview has ended.' };
+    const now = Date.now();
+    const conversation = store.get().conversation;
+    const index = conversation.totalMessages;
+    const userMessage: HistoryMessage = {
+      index,
+      role: 'user',
+      content: content || 'Image attached',
+      ...(images.length
+        ? {
+            images: images.map((image) => ({
+              media_type: image.mediaType,
+              data: image.base64 ?? '',
+              uri: image.uri,
+              alt: image.alt ?? image.name,
+              label: image.name,
+              source: 'user_prompt',
+            })),
+          }
+        : null),
+    };
+    store.setState((state) => ({
+      conversation: {
+        ...state.conversation,
+        messages: [...state.conversation.messages, userMessage],
+        totalMessages: index + 1,
+        execution: { kind: 'working', label: 'Preview', observedAt: now, turnId: 1 },
+        reasoningPhase: 'none',
+      },
+    }));
+    if (!images.length && !content) return { ok: true };
+    setTimeout(() => {
+      if (!store.get().demo) return;
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          messages: [
+            ...state.conversation.messages,
+            {
+              index: state.conversation.totalMessages,
+              role: 'assistant',
+              content:
+                'This is the **Preview** surface. Nothing was sent. Pair a server to run the instruction on your VPS.',
+            },
+          ],
+          totalMessages: state.conversation.totalMessages + 1,
+          execution: { kind: 'ready', label: 'Ready', observedAt: Date.now(), turnId: 1 },
+        },
+      }));
+    }, 500);
+    return { ok: true };
   }
 
   async retryDelivery(clientMessageId: string): Promise<{ ok: boolean; error?: string }> {
@@ -1916,6 +2107,22 @@ export class AppController {
   }
 
   async stopTurn(): Promise<{ ok: boolean; error?: string }> {
+    if (store.get().demo) {
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          execution: {
+            kind: 'stopped',
+            label: 'Stopped',
+            detail: 'Preview only',
+            observedAt: Date.now(),
+            turnId: state.conversation.execution.turnId,
+          },
+          reasoningPhase: 'none',
+        },
+      }));
+      return { ok: true };
+    }
     const conversation = store.get().conversation;
     if (!conversation.sessionId || !this.client?.isOpen) {
       return { ok: false, error: 'Reconnect to stop this turn.' };
@@ -1947,6 +2154,7 @@ export class AppController {
   /* -------------------------------------------------------------------- work */
 
   async loadPlan(): Promise<void> {
+    if (store.get().demo) return;
     const conversation = store.get().conversation;
     const client = this.client;
     const sessionId = conversation.sessionId;
@@ -2090,7 +2298,18 @@ export class AppController {
         error: null,
         attempt: 0,
       },
-      inventory: { sessions: [], fetchedAt: null, loading: false, error: null, partial: false, limit: 50, includeArchived: false, pendingRestore: null },
+      inventory: {
+        sessions: [],
+        fetchedAt: null,
+        loading: false,
+        error: null,
+        partial: false,
+        limit: 50,
+        includeArchived: false,
+        pinnedSessionIds: [],
+        projects: [],
+        pendingRestore: null,
+      },
       conversation: resetConversation(),
     });
     if (remaining[0]) await this.activateProfile(remaining[0], { restore: false });
@@ -2139,6 +2358,424 @@ export class AppController {
   async setAppearance(value: 'system' | 'light' | 'night'): Promise<void> {
     store.setState({ appearance: value });
     await setPref(APPEARANCE, value);
+  }
+
+  async setThemeFamily(value: string): Promise<void> {
+    if (!isThemeFamily(value)) return;
+    store.setState({ themeFamily: value });
+    await setPref(THEME_FAMILY, value);
+  }
+
+  async setEffects(value: EffectsPreference): Promise<void> {
+    if (!isEffects(value)) return;
+    store.setState({ effects: value });
+    await setPref(EFFECTS, value);
+  }
+
+  async setReasoningDisplay(value: ReasoningDisplay): Promise<void> {
+    if (!isReasoningDisplay(value)) return;
+    // Presentation only: this never touches the attachment or the turn.
+    store.setState({ reasoningDisplay: value });
+    await setPref(REASONING_DISPLAY, value);
+  }
+
+  /**
+   * Labelled demo. No socket, no daemon, no repository state. Used by Welcome
+   * so the interface can be inspected before pairing.
+   */
+  enterDemo(): void {
+    this.stopHealthChecks();
+    this.suspendInventoryPolling();
+    const now = Date.now();
+    const rich = demoSessions.find((session) => session.session_id === DEMO_SESSION_ID) ?? demoSessions[0];
+    store.setState((state) => ({
+      demo: true,
+      bootstrap: 'ready',
+      connection: {
+        ...state.connection,
+        state: 'current',
+        lastCheckedAt: now,
+        lastContactAt: now,
+        serverLabel: 'Preview · sample data',
+        host: 'On this phone',
+        daemonVersion: 'preview',
+        serverName: 'Preview',
+        capabilities: [
+          'mobile_continuation',
+          'bounded_history',
+          'identity_fencing',
+          'delivery_receipts',
+          'soft_interrupt_ids',
+          'todo_state',
+          'file_read',
+          'archive_restore',
+          'models',
+          'directory_browse',
+          'session_config',
+          'context_snapshot',
+          'image_input',
+          'changes',
+        ],
+        error: null,
+        attempt: 0,
+      },
+      inventory: {
+        ...state.inventory,
+        sessions: demoSessions,
+        fetchedAt: now,
+        loading: false,
+        error: null,
+        partial: false,
+        pinnedSessionIds: [DEMO_SESSION_ID],
+        projects: demoProjects,
+      },
+      conversation: resetConversation({
+        serverId: DEMO_SERVER_ID,
+        sessionId: DEMO_SESSION_ID,
+        attachmentId: 'demo-attachment',
+        session: rich,
+        title: rich.title ?? 'Preview session',
+        workingDir: rich.working_dir ?? null,
+        messages: demoMessages,
+        totalMessages: demoMessages.length,
+        baseIndex: 0,
+        hasOlder: false,
+        reasoning: demoReasoning,
+        reasoningPhase: 'thinking',
+        reasoningStartedAt: now - 5_000,
+        tools: demoTools,
+        changes: deriveChanges(demoMessages, demoTools),
+        config: {
+          model: 'claude-sonnet-preview',
+          effort: 'high',
+          efforts: ['none', 'low', 'medium', 'high', 'max'],
+          modelConfirmed: true,
+          effortConfirmed: true,
+          source: 'server',
+          pendingModel: null,
+          pendingEffort: null,
+          applying: false,
+          error: null,
+          observedAt: now,
+        },
+        context: demoContext,
+        execution: {
+          kind: 'working',
+          label: 'Running bash',
+          detail: 'bun run typecheck',
+          observedAt: now,
+          turnId: 1,
+        },
+        seam: { index: 2, count: 3 },
+        historyFreshness: { status: 'authoritative', observedAt: now },
+        plan: {
+          state: {
+            todos: [
+              { id: 't1', content: 'Verify continuation attach', status: 'completed' },
+              { id: 't2', content: 'Restore draft and reading anchor', status: 'completed' },
+              { id: 't3', content: 'Run adapter contract tests', status: 'in_progress' },
+            ],
+          },
+          observedAt: now,
+        },
+      }),
+    }));
+  }
+
+  exitDemo(): void {
+    store.setState((state) => ({
+      demo: false,
+      connection: {
+        ...state.connection,
+        state: 'cached',
+        serverLabel: '',
+        host: '',
+        daemonVersion: null,
+        serverName: null,
+        capabilities: [],
+        error: null,
+      },
+      inventory: {
+        ...state.inventory,
+        sessions: [],
+        fetchedAt: null,
+        error: null,
+        pinnedSessionIds: [],
+        projects: [],
+      },
+      conversation: resetConversation(),
+    }));
+  }
+
+  private openDemoSession(sessionId: string): void {
+    const session = demoSessions.find((entry) => entry.session_id === sessionId) ?? demoSessions[0];
+    const rich = session.session_id === DEMO_SESSION_ID;
+    store.setState((state) => ({
+      conversation: resetConversation({
+        serverId: DEMO_SERVER_ID,
+        sessionId: session.session_id,
+        attachmentId: `demo-${session.session_id}`,
+        session,
+        title: session.title ?? 'Preview session',
+        workingDir: session.working_dir ?? null,
+        messages: rich ? demoMessages : [],
+        totalMessages: rich ? demoMessages.length : 0,
+        reasoning: rich ? demoReasoning : '',
+        reasoningPhase: rich ? 'thinking' : 'none',
+        reasoningStartedAt: rich ? Date.now() - 5_000 : null,
+        tools: rich ? demoTools : [],
+        changes: rich ? deriveChanges(demoMessages, demoTools) : [],
+        config: {
+          model: 'claude-sonnet-preview',
+          effort: 'high',
+          efforts: ['none', 'low', 'medium', 'high', 'max'],
+          modelConfirmed: true,
+          effortConfirmed: true,
+          source: 'server',
+          pendingModel: null,
+          pendingEffort: null,
+          applying: false,
+          error: null,
+          observedAt: Date.now(),
+        },
+        context: rich ? demoContext : null,
+        execution: rich
+          ? {
+              kind: 'working',
+              label: 'Running bash',
+              detail: 'bun run typecheck',
+              observedAt: Date.now(),
+              turnId: 1,
+            }
+          : { kind: 'ready', label: 'Ready', observedAt: Date.now(), turnId: 1 },
+        historyFreshness: { status: 'authoritative', observedAt: Date.now() },
+      }),
+      connection: { ...state.connection, state: 'current' },
+    }));
+  }
+
+  async togglePinnedSession(sessionId: string): Promise<void> {
+    const current = store.get().inventory.pinnedSessionIds;
+    const next = current.includes(sessionId)
+      ? current.filter((value) => value !== sessionId)
+      : [...current, sessionId].slice(-24);
+    store.setState((state) => ({ inventory: { ...state.inventory, pinnedSessionIds: next } }));
+    await setPref(PINNED_SESSIONS, JSON.stringify(next));
+  }
+
+  async saveProjects(projects: Array<ProjectLike>): Promise<void> {
+    store.setState((state) => ({ inventory: { ...state.inventory, projects } }));
+    await setPref(PROJECTS, JSON.stringify(projects));
+  }
+
+  /** Server-owned model catalog and model-specific effort ladder. */
+  async refreshModels(): Promise<{ models: string[]; current: string | null }> {
+    if (store.get().demo) {
+      const config = store.get().conversation.config;
+      return { models: ['claude-sonnet-preview', 'gpt-5-preview'], current: config.model };
+    }
+    const client = this.client;
+    const sessionId = store.get().conversation.sessionId;
+    if (!client?.isOpen || !sessionId) return { models: [], current: null };
+    try {
+      const frame = await client.request({ req: 'list_models', session_id: sessionId }, 8_000, {
+        suppressEvent: true,
+      });
+      if (frame.ev !== 'models') return { models: [], current: null };
+      this.applyCatalog(frame);
+      return { models: frame.models, current: frame.current ?? null };
+    } catch {
+      return { models: [], current: null };
+    }
+  }
+
+  private applyCatalog(frame: Extract<ServerEvent, { ev: 'models' }>): void {
+    const sessionId = store.get().conversation.sessionId;
+    if (!sessionId || frame.session_id !== sessionId) return;
+    store.setState((state) => ({
+      conversation: {
+        ...state.conversation,
+        config: {
+          ...state.conversation.config,
+          model: frame.current ?? state.conversation.config.model,
+          modelConfirmed: frame.current !== undefined && frame.current !== null,
+          efforts: frame.efforts ?? state.conversation.config.efforts,
+          effort: frame.current_effort ?? state.conversation.config.effort,
+          effortConfirmed:
+            frame.current_effort !== undefined && frame.current_effort !== null,
+          source: 'server',
+          observedAt: Date.now(),
+        },
+      },
+    }));
+  }
+
+  /**
+   * Apply model then effort. The adapter only reports confirmed after the
+   * daemon acknowledges the corresponding change event.
+   */
+  async configureSession(input: {
+    model?: string | null;
+    effort?: string | null;
+  }): Promise<{ ok: boolean; error?: string }> {
+    if (store.get().demo) {
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          config: {
+            ...state.conversation.config,
+            model: input.model ?? state.conversation.config.model,
+            effort: input.effort ?? state.conversation.config.effort,
+            applying: false,
+            source: 'server',
+            observedAt: Date.now(),
+          },
+        },
+      }));
+      return { ok: true };
+    }
+    const client = this.client;
+    const conversation = store.get().conversation;
+    const sessionId = conversation.sessionId;
+    if (!client?.isOpen || !sessionId) return { ok: false, error: 'Reconnect to change configuration.' };
+    if (conversation.execution.kind === 'working') {
+      return { ok: false, error: 'This turn is running. Configuration applies to the next turn.' };
+    }
+    const model = input.model ?? conversation.config.model;
+    const effort = input.effort ?? conversation.config.effort;
+    store.setState((state) => ({
+      conversation: {
+        ...state.conversation,
+        config: {
+          ...state.conversation.config,
+          applying: true,
+          error: null,
+          pendingModel: input.model ?? state.conversation.config.pendingModel,
+          pendingEffort: input.effort ?? state.conversation.config.pendingEffort,
+          source: 'pending',
+        },
+      },
+    }));
+    try {
+      if (input.model !== undefined && input.model !== conversation.config.model) {
+        const reply = await client.request(
+          { req: 'set_model', session_id: sessionId, model: input.model ?? '' },
+          15_000,
+          { suppressEvent: true },
+        );
+        if (reply.ev === 'error') throw new Error(reply.message);
+      }
+      if (input.effort !== undefined) {
+        const reply = await client.request(
+          { req: 'set_effort', session_id: sessionId, effort: input.effort },
+          15_000,
+          { suppressEvent: true },
+        );
+        if (reply.ev === 'error') throw new Error(reply.message);
+      }
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          config: {
+            ...state.conversation.config,
+            model: model ?? state.conversation.config.model,
+            effort,
+            modelConfirmed: model !== null,
+            effortConfirmed: input.effort === null || effort !== null,
+            applying: false,
+            pendingModel: null,
+            pendingEffort: null,
+            source: 'server',
+            observedAt: Date.now(),
+          },
+        },
+      }));
+      return { ok: true };
+    } catch (error) {
+      const message = errorMessage(error);
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          config: { ...state.conversation.config, applying: false, error: message },
+        },
+      }));
+      return { ok: false, error: message };
+    }
+  }
+
+  async refreshContext(): Promise<void> {
+    if (store.get().demo) return;
+    const client = this.client;
+    const conversation = store.get().conversation;
+    if (!client?.isOpen || !conversation.sessionId || !conversation.attachmentId) return;
+    try {
+      const frame = await client.request(
+        { req: 'get_context_snapshot', session_id: conversation.sessionId },
+        8_000,
+        { suppressEvent: true },
+      );
+      if (frame.ev === 'context_snapshot') this.applyContext(frame);
+    } catch {
+      // Unknown stays unknown; no invented percentage.
+    }
+  }
+
+  private applyContext(frame: Extract<ServerEvent, { ev: 'context_snapshot' }>): void {
+    const conversation = store.get().conversation;
+    if (frame.session_id !== conversation.sessionId) return;
+    const next: ContextSnapshot = {
+      usedTokens: frame.used_tokens,
+      limitTokens: frame.limit_tokens,
+      basis: frame.basis,
+      model: frame.model,
+      observedAt: frame.observed_at_ms,
+      freshness: 'current',
+      source: 'adapter',
+    };
+    store.setState((state) => ({ conversation: { ...state.conversation, context: next } }));
+  }
+
+  /** Authenticated read-only server directory listing. */
+  async listDirectories(
+    path: string,
+    options: { cursor?: string; showHidden?: boolean } = {},
+  ): Promise<
+    | { ok: true; canonicalPath: string; parent: string | null; entries: import('./protocol/frames').DirectoryEntry[]; cursor: string | null; roots: string[] }
+    | { ok: false; error: string }
+  > {
+    const client = this.client;
+    if (!client?.isOpen) return { ok: false, error: 'Reconnect to browse the server.' };
+    const capabilities =
+      client.hello?.ev === 'hello_ok' ? client.hello.capabilities : [];
+    if (!capabilities.includes('directory_browse')) {
+      return { ok: false, error: 'This server does not support folder browsing.' };
+    }
+    try {
+      const frame = await client.request(
+        {
+          req: 'list_directories',
+          path,
+          ...(options.cursor ? { cursor: options.cursor } : null),
+          show_hidden: options.showHidden === true,
+          limit: 100,
+        },
+        12_000,
+        { suppressEvent: true },
+      );
+      if (frame.ev === 'error') return { ok: false, error: frame.message };
+      if (frame.ev !== 'directory') return { ok: false, error: 'The server returned no folder listing.' };
+      if (frame.error) return { ok: false, error: frame.error };
+      return {
+        ok: true,
+        canonicalPath: frame.canonical_path,
+        parent: frame.parent,
+        entries: frame.entries.filter((entry) => entry.kind === 'directory'),
+        cursor: frame.cursor,
+        roots: frame.roots,
+      };
+    } catch (error) {
+      return { ok: false, error: errorMessage(error) };
+    }
   }
 
   async setPrivacyPreview(value: boolean): Promise<void> {
@@ -2266,6 +2903,20 @@ export class AppController {
         }
         this.attachedSessionId = session.session_id;
         void this.refreshSessions({ force: true });
+        if (frame.capabilities.includes('session_config')) {
+          setTimeout(() => {
+            if (store.get().conversation.attachmentId === frame.attachment_id) {
+              void this.refreshModels();
+            }
+          }, 0);
+        }
+        if (frame.capabilities.includes('context_snapshot')) {
+          setTimeout(() => {
+            if (store.get().conversation.attachmentId === frame.attachment_id) {
+              void this.refreshContext();
+            }
+          }, 0);
+        }
         return;
       }
       case 'history': {
@@ -2275,6 +2926,11 @@ export class AppController {
       }
       case 'text_delta': {
         if (!belongs(frame.attachment_id)) return;
+        if (store.get().conversation.reasoningPhase === 'thinking') {
+          store.setState((state) => ({
+            conversation: { ...state.conversation, reasoningPhase: 'working' },
+          }));
+        }
         if (frame.turn_id < this.lastTurnId) return;
         this.lastTurnId = frame.turn_id;
         this.streamText += frame.text;
@@ -2306,12 +2962,25 @@ export class AppController {
           conversation: {
             ...state.conversation,
             reasoning: `${state.conversation.reasoning}${frame.text}`.slice(-16_000),
+            reasoningPhase: 'thinking',
+            reasoningStartedAt: state.conversation.reasoningStartedAt ?? Date.now(),
           },
         }));
         return;
       }
       case 'reasoning_done': {
         if (!belongs(frame.attachment_id)) return;
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            reasoningPhase: 'working',
+            reasoningDurationSecs:
+              frame.duration_secs ??
+              (state.conversation.reasoningStartedAt
+                ? (Date.now() - state.conversation.reasoningStartedAt) / 1000
+                : null),
+          },
+        }));
         return;
       }
       case 'text_done': {
@@ -2355,6 +3024,9 @@ export class AppController {
             ]),
           },
         }));
+        store.setState((state) => ({
+          conversation: { ...state.conversation, reasoningPhase: 'working' },
+        }));
         this.setWorking(frame.turn_id, frame.name);
         this.flushStream();
         return;
@@ -2376,10 +3048,9 @@ export class AppController {
       }
       case 'tool_done': {
         if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        store.setState((state) => ({
-          conversation: {
-            ...state.conversation,
-            tools: this.boundTools(state.conversation.tools.map((tool) =>
+        store.setState((state) => {
+          const tools = this.boundTools(
+            state.conversation.tools.map((tool) =>
               tool.callId === frame.call_id
                 ? {
                     ...tool,
@@ -2391,9 +3062,17 @@ export class AppController {
                     completedAt: Date.now(),
                   }
                 : tool,
-            )),
-          },
-        }));
+            ),
+          );
+          return {
+            conversation: {
+              ...state.conversation,
+              tools,
+              changes: deriveChanges(state.conversation.messages, tools),
+              reasoningPhase: 'working',
+            },
+          };
+        });
         // A tool finishing is not the task finishing.
         this.setWorking(frame.turn_id, undefined);
         return;
@@ -2408,6 +3087,18 @@ export class AppController {
           observedAt: Date.now(),
           turnId: frame.turn_id,
         });
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            reasoningPhase: 'none',
+            reasoningDurationSecs:
+              state.conversation.reasoningDurationSecs ??
+              (state.conversation.reasoningStartedAt
+                ? (Date.now() - state.conversation.reasoningStartedAt) / 1000
+                : null),
+          },
+        }));
+        void this.refreshContext();
         if (typeof frame.pending_soft_interrupts === 'number') {
           store.setState((state) => ({
             conversation: { ...state.conversation, pendingSoftInterrupts: frame.pending_soft_interrupts ?? 0 },
@@ -2431,6 +3122,9 @@ export class AppController {
           observedAt: Date.now(),
           turnId: frame.turn_id,
         });
+        store.setState((state) => ({
+          conversation: { ...state.conversation, reasoningPhase: 'none' },
+        }));
         return;
       }
       case 'session_status': {
@@ -2530,6 +3224,43 @@ export class AppController {
         }));
         return;
       }
+      case 'models': {
+        this.applyCatalog(frame);
+        return;
+      }
+      case 'context_snapshot': {
+        if (frame.session_id !== conversation.sessionId) return;
+        this.applyContext(frame);
+        return;
+      }
+      case 'session_config': {
+        if (frame.session_id !== conversation.sessionId) return;
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            config: {
+              ...state.conversation.config,
+              model: frame.model ?? state.conversation.config.model,
+              effort: frame.effort,
+              efforts: frame.efforts.length
+                ? frame.efforts
+                : state.conversation.config.efforts,
+              modelConfirmed: frame.confirmed && frame.model !== null,
+              effortConfirmed: frame.confirmed,
+              applying: false,
+              pendingModel: null,
+              pendingEffort: null,
+              source: frame.confirmed ? 'server' : 'unknown',
+              error: null,
+              observedAt: Date.now(),
+            },
+          },
+        }));
+        return;
+      }
+      case 'directory':
+      case 'image_ack':
+        return;
       case 'session_closed': {
         store.setState((state) => ({
           conversation: { ...state.conversation, lastError: frame.reason },
@@ -2695,8 +3426,9 @@ export class AppController {
     ) {
       return;
     }
+    const messages = attachHistoryImages(frame.messages, frame.images);
     const firstVisit = bookmark === null && this.firstVisit;
-    const seam = deriveSeam(frame.messages, frame.total_messages, frame.base_index, bookmark, firstVisit);
+    const seam = deriveSeam(messages, frame.total_messages, frame.base_index, bookmark, firstVisit);
     if (firstVisit) this.firstVisit = false;
 
     // Acceptance must come from the adapter's correlated ledger, never from
@@ -2719,13 +3451,17 @@ export class AppController {
     store.setState((current) => ({
       conversation: {
         ...current.conversation,
-        messages: frame.messages,
+        messages,
         totalMessages: frame.total_messages,
         baseIndex: frame.base_index,
         hasOlder: frame.base_index > 0,
         loadingOlder: false,
         provisionalText: '',
         reasoning: '',
+        reasoningPhase: 'none',
+        reasoningStartedAt: null,
+        reasoningDurationSecs: null,
+        changes: deriveChanges(messages, current.conversation.tools),
         delivery,
         seam: seam.index !== null ? { index: seam.index, count: seam.count } : null,
         hasNewActivity: hasNewActivity || current.conversation.hasNewActivity,
@@ -2752,18 +3488,19 @@ export class AppController {
     this.noteContact();
 
     if (firstVisit) {
-      const last = frame.messages[frame.messages.length - 1];
+      const last = messages[messages.length - 1];
       await setBookmark(serverId, sessionId, frame.total_messages, last ? messageFingerprint(last) : '');
     }
 
     // Persist asynchronously; a big transcript must not block the frame loop.
     setTimeout(() => {
       if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
-      void upsertMessages(serverId, sessionId, frame.messages);
+      void upsertMessages(serverId, sessionId, messages);
     }, 0);
   }
 
   async loadOlder(): Promise<void> {
+    if (store.get().demo) return;
     const conversation = store.get().conversation;
     const sessionId = conversation.sessionId;
     const client = this.client;

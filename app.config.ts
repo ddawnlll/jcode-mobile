@@ -10,7 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'JCode Mobile',
   slug: 'jcode-mobile',
-  version: '0.1.4',
+  version: '0.2.0',
   orientation: 'portrait',
   scheme: 'jcodemobile',
   userInterfaceStyle: 'automatic',
@@ -26,6 +26,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
       NSCameraUsageDescription:
         'Scan a JCode pairing code shown on your own server.',
+      NSPhotoLibraryUsageDescription:
+        'Attach a screenshot or image to a message for JCode on your server.',
       NSFaceIDUsageDescription: undefined,
     },
   },
@@ -44,6 +46,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-secure-store',
     'expo-sqlite',
     'expo-font',
+    'expo-image',
+    [
+      'expo-image-picker',
+      {
+        photosPermission:
+          'Attach a screenshot or image to a message for JCode on your server.',
+      },
+    ],
     [
       'expo-splash-screen',
       {

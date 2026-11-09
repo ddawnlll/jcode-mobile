@@ -8,7 +8,7 @@ import { createServer, type Server, type Socket } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test, { mock } from 'node:test';
+import test from 'node:test';
 
 import { Attachment } from '../src/attachment.ts';
 import type { AdapterConfig } from '../src/config.ts';
@@ -33,6 +33,7 @@ function configFor(socketPath: string, stateDir: string, overrides: Partial<Adap
     renameTimeoutMs: 8_000,
     logLevel: 'warn',
     faultAfterSend: false,
+    workspaceRoots: [stateDir],
     ...overrides,
   };
 }
@@ -456,13 +457,13 @@ test('a timed-out rename cannot complete or hide a later rename', async () => {
     await started;
 
     const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
-    mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const first = attachment.rename('A title');
       await settle();
-      const firstRequest = frames().find((frame) => frame.type === 'rename_session');
+      const firstRequest = await waitForFrame(frames, 'rename_session');
       assert.ok(firstRequest);
-      mock.timers.tick(201);
+      // Real 200 ms deadline: Bun and Node expose different fake-timer
+      // surfaces, and this test must exercise the attachment's real timer.
       await assert.rejects(first, /did not confirm/);
 
       // The daemon may still process the timed-out request. Overlapping a new
@@ -482,7 +483,7 @@ test('a timed-out rename cannot complete or hide a later rename', async () => {
 
       const second = attachment.rename('B title');
       await settle();
-      const secondRequest = frames().filter((frame) => frame.type === 'rename_session').at(-1);
+      const secondRequest = await waitForFrame(frames, 'rename_session', firstRequest!.id);
       assert.ok(secondRequest);
       assert.notEqual(secondRequest!.id, firstRequest!.id);
 
@@ -507,8 +508,23 @@ test('a timed-out rename cannot complete or hide a later rename', async () => {
       send({ type: 'done', id: secondRequest!.id });
       assert.deepEqual(await second, { title: 'B title', displayTitle: 'B title' });
     } finally {
-      mock.timers.reset();
       attachment.dispose();
     }
   });
 });
+
+/** Socket writes settle on a different turn under Bun and Node. */
+async function waitForFrame(
+  frames: () => Record<string, unknown>[],
+  type: string,
+  afterId?: unknown,
+): Promise<Record<string, unknown> | undefined> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const match = frames()
+      .filter((frame) => frame.type === type)
+      .find((frame) => afterId === undefined || frame.id !== afterId);
+    if (match) return match;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return undefined;
+}

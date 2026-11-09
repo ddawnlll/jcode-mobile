@@ -6,9 +6,9 @@ Updated: 2026-11-08
 
 | Item | Value |
 | --- | --- |
-| Branch | `main` |
+| Branch | `feature/v0.2.0-tidal-glass` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.1.4 |
+| App version | 0.2.0 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -60,6 +60,23 @@ gh workflow run check.yml --ref main         # Android 36 build, pass
 ## v0.1.4 reliability patch
 
 Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`, followed by nine review-round race fixes. Full evidence is in `docs/V0_1_4_VERIFICATION.md`. Current checks under Node 22.21.1: `npm run check` (62 Jest tests), `npm run adapter:test` (12 tests), `npm run e2e` (10 tests, Expo web/Chromium). Native Android/iOS checks remain NOT_RUN on this host.
+
+## v0.2.0 Tidal Glass and Bun
+
+Bun 1.4.4 is the sole host runtime and package manager. `bun.lock` is the one
+lockfile; CI uses `oven-sh/setup-bun` and `bun install --frozen-lockfile`.
+Adapter, typecheck, lint, Jest/RNTL, Playwright, and Expo web export run under
+Bun. Full evidence, coverage matrix, and the Bun/Node performance comparison are
+in `docs/V0_2_0_VERIFICATION.md`.
+
+| Item | Value |
+| --- | --- |
+| Theme families | 11 families / 22 Light+Night palettes; Tidal preserved |
+| Rich content | CommonMark/GFM + footnotes + math, highlight.js, native LaTeX |
+| Images | bounded prompt images + controlled Markdown image loading |
+| Adapter additions | directory browse, config/effort, context snapshot, images, changes |
+| Web e2e | iPhone 14, Pixel 7, and 320-wide projects |
+| Native v0.2 gates | NOT_RUN on this VPS |
 
 ## Web target (verified 2026-11-09 on Debian 13)
 

@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
-import type { HistoryMessage, SessionInfo } from '../protocol/frames';
+import type { HistoryMessage, MessageImage, SessionInfo } from '../protocol/frames';
+import type { ChangeRecord, ToolRow } from '../state/store';
 
 export function newClientId(prefix: string): string {
   return `${prefix}_${Crypto.randomUUID()}`;
@@ -133,4 +134,108 @@ export function formatClock(ms: number | null | undefined): string {
     .getMinutes()
     .toString()
     .padStart(2, '0')}`;
+}
+
+const EDIT_TOOLS = /(^|[_-])(edit|write|apply_patch|patch|str_replace|create_file|delete_file)([_-]|$)/i;
+
+function changeFromInput(
+  key: string,
+  callId: string,
+  name: string,
+  input: unknown,
+): ChangeRecord | null {
+  if (!EDIT_TOOLS.test(name)) return null;
+  if (!input || typeof input !== 'object') return null;
+  const record = input as Record<string, unknown>;
+  const path =
+    (typeof record.path === 'string' && record.path) ||
+    (typeof record.file_path === 'string' && record.file_path) ||
+    (typeof record.target === 'string' && record.target) ||
+    (typeof record.filename === 'string' && record.filename) ||
+    '';
+  if (!path) return null;
+  const patch =
+    (typeof record.patch === 'string' && record.patch) ||
+    (typeof record.diff === 'string' && record.diff) ||
+    (typeof record.new_string === 'string' && record.old_string !== undefined
+      ? `- ${String(record.old_string)}\n+ ${record.new_string}`
+      : '');
+  const lowered = name.toLowerCase();
+  const operation: ChangeRecord['operation'] = lowered.includes('delete')
+    ? 'delete'
+    : lowered.includes('write') || lowered.includes('create')
+      ? 'write'
+      : lowered.includes('rename')
+        ? 'rename'
+        : 'edit';
+  const lines = patch ? patch.split('\n') : [];
+  const added = lines.filter((line) => line.startsWith('+') && !line.startsWith('+++')).length;
+  const removed = lines.filter((line) => line.startsWith('-') && !line.startsWith('---')).length;
+  return {
+    key,
+    callId,
+    path,
+    operation,
+    ...(patch
+      ? { diff: patch.slice(0, 24_000), added, removed, evidence: 'diff' as const }
+      : { evidence: 'path' as const }),
+  };
+}
+
+/** Confirmed file changes only; never infer a diff from assistant prose. */
+export function deriveChanges(messages: HistoryMessage[], tools: ToolRow[]): ChangeRecord[] {
+  const changes: ChangeRecord[] = [];
+  const seen = new Set<string>();
+  for (const tool of tools) {
+    if (tool.state === 'failed' || tool.state === 'running') continue;
+    const change = changeFromInput(`t-${tool.callId}`, tool.callId, tool.name, tool.input);
+    if (change && !seen.has(change.callId)) {
+      seen.add(change.callId);
+      changes.push(change);
+    }
+  }
+  for (const message of messages) {
+    if (!message.tool_data) continue;
+    if (seen.has(message.tool_data.id)) continue;
+    const change = changeFromInput(
+      `h-${message.index}`,
+      message.tool_data.id,
+      message.tool_data.name,
+      message.tool_data.input,
+    );
+    if (change) {
+      seen.add(change.callId);
+      changes.push(change);
+    }
+  }
+  return changes.slice(-80);
+}
+
+/**
+ * Daemon history carries images beside the message array. Anchor them to the
+ * prompt, tool call or insertion boundary the server reports; never invent an
+ * association from prose.
+ */
+export function attachHistoryImages(
+  messages: HistoryMessage[],
+  images: MessageImage[] | undefined,
+): HistoryMessage[] {
+  if (!images || images.length === 0) return messages;
+  const copy = messages.map((message) => ({ ...message }));
+  const userMessages = copy.filter((message) => message.role === 'user');
+  for (const image of images) {
+    let target: HistoryMessage | undefined;
+    if (typeof image.history_message_index === 'number') {
+      const boundary = Math.max(0, Math.min(copy.length - 1, image.history_message_index - 1));
+      target = copy[boundary];
+    } else if (image.anchor?.kind === 'user_prompt' && typeof image.anchor.ordinal === 'number') {
+      target = userMessages[image.anchor.ordinal - 1];
+    } else if (image.anchor?.kind === 'tool_call' && typeof image.anchor.id === 'string') {
+      target = copy.find((message) => message.tool_data?.id === image.anchor?.id);
+    }
+    if (!target) target = copy[copy.length - 1];
+    if (!target) continue;
+    target.images = [...(target.images ?? []), image];
+  }
+  return copy;
 }

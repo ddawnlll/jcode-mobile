@@ -57,3 +57,23 @@ These fields are additive to the curated vocabulary and are required for mobile 
 - No background mobile socket requirement; continuation is server-owned.
 - No multi-process-per-phone agent runtime, second transcript store, or provider proxy.
 - No claim that the installed server equals the reviewed source beyond the binary's version/commit evidence.
+
+## v0.2.0 additive operations
+
+These operations are negotiated through `hello_ok`/`attached` capabilities and
+do not change the v1 envelope or existing continuation semantics.
+
+| Capability / request | Source evidence | Behavior |
+| --- | --- | --- |
+| `directory_browse`; `list_directories`, `validate_directory` | Adapter-side `realpath`/`readdir` | Read-only, configured roots only, canonical path, paging, hidden toggle, typed errors; no shell |
+| `session_config`; `set_effort`, confirmed `set_model` | `wire.rs` `set_model`, `set_reasoning_effort`; `wire/events.rs` `model_changed`, `reasoning_effort_changed` | Correlated confirmation; model switch reports the effective effort and `context_window` |
+| model-specific efforts in `models` | `jcode-provider-core/src/reasoning.rs` ladders | Adapter emits only a provider/model-backed ladder; unknown stays empty |
+| `context_snapshot`; `get_context_snapshot` | `wire/events.rs` `tokens`, `model_changed.context_window` | Reports last-request prompt tokens separately from the model limit; never lifetime usage or characters/4 |
+| `image_input`; `send_message.images`, `soft_interrupt.images` | `wire.rs` `images: Vec<(String, String)>` | Bounded media-type/base64 tuples; 4 images, 8 MiB each, 20 MiB total |
+| `history.images` and `HistoryMessage.reasoning` | `wire/events.rs` `images`; `jcode-render-core/src/reasoning.rs` sentinel markup | Anchors images to the reported message boundary; removes persisted reasoning markup from assistant prose and exposes it only through the reasoning display preference |
+| `changes` | Existing `tool_exec.input` / `tool_data` evidence | Client derives confirmed edit paths and supplied patch text; prose is never treated as a diff |
+
+Images are never uploaded to a phone-local path. The adapter passes the same
+media type and base64 payload to the daemon's existing image input. A provider
+that does not support image input may reject the turn; the app reports that
+rejection and never substitutes a text description.

@@ -11,6 +11,7 @@ jest.mock('@react-navigation/native', () => {
   const navigate = jest.fn();
   return {
     useNavigation: () => ({ navigate, goBack: jest.fn() }),
+    useRoute: () => ({ params: undefined }),
     useFocusEffect: (callback: () => void | (() => void)) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ReactModule = require('react') as typeof React;

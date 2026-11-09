@@ -17,6 +17,8 @@ import { ControlBridge } from './bridge.ts';
 import { DeviceRegistry } from './registry.ts';
 import { Attachment } from './attachment.ts';
 import { newId, nowMs, readJson, writeJsonAtomic } from './util.ts';
+import { parseImages } from './images.ts';
+import { listDirectories } from './directory.ts';
 
 interface ClientState {
   id: string;
@@ -41,7 +43,6 @@ const MAX_REQUESTS_PER_WINDOW = 120;
 const RATE_WINDOW_MS = 10_000;
 const MAX_CONTENT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
-
 /**
  * Browsers cannot set an Authorization header on WebSocket. They can offer a
  * subprotocol, so a web client sends `jcode-v1` plus `token.<bearer>`. Native
@@ -133,6 +134,11 @@ const ADAPTER_CAPABILITIES = [
   'file_read',
   'archive_restore',
   'models',
+  'directory_browse',
+  'session_config',
+  'context_snapshot',
+  'image_input',
+  'changes',
 ];
 
 export class MobileAdapter {
@@ -341,7 +347,7 @@ export class MobileAdapter {
         this.reply(client, id, {
           ev: 'hello_ok',
           version: 1,
-          server: 'jcode-mobile-adapter/0.1.4',
+          server: 'jcode-mobile-adapter/0.2.0',
           capabilities: ADAPTER_CAPABILITIES,
         });
         return;
@@ -359,7 +365,7 @@ export class MobileAdapter {
         daemonVersion = this.observedDaemonVersion() ?? daemonVersion;
         this.reply(client, id, {
           ev: 'server_info',
-          server: 'jcode-mobile-adapter/0.1.4',
+          server: 'jcode-mobile-adapter/0.2.0',
           daemon_version: daemonVersion,
           continuation: true,
           capabilities: ADAPTER_CAPABILITIES,
@@ -412,7 +418,12 @@ export class MobileAdapter {
         if (!attachment) return;
         const content = typeof frame.content === 'string' ? frame.content : '';
         const clientMessageId = typeof frame.client_message_id === 'string' ? frame.client_message_id : '';
-        if (!content.trim() || !clientMessageId) {
+        const parsedImages = parseImages(frame.images);
+        if (!parsedImages.ok) {
+          this.error(client, id, 'invalid_request', parsedImages.error);
+          return;
+        }
+        if ((!content.trim() && parsedImages.images.length === 0) || !clientMessageId) {
           this.error(client, id, 'invalid_request', 'content and client_message_id are required.');
           return;
         }
@@ -420,7 +431,7 @@ export class MobileAdapter {
           this.error(client, id, 'invalid_request', 'Message is too long.');
           return;
         }
-        const result = attachment.sendMessage(content, clientMessageId);
+        const result = attachment.sendMessage(content, clientMessageId, parsedImages.images);
         if (!result.accepted) {
           this.error(client, id, 'daemon_unavailable', 'The session connection is not open.');
           return;
@@ -433,7 +444,12 @@ export class MobileAdapter {
         if (!attachment) return;
         const content = typeof frame.content === 'string' ? frame.content : '';
         const clientId = typeof frame.client_id === 'string' ? frame.client_id : '';
-        if (!content.trim() || !clientId) {
+        const parsedImages = parseImages(frame.images);
+        if (!parsedImages.ok) {
+          this.error(client, id, 'invalid_request', parsedImages.error);
+          return;
+        }
+        if ((!content.trim() && parsedImages.images.length === 0) || !clientId) {
           this.error(client, id, 'invalid_request', 'content and client_id are required.');
           return;
         }
@@ -441,7 +457,7 @@ export class MobileAdapter {
           this.error(client, id, 'invalid_request', 'Message is too long.');
           return;
         }
-        attachment.softInterrupt(content, clientId);
+        attachment.softInterrupt(content, clientId, parsedImages.images);
         this.reply(client, id, { ev: 'ok' });
         return;
       }
@@ -531,6 +547,8 @@ export class MobileAdapter {
           session_id: attachment.sessionId,
           models: models.models,
           current: models.current,
+          efforts: models.efforts,
+          current_effort: models.currentEffort,
         });
         return;
       }
@@ -542,8 +560,83 @@ export class MobileAdapter {
           this.error(client, id, 'invalid_request', 'model is required.');
           return;
         }
-        attachment.setModel(model);
-        this.reply(client, id, { ev: 'ok' });
+        const result = await attachment.setModel(model);
+        if (result.error) {
+          this.error(client, id, 'internal', result.error);
+          return;
+        }
+        this.reply(client, id, {
+          ev: 'session_config',
+          session_id: attachment.sessionId,
+          model: result.model,
+          effort: result.effort,
+          efforts: [],
+          confirmed: true,
+          source: 'server',
+        });
+        return;
+      }
+      case 'set_effort': {
+        const attachment = this.requireAttachment(client, id, frame);
+        if (!attachment) return;
+        const effort = typeof frame.effort === 'string' ? frame.effort : null;
+        const result = await attachment.setEffort(effort);
+        if (result.error) {
+          this.error(client, id, 'internal', result.error);
+          return;
+        }
+        this.reply(client, id, {
+          ev: 'session_config',
+          session_id: attachment.sessionId,
+          model: null,
+          effort: result.effort,
+          efforts: [],
+          confirmed: true,
+          source: 'server',
+        });
+        return;
+      }
+      case 'get_context_snapshot': {
+        const attachment = this.requireAttachment(client, id, frame);
+        if (!attachment) return;
+        this.reply(client, id, { ...attachment.contextSnapshot(), session_id: attachment.sessionId });
+        return;
+      }
+      case 'list_directories':
+      case 'validate_directory': {
+        const path = typeof frame.path === 'string' ? frame.path : '';
+        const cursor = Math.max(
+          0,
+          Number.parseInt(typeof frame.cursor === 'string' ? frame.cursor : '0', 10) || 0,
+        );
+        const limit =
+          req === 'validate_directory'
+            ? 0
+            : Math.min(Math.max(typeof frame.limit === 'number' ? frame.limit : 100, 1), 200);
+        const listing = await this.directoryListing(path, frame.show_hidden === true, cursor, limit);
+        if (!listing.ok) {
+          this.reply(client, id, {
+            ev: 'directory',
+            path,
+            canonical_path: path,
+            parent: null,
+            entries: [],
+            cursor: null,
+            roots: [],
+            error: listing.error,
+          });
+          return;
+        }
+        this.reply(client, id, {
+          ev: 'directory',
+          path,
+          canonical_path: listing.canonicalPath,
+          parent: listing.parent,
+          entries: listing.entries,
+          cursor: listing.cursor,
+          roots: listing.roots,
+          error: null,
+        });
         return;
       }
       case 'read_file': {
@@ -621,6 +714,34 @@ export class MobileAdapter {
     } catch (error) {
       this.error(client, id, 'daemon_unavailable', (error as Error).message);
     }
+  }
+
+  /**
+   * Read-only canonical directory listing inside configured workspace roots.
+   * No shell, no recursive preload, and no path outside a root.
+   */
+  private async directoryListing(
+    requestedPath: string,
+    showHidden: boolean,
+    cursor: number,
+    limit: number,
+  ) {
+    const result = await listDirectories(
+      this.config.workspaceRoots,
+      requestedPath,
+      showHidden,
+      cursor,
+      limit,
+    );
+    if (!result.ok) return result;
+    return {
+      ok: true as const,
+      canonicalPath: result.listing.canonicalPath,
+      parent: result.listing.parent,
+      entries: result.listing.entries,
+      cursor: result.listing.cursor,
+      roots: result.listing.roots,
+    };
   }
 
   private observedDaemonVersion(): string | null {

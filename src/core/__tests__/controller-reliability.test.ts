@@ -298,6 +298,8 @@ function resetStore(): void {
       partial: false,
       limit: 50,
       includeArchived: false,
+      pinnedSessionIds: [],
+      projects: [],
       pendingRestore: null,
     },
     conversation: resetConversation(),

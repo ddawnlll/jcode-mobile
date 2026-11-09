@@ -47,7 +47,11 @@ export async function createSession(
   ).toBeVisible();
 
   await page.getByRole('textbox', { name: 'Folder on server' }).fill(folder);
-  await page.getByRole('textbox', { name: 'Instruction' }).fill(instruction);
+  await page.getByRole('textbox', { name: 'First instruction' }).fill(instruction);
   await page.getByRole('button', { name: 'Start session' }).click();
+  await expect(page.getByRole('button', { name: 'Confirm and send' })).toBeVisible({
+    timeout: 45_000,
+  });
+  await page.getByRole('button', { name: 'Confirm and send' }).click();
   await expectConversation(page);
 }

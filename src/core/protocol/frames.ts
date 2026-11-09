@@ -48,6 +48,20 @@ export interface SessionInfo {
   live_state?: 'working' | 'ready';
 }
 
+export interface MessageImage {
+  media_type: string;
+  /** Base64 payload, without a data: prefix. */
+  data: string;
+  /** Local or remote URI when a prompt image is not carried as base64. */
+  uri?: string;
+  label?: string | null;
+  alt?: string | null;
+  source?: string;
+  anchor?: { kind: string; ordinal?: number; id?: string } | null;
+  /** Insert before this index in the accompanying history window. */
+  history_message_index?: number;
+}
+
 export interface HistoryMessage {
   /** Stable zero-based position in the persisted transcript. */
   index: number;
@@ -57,6 +71,10 @@ export interface HistoryMessage {
   tool_calls?: string[];
   /** One structured tool call recorded with this assistant message. */
   tool_data?: { id: string; name: string; input?: unknown; intent?: string };
+  /** Images attached to this prompt or produced by this turn. */
+  images?: MessageImage[];
+  /** Server-exposed reasoning recovered from the persisted markup. */
+  reasoning?: string;
   /** Present when the daemon reports a completed stored turn. */
   response_stats?: {
     duration_secs?: number;
@@ -110,6 +128,16 @@ export interface ServerCapabilities {
   archive_restore: boolean;
   /** Model catalog for a session. */
   models: boolean;
+  /** Authenticated read-only server directory browsing. */
+  directory_browse?: boolean;
+  /** Session model/effort configuration with correlated confirmation. */
+  session_config?: boolean;
+  /** Authoritative last-request context occupancy. */
+  context_snapshot?: boolean;
+  /** User-prompt image input forwarded to the daemon. */
+  image_input?: boolean;
+  /** Structured tool-reported file changes. */
+  changes?: boolean;
   /** No permissions capability is advertised: the bridge does not implement one. */
   permissions: false;
   /** No push capability is advertised. */
@@ -126,6 +154,11 @@ export const CAPABILITY_NAMES = [
   'file_read',
   'archive_restore',
   'models',
+  'directory_browse',
+  'session_config',
+  'context_snapshot',
+  'image_input',
+  'changes',
 ] as const;
 
 export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
@@ -167,6 +200,8 @@ export type ServerEvent =
       /** True when the persisted session was interrupted mid-generation. */
       interrupted_at_attach?: boolean;
       has_older?: boolean;
+      /** Images anchored to this bounded history window. */
+      images?: MessageImage[];
       /** Server-owned recovery intent, when the daemon reports one. */
       recovery?: { continuation_message: string; reconnect_notice?: string };
     }
@@ -181,7 +216,13 @@ export type ServerEvent =
       new_text: string;
     }
   | { ev: 'reasoning_delta'; session_id: string; attachment_id: string; turn_id: number; text: string }
-  | { ev: 'reasoning_done'; session_id: string; attachment_id: string; turn_id: number }
+  | {
+      ev: 'reasoning_done';
+      session_id: string;
+      attachment_id: string;
+      turn_id: number;
+      duration_secs?: number;
+    }
   | { ev: 'text_done'; session_id: string; attachment_id: string; turn_id: number }
   | { ev: 'message_accepted'; session_id: string; attachment_id: string; client_message_id: string; turn_id: number }
   | {
@@ -240,7 +281,44 @@ export type ServerEvent =
       state: TodoSnapshot;
       observed_at_ms: number;
     }
-  | { ev: 'models'; session_id: string; models: string[]; current?: string | null }
+  | {
+      ev: 'models';
+      session_id: string;
+      models: string[];
+      current?: string | null;
+      efforts?: string[];
+      current_effort?: string | null;
+    }
+  | {
+      ev: 'context_snapshot';
+      session_id: string;
+      attachment_id: string;
+      used_tokens: number | null;
+      limit_tokens: number | null;
+      basis: 'last_request' | 'current_prompt' | 'unknown';
+      model: string | null;
+      observed_at_ms: number;
+    }
+  | {
+      ev: 'session_config';
+      session_id: string;
+      model: string | null;
+      effort: string | null;
+      efforts: string[];
+      confirmed: boolean;
+      source: string;
+    }
+  | {
+      ev: 'directory';
+      path: string;
+      canonical_path: string;
+      parent: string | null;
+      entries: DirectoryEntry[];
+      cursor: string | null;
+      roots: string[];
+      error?: string | null;
+    }
+  | { ev: 'image_ack'; session_id: string; client_message_id: string; accepted: boolean }
   | {
       ev: 'server_info';
       server: string;
@@ -259,6 +337,14 @@ export type ServerEvent =
     }
   | { ev: 'unknown'; kind?: string };
 
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  kind: 'directory' | 'file' | 'symlink' | 'other';
+  hidden?: boolean;
+  readable?: boolean;
+}
+
 /* --------------------------------------------------------------- requests */
 
 export type ClientRequest =
@@ -269,8 +355,20 @@ export type ClientRequest =
   | { req: 'create_session'; working_dir: string; client_request_id: string }
   | { req: 'get_history'; session_id: string; limit?: number }
   | { req: 'get_history_before'; session_id: string; before_index: number; limit?: number }
-  | { req: 'send_message'; session_id: string; content: string; client_message_id: string }
-  | { req: 'soft_interrupt'; session_id: string; content: string; client_id: string }
+  | {
+      req: 'send_message';
+      session_id: string;
+      content: string;
+      client_message_id: string;
+      images?: Array<[string, string]>;
+    }
+  | {
+      req: 'soft_interrupt';
+      session_id: string;
+      content: string;
+      client_id: string;
+      images?: Array<[string, string]>;
+    }
   | { req: 'cancel_soft_interrupts'; session_id: string; client_ids: string[] }
   | { req: 'cancel'; session_id: string }
   | { req: 'archive_session'; session_id: string }
@@ -280,6 +378,10 @@ export type ClientRequest =
   | { req: 'get_todo_state'; session_id: string }
   | { req: 'list_models'; session_id: string }
   | { req: 'set_model'; session_id: string; model: string }
+  | { req: 'set_effort'; session_id: string; effort: string | null }
+  | { req: 'get_context_snapshot'; session_id: string }
+  | { req: 'list_directories'; path: string; cursor?: string; limit?: number; show_hidden?: boolean }
+  | { req: 'validate_directory'; path: string }
   | { req: 'read_file'; session_id: string; path: string; max_bytes?: number }
   | { req: 'get_server_info' }
   | { req: 'ping' };
@@ -309,6 +411,10 @@ const KNOWN_REQUESTS = new Set<ClientRequestName>([
   'get_todo_state',
   'list_models',
   'set_model',
+  'set_effort',
+  'get_context_snapshot',
+  'list_directories',
+  'validate_directory',
   'read_file',
   'get_server_info',
   'ping',

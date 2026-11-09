@@ -23,6 +23,10 @@ test.describe('confirmed title persistence', () => {
     await expect(page.getByRole('heading', { name: 'New session' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Folder on server' }).fill('/home/quant/jcode-mobile');
     await page.getByRole('button', { name: 'Start session' }).click();
+    await expect(page.getByRole('button', { name: 'Confirm and send' })).toBeVisible({
+      timeout: 45_000,
+    });
+    await page.getByRole('button', { name: 'Confirm and send' }).click();
     await expect(
       page.getByRole('textbox', { name: /^(Message|Add an instruction)$/ }),
     ).toBeVisible({ timeout: 45_000 });
