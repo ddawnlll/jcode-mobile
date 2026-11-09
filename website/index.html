@@ -103,6 +103,8 @@
     </div>
   </header>
 
+  <div class="motion-ui" id="motion-ui" aria-hidden="true"></div>
+
   <main id="main">
     <section class="hero" id="top" aria-labelledby="hero-title">
       <div class="wrap hero-lines" aria-hidden="true">
@@ -323,12 +325,14 @@
                 <img class="scene-image is-active" data-scene-image="send" src="assets/media/conversation-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview conversation with sample data, the Session work sheet open, and the composer." decoding="async">
                 <img class="scene-image" data-scene-image="away" src="assets/media/sessions-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview sessions screen with sample recent sessions and a New session button." decoding="async">
                 <img class="scene-image" data-scene-image="return" src="assets/media/work-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview session work sheet with sample activity rows and a Stop this turn control." decoding="async">
+                <div class="motion-scene-images" id="motion-scene-images" aria-hidden="true"></div>
               </div>
             </div>
             <div class="stage-caption">
               <span class="mono stage-scene" id="stage-scene">01 / Send</span>
               <span id="stage-caption-text">Draft saved, sending, sent to server, accepted. Four states, one explicit path.</span>
               <span class="mono stage-provenance" id="stage-provenance">Preview capture / v0.2.0 / Night</span>
+              <div class="motion-caption" id="motion-caption"></div>
             </div>
           </div>
           <div class="scene-tabs" id="scene-tabs" role="tablist" aria-label="Illustrative continuity states">
@@ -336,6 +340,7 @@
             <button class="scene-tab" id="tab-away" type="button" role="tab" aria-selected="false" aria-controls="scene-panel" data-scene="away" tabindex="-1"><span class="mono">02</span> Step away</button>
             <button class="scene-tab" id="tab-return" type="button" role="tab" aria-selected="false" aria-controls="scene-panel" data-scene="return" tabindex="-1"><span class="mono">03</span> Return</button>
           </div>
+          <div class="scene-progress" id="scene-progress" aria-hidden="true"></div>
         </div>
       </div>
     </section>
@@ -643,5 +648,6 @@ bun integration/jcode-adapter/src/main.ts</code></pre>
     <p class="boot-fallback">The orbit animation is paused because JavaScript is off. All product information remains available.</p>
   </noscript>
   <script src="main.js" defer></script>
+  <script type="module" src="assets/motion.js"></script>
 </body>
 </html>

@@ -865,6 +865,126 @@ p { text-wrap: pretty; }
 .scene-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--brand); }
 .scene-tab:active { transform: translateY(1px); }
 
+/* Motion island
+   Everything below is progressive enhancement. The static markup above is the
+   no-JavaScript page; the bundled React island only adds layers on top of it. */
+
+.motion-scene-images,
+.motion-caption,
+.scene-progress {
+  display: none;
+}
+
+.motion-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  height: 2px;
+  pointer-events: none;
+}
+.motion-progress-bar {
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: 0 50%;
+}
+
+.motion-enhanced .motion-scene-images {
+  display: block;
+  position: absolute;
+  inset: 0;
+}
+.motion-scene-frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: 18px;
+}
+.motion-scene-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 18px;
+}
+.motion-scene-index {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 5px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.4;
+  letter-spacing: 0.1em;
+}
+.motion-enhanced .scene-image {
+  opacity: 0 !important;
+}
+
+.motion-enhanced .motion-caption { display: block; width: 100%; }
+.motion-enhanced .stage-caption > .stage-scene,
+.motion-enhanced .stage-caption > #stage-caption-text,
+.motion-enhanced .stage-caption > #stage-provenance {
+  display: none;
+}
+.motion-enhanced .stage-caption { gap: 0; }
+.motion-caption-stack { width: 100%; }
+.motion-caption-frame { display: grid; gap: 4px; }
+.motion-caption-text { color: var(--muted); }
+
+.motion-enhanced .scene-progress {
+  display: block;
+  width: 100%;
+  padding: 8px 12px 0;
+}
+.scene-progress-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scene-progress-item {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding-top: 5px;
+}
+.scene-progress-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--line);
+}
+.scene-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--brand);
+  transform-origin: 0 50%;
+}
+.scene-progress-label { color: var(--muted); font-size: 8px; letter-spacing: 0.1em; }
+
+/* ScrollTrigger owns the pin on desktop. The stylesheet sticky stage remains
+   the no-GSAP fallback and the mobile behaviour. */
+.motion-pinned .narrative-stage { position: relative; top: auto; }
+.motion-gsap .narrative-stage[data-scene] .stage-device { transform: none; }
+.motion-gsap .stage-device { transition: none; }
+.motion-gsap .stage-panel { transform-origin: 50% 50%; }
+
 .narrative-end {
   margin-top: 0;
   padding: 18px 0 0;
@@ -1495,6 +1615,12 @@ td[data-label="State"] { white-space: nowrap; font-weight: 500; }
 
 @media print {
   .masthead, .scene-tabs, .motion-toggle, .skip-link, .site-footer { display: none !important; }
+  .motion-progress, .scene-progress, .motion-scene-images, .motion-caption { display: none !important; }
+  .motion-enhanced .scene-image { opacity: 0 !important; }
+  .motion-enhanced .scene-image.is-active { opacity: 1 !important; }
+  .motion-enhanced .stage-caption > .stage-scene,
+  .motion-enhanced .stage-caption > #stage-caption-text,
+  .motion-enhanced .stage-caption > #stage-provenance { display: block !important; }
   .section, .hero { break-inside: avoid; }
   .orbit-canvas { display: none !important; }
   .orbit-static { display: grid !important; }

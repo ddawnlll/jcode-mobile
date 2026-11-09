@@ -1,7 +1,9 @@
 # Marketing site tooling
 
-Status: **build, serve, and test tooling only.** No marketing site has been
-deployed by this repository, and these files make no claim that one is live.
+Status: **build, serve, and test tooling.** The owner publishes the static
+output manually to GitHub Pages at `https://ddawnlll.github.io/jcode-mobile/`.
+The workflow in this repository never deploys on push. This document does not
+claim that the motion upgrade below is live until the owner redeploys.
 
 The static site source lives in `website/` and is owned by the website worker.
 This document describes the root-owned tooling around it:
@@ -12,22 +14,31 @@ This document describes the root-owned tooling around it:
 | `scripts/marketing/serve.mjs` | Safe local static server for verification |
 | `scripts/marketing/*.test.mjs` | Bun tests for the build and server contract |
 | `e2e/marketing/` | Dedicated Playwright config, helpers, and specs |
+| `website/motion/` | GSAP ScrollTrigger entry and the Framer Motion island |
 | `.github/workflows/marketing.yml` | Manual-only GitHub Pages build/deploy |
 | `package.json` | `marketing:build`, `marketing:serve`, `marketing:test` |
 
 ## Verified
 
-On 2026-11-09, against HEAD `c9b37bb` plus this tooling:
+On 2026-11-09, against `a2d9556` plus the motion upgrade:
 
-- `bun run marketing:build`: 23 files, 4040.1 KiB.
-- `bun test scripts/marketing/*.test.mjs`: 21 pass.
-- `bunx --bun playwright test -c e2e/marketing/playwright.config.ts`: 59 pass
-  at 320/390/768/1440, no-JS, and server projects; no failures.
-- Root visually reviewed desktop 1440 and mobile 390/320: no horizontal
-  overflow, and the 1.5 MB welcome GIF rendered with its "Design preview. Not
-  recorded app footage." label.
+- `bun install --frozen-lockfile`: 1063 packages, no changes.
+- `bun run check`: typecheck, lint, and 75 Jest tests pass.
+- `bun run marketing:build`: 26 files, 4514.6 KiB total site.
+- Motion bundles: `assets/motion.js` 121,053 B (47 KB gzip) plus split
+  `assets/island-*.js` 360,090 B (115 KB gzip) and a 910 B loader chunk.
+  Combined raw bundle 482,053 B, 162 KB gzip.
+- `bun test scripts/marketing/*.test.mjs`: 25 pass.
+- `bunx --bun playwright test -c e2e/marketing/playwright.config.ts`: 76 pass,
+  3 skipped (the desktop pin intentionally does not run below 921 px), 0 fail.
+- `bun run adapter:test`: 16 pass.
+- Visually reviewed desktop 1440 and mobile 390/320: no horizontal overflow,
+  the hero entrance timeline measures 1050 ms with the CTA and plate complete
+  before 900 ms, the pinned stage holds, and the welcome GIF keeps its
+  "Design preview. Not recorded app footage." label.
 
-The site is not deployed.
+Deployment is manual through `.github/workflows/marketing.yml`; the live URL is
+https://ddawnlll.github.io/jcode-mobile/.
 
 ## Source and output contract
 
@@ -36,6 +47,10 @@ website/
   index.html
   styles.css
   main.js
+  motion/
+    boot.js       immediate GSAP entry, loads the island on idle
+    scroll.js     ScrollTrigger choreography
+    island.jsx    React scene panel, captions, and rails
   assets/
     fonts/
     media/
@@ -45,10 +60,18 @@ website/
     social-card.png
 ```
 
-The build copies `website/**` **verbatim**. It does not rewrite HTML, inject a
-base path, fingerprint filenames, or transform CSS. That is deliberate: the
-output must work unchanged at a domain root and at a GitHub Pages project path
-such as `/jcode-mobile/`.
+The build copies the static files **verbatim** and excludes `website/motion/`
+from the output. `build.mjs` bundles `website/motion/boot.js` with Bun into
+`assets/motion.js`; the dynamic Framer Motion import splits into
+`assets/island-<hash>.js`. The HTML, CSS, and `main.js` are not rewritten. No
+base path is injected, no filename is fingerprinted except the split chunk, and
+no CSS is transformed. That is deliberate: the output must work unchanged at a
+domain root and at a GitHub Pages project path such as `/jcode-mobile/`.
+
+The bundle is deterministic for unchanged inputs. It is minified, has no source
+map, and contains no CDN import or remote asset URL. Vendor documentation
+strings embedded by React and GSAP are not requests; the CSP and the Playwright
+request log both enforce the runtime boundary.
 
 Default output: `dist/marketing/` (ignored by `.gitignore` through `dist/`).
 A staging output is also fine because `.staging/` is ignored:
@@ -68,16 +91,51 @@ Every build writes `build-manifest.json` beside the copied files:
   "entry": "index.html",
   "productVersion": "0.2.0",
   "basePath": ".",
-  "fileCount": 23,
+  "fileCount": 26,
   "totalBytes": 1234567,
   "files": [
     { "path": "index.html", "bytes": 1234, "sha256": "..." }
-  ]
+  ],
+  "motion": {
+    "entry": "assets/motion.js",
+    "files": ["assets/boot-<hash>.js", "assets/island-<hash>.js", "assets/motion.js"],
+    "bytes": 482053
+  }
 }
 ```
 
 The manifest is deterministic for unchanged inputs: sorted paths, no build
-timestamp, SHA-256 per copied file. It excludes itself.
+timestamp, SHA-256 per output file. It excludes itself. `motion` is `null` when
+a source tree has no `motion/boot.js`, which keeps the fixture tests small.
+
+## Motion contract
+
+GSAP 3.15.1 with ScrollTrigger and Framer Motion 12.43.0 are real Bun
+dependencies declared in `package.json` and locked in `bun.lock`. They are
+bundled locally; there is no CDN, no remote font, and no runtime network
+request.
+
+| Layer | Owns | Trigger |
+| --- | --- | --- |
+| `website/motion/scroll.js` | Hero entrance and parallax, plate and phone drift, desktop pinned continuity stage, specimen and palette batches, welcome phone reveal, scene-linked device shift | Loads immediately as part of `assets/motion.js` |
+| `website/motion/island.jsx` | `AnimatePresence` scene-image crossfade, caption transitions, three-segment scene rail, page reading rail | Loaded on `requestIdleCallback` with a 900 ms timeout |
+| `website/main.js` | Scene state, tab semantics, orbit scene, canvas policy | Remains the single source of truth and publishes `jcode:scene` |
+
+Rules:
+
+- Native scroll stays native. There is no wheel, touch, key, or momentum
+  interception.
+- The hero entrance is bounded and reported as `heroEntranceMs`. It must stay
+  at or below 1800 ms; the current timeline is 1050 ms. The CTA and plate are
+  both settled before 900 ms.
+- Scroll-linked work animates transform and opacity only.
+- `prefers-reduced-motion: reduce` creates no ScrollTriggers, sets
+  `html[data-motion="reduced"]`, loads the island in a static frame, and keeps
+  the scene tabs usable.
+- The pin is desktop-only (`min-width: 921px`). Below that the existing sticky
+  stage stays in charge.
+- The static HTML and its three scene images remain the no-JavaScript page. The
+  island only adds overlay layers after React mounts.
 
 ## Build validation
 
@@ -185,6 +243,13 @@ Assertions include:
 - canvases pause when offscreen and when `visibilitychange` reports hidden
 - `prefers-reduced-motion: reduce` removes long-running CSS animation and
   leaves both canvases paused
+- `motion.spec.ts` proves `window.__jcodeMotion` reports a GSAP 3.x version,
+  `scrollTrigger: true`, `framerMotion: true`, and a non-zero ScrollTrigger
+  count; hero transforms change on scroll; the 1440 pin holds and stays usable;
+  `AnimatePresence` crossfades one scene image and updates the rail; the
+  reduced-motion path creates zero ScrollTriggers and still switches scenes
+- the motion bundles are requested from `/jcode-mobile/assets/` and no request
+  leaves the site origin
 - no uncaught page errors or `console.error`
 - no-JavaScript content remains readable and the APK CTA remains reachable
 - basic semantics: one `main`, empty accessible names, image `alt`, broken ARIA
@@ -220,9 +285,8 @@ uploads `dist/marketing` as an artifact. The deploy job exists only when both:
 
 The deploy job uses `actions/configure-pages`, `upload-pages-artifact`, and
 `deploy-pages` with `pages: write` and `id-token: write`. The repository owner
-must enable Pages and choose GitHub Actions as the source. No workflow run has
-been performed by the tooling work, and this document does not assert that a
-Pages site is live.
+has enabled Pages with GitHub Actions as the source. Deployments remain manual
+and gated; this repository never deploys on push.
 
 For a project page, the site is served at `/<repo>/`; all URLs in the build are
 relative, so no `basePath` setting is needed.

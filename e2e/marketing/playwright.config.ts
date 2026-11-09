@@ -8,7 +8,7 @@ const serveScript = join(REPO_ROOT, 'scripts/marketing/serve.mjs');
 const siteDir = process.env.MARKETING_SOURCE_DIR ?? join(REPO_ROOT, 'website');
 const outDir = MARKETING_OUT_DIR;
 
-const siteSpecs = /(layout|resources|interaction|a11y)\.spec\.ts/;
+const siteSpecs = /(layout|resources|interaction|a11y|motion)\.spec\.ts/;
 
 export default defineConfig({
   testDir: '.',

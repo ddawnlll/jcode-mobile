@@ -13,7 +13,8 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, lstat, mkdir, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,6 +23,9 @@ export const REPO_ROOT = resolve(SCRIPT_DIR, '../..');
 export const DEFAULT_SOURCE_DIR = join(REPO_ROOT, 'website');
 export const DEFAULT_OUT_DIR = join(REPO_ROOT, 'dist/marketing');
 export const MANIFEST_NAME = 'build-manifest.json';
+export const MOTION_SOURCE_DIR = 'motion';
+export const MOTION_BOOT_ENTRY = 'motion/boot.js';
+export const MOTION_ENTRY_OUTPUT = 'assets/motion.js';
 
 /** External navigations the marketing site is allowed to contain. Assets may
  * never be remote. Extend with MARKETING_ALLOWED_EXTERNAL_PREFIXES when a real
@@ -37,6 +41,10 @@ const IGNORED_NAMES = new Set(['.DS_Store', 'Thumbs.db', 'node_modules', '.git']
 
 const LOCAL_SCHEMES = new Set(['mailto', 'tel']);
 const IMAGE_DATA_PREFIX = 'data:image/';
+
+function isMotionSource(relativePath) {
+  return relativePath === MOTION_SOURCE_DIR || relativePath.startsWith(`${MOTION_SOURCE_DIR}/`);
+}
 
 function isInside(parent, child) {
   const rel = relative(parent, child);
@@ -308,6 +316,23 @@ function validateCss(cssText, fromPath, validateReference, context) {
 }
 
 function validateJavaScript(script, fromPath, context) {
+  if (context.generated) {
+    // Bundled vendor output (GSAP, React, Framer Motion) contains documentation
+    // URLs and namespace strings. It must still ship no source map and no
+    // remote runtime load. The CSP and the request-log e2e test enforce the
+    // network boundary at runtime.
+    if (/\/\/[#@]\s*sourceMappingURL=/.test(script)) {
+      throw new Error(`generated bundle ${fromPath} must not reference a source map`);
+    }
+    const remoteLoad =
+      /\b(?:import|importScripts)\s*\(\s*['"`](?:https?:)?\/\//.test(script) ||
+      /\.src\s*=\s*['"`](?:https?:)?\/\//.test(script);
+    if (remoteLoad) {
+      throw new Error(`generated bundle ${fromPath} loads a remote runtime asset`);
+    }
+    return;
+  }
+
   const rootAbsolutePatterns = [
     /\b(?:src|href|poster)\s*=\s*['"`]\/(?!\/)/g,
     /\b(?:fetch|import|importScripts|open)\s*\(\s*['"`]\/(?!\/)/g,
@@ -505,7 +530,10 @@ async function validateSite({ sourceFiles, allowedExternalPrefixes }) {
       validateCss(texts.get(file.relativePath), file.relativePath, validateReference, context);
     } else if (extension === '.js' || extension === '.mjs') {
       const context = { sourceFiles, htmlIds, allowedExternalPrefixes, htmlPath: null, ids: new Set() };
-      validateJavaScript(texts.get(file.relativePath), file.relativePath, context);
+      validateJavaScript(texts.get(file.relativePath), file.relativePath, {
+        ...context,
+        generated: Boolean(file.generated),
+      });
     }
   }
 
@@ -520,6 +548,68 @@ async function validateSite({ sourceFiles, allowedExternalPrefixes }) {
 async function hashFile(path) {
   const data = await readFile(path);
   return createHash('sha256').update(data).digest('hex');
+}
+
+/**
+ * Bundle the motion island with Bun. The entry ships as `assets/motion.js`;
+ * the split Framer Motion chunk carries a content hash. Vendor output is
+ * minified, source-map free, and never fetched from a CDN.
+ */
+async function bundleMotion(sourceDir) {
+  const entry = join(sourceDir, MOTION_BOOT_ENTRY);
+  if (!existsSync(entry)) return { files: [], tempDir: null };
+  const bun = globalThis.Bun;
+  if (!bun || typeof bun.build !== 'function') {
+    throw new Error('motion bundling requires Bun');
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'jcode-marketing-motion-'));
+  let result;
+  try {
+    result = await bun.build({
+      entrypoints: [entry],
+      target: 'browser',
+      format: 'esm',
+      minify: true,
+      splitting: true,
+      sourcemap: 'none',
+      define: { 'process.env.NODE_ENV': '"production"' },
+      outdir: tempDir,
+      naming: {
+        entry: MOTION_ENTRY_OUTPUT,
+        chunk: 'assets/[name]-[hash].js',
+      },
+    });
+  } catch (error) {
+    await rm(tempDir, { recursive: true, force: true });
+    throw new Error(`motion bundle failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!result.success) {
+    await rm(tempDir, { recursive: true, force: true });
+    const details = result.logs
+      .map((log) => (typeof log === 'string' ? log : log.message ?? String(log)))
+      .join('\n');
+    throw new Error(`motion bundle failed:\n${details}`);
+  }
+
+  const files = result.outputs
+    .filter((output) => output.kind === 'entry-point' || output.kind === 'chunk')
+    .map((output) => ({
+      relativePath: relative(tempDir, output.path).split(sep).join('/'),
+      absolute: output.path,
+      realPath: output.path,
+      size: output.size,
+      generated: true,
+    }))
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+
+  if (!files.some((file) => file.relativePath === MOTION_ENTRY_OUTPUT)) {
+    await rm(tempDir, { recursive: true, force: true });
+    throw new Error(`motion bundle did not produce ${MOTION_ENTRY_OUTPUT}`);
+  }
+
+  return { files, tempDir };
 }
 
 function assertSafeOutput({ sourceDir, outDir, repoRoot, allowOutsideRepo }) {
@@ -565,31 +655,43 @@ export async function buildMarketingSite(options = {}) {
   assertSafeOutput({ sourceDir: source, outDir: out, repoRoot: repo, allowOutsideRepo });
 
   const externalPrefixes = getAllowedExternalPrefixes(allowedExternalPrefixes);
-  const sourceFiles = await walkSourceFiles(source, repo);
-  const checks = await validateSite({ sourceFiles, allowedExternalPrefixes: externalPrefixes });
+  const sourceFiles = (await walkSourceFiles(source, repo)).filter(
+    (file) => !isMotionSource(file.relativePath),
+  );
+  const motion = await bundleMotion(source);
 
-  await rm(out, { recursive: true, force: true });
-  await mkdir(out, { recursive: true });
+  let manifests;
+  let totalBytes;
+  let checks;
+  try {
+    const allFiles = [...sourceFiles, ...motion.files];
+    checks = await validateSite({ sourceFiles: allFiles, allowedExternalPrefixes: externalPrefixes });
 
-  for (const file of sourceFiles) {
-    const destination = join(out, file.relativePath);
-    await mkdir(dirname(destination), { recursive: true });
-    await cp(file.realPath, destination);
+    await rm(out, { recursive: true, force: true });
+    await mkdir(out, { recursive: true });
+
+    for (const file of allFiles) {
+      const destination = join(out, file.relativePath);
+      await mkdir(dirname(destination), { recursive: true });
+      await cp(file.realPath, destination);
+    }
+
+    manifests = [];
+    totalBytes = 0;
+    for (const file of allFiles) {
+      const destination = join(out, file.relativePath);
+      const info = await stat(destination);
+      totalBytes += info.size;
+      manifests.push({
+        path: file.relativePath,
+        bytes: info.size,
+        sha256: await hashFile(destination),
+      });
+    }
+    manifests.sort((a, b) => a.path.localeCompare(b.path));
+  } finally {
+    if (motion.tempDir) await rm(motion.tempDir, { recursive: true, force: true });
   }
-
-  const manifests = [];
-  let totalBytes = 0;
-  for (const file of sourceFiles) {
-    const destination = join(out, file.relativePath);
-    const info = await stat(destination);
-    totalBytes += info.size;
-    manifests.push({
-      path: file.relativePath,
-      bytes: info.size,
-      sha256: await hashFile(destination),
-    });
-  }
-  manifests.sort((a, b) => a.path.localeCompare(b.path));
 
   let productVersion = null;
   try {
@@ -608,6 +710,13 @@ export async function buildMarketingSite(options = {}) {
     fileCount: manifests.length,
     totalBytes,
     files: manifests,
+    motion: motion.files.length
+      ? {
+          entry: MOTION_ENTRY_OUTPUT,
+          files: motion.files.map((file) => file.relativePath),
+          bytes: motion.files.reduce((sum, file) => sum + file.size, 0),
+        }
+      : null,
   };
   await writeFile(join(out, MANIFEST_NAME), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 

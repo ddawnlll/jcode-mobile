@@ -586,6 +586,8 @@
     }
   };
 
+  const SCENE_ORDER = Object.keys(SCENE_COPY);
+
   let activeScene = "send";
   let suppressScrollSceneUntil = 0;
 
@@ -616,6 +618,16 @@
 
     const stageOrbit = canvases[1] && canvases[1].__orbit;
     if (stageOrbit) stageOrbit.setScene(next);
+
+    const detail = {
+      scene: next,
+      index: Math.max(0, SCENE_ORDER.indexOf(next)),
+      total: SCENE_ORDER.length,
+      copy: SCENE_COPY[next]
+    };
+    root.dataset.scene = next;
+    window.__jcodeScene = detail;
+    document.dispatchEvent(new CustomEvent("jcode:scene", { detail }));
 
     if (changed && options && options.scroll) {
       const step = steps.find((item) => item.dataset.scene === next);
