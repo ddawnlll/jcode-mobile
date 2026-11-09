@@ -45,6 +45,7 @@ yarn-error.*
 
 # local staging state, build artifacts, and device captures
 .staging/
+.playwright-cli/
 artifacts/
 docs/evidence/device/
 *.apk

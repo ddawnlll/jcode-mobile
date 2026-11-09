@@ -16,6 +16,25 @@ WEB_PORT="${JCODE_E2E_WEB_PORT:-8091}"
 
 mkdir -p "$STAGE"
 
+# launch_detached <pid-file> <log-file> <command...>
+#
+# Start <command> in the background with no controlling terminal, record the
+# PID that will exec it, and return immediately. Linux util-linux uses
+# `setsid -f`; hosts without it (macOS) fall back to nohup. Both paths record
+# the final process PID: the setsid child writes its own PID before exec, and
+# $! is the nohup/bash PID that exec preserves.
+launch_detached() {
+  local pid_file="$1" log_file="$2"
+  shift 2
+  if command -v setsid >/dev/null 2>&1 && setsid -f true >/dev/null 2>&1; then
+    setsid -f bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$pid_file" "$@" \
+      >"$log_file" 2>&1 </dev/null
+  else
+    nohup bash -c 'exec "$@"' _ "$@" >"$log_file" 2>&1 </dev/null &
+    echo $! >"$pid_file"
+  fi
+}
+
 # 1. Isolated daemon. staging-up.sh reuses a live socket and copies only the
 # local provider config; it never touches the production JCode home.
 JCODE_STAGING_DIR="$DAEMON_STAGE" bash "$ROOT/scripts/staging-up.sh" >/dev/null
@@ -31,16 +50,16 @@ export JCODE_ADAPTER_STATE="$STAGE/adapter"
 # 2. Adapter for the isolated daemon.
 if ! curl -sf "http://127.0.0.1:$ADAPTER_PORT/health" >/dev/null; then
   echo "starting e2e adapter on 127.0.0.1:$ADAPTER_PORT"
-  setsid -f bash -c "echo \$\$ > '$STAGE/adapter.pid'; exec env \
-    JCODE_HOME='$JCODE_HOME' \
-    JCODE_RUNTIME_DIR='$JCODE_RUNTIME_DIR' \
-    JCODE_SOCKET='$JCODE_SOCKET' \
-    JCODE_API_SOCKET='$JCODE_API_SOCKET' \
-    JCODE_ADAPTER_HOST='$JCODE_ADAPTER_HOST' \
-    JCODE_ADAPTER_PORT='$JCODE_ADAPTER_PORT' \
-    JCODE_ADAPTER_STATE='$JCODE_ADAPTER_STATE' \
-    bun '$ROOT/integration/jcode-adapter/src/main.ts'" \
-    >"$STAGE/adapter.log" 2>&1 </dev/null
+  launch_detached "$STAGE/adapter.pid" "$STAGE/adapter.log" \
+    env \
+    JCODE_HOME="$JCODE_HOME" \
+    JCODE_RUNTIME_DIR="$JCODE_RUNTIME_DIR" \
+    JCODE_SOCKET="$JCODE_SOCKET" \
+    JCODE_API_SOCKET="$JCODE_API_SOCKET" \
+    JCODE_ADAPTER_HOST="$JCODE_ADAPTER_HOST" \
+    JCODE_ADAPTER_PORT="$JCODE_ADAPTER_PORT" \
+    JCODE_ADAPTER_STATE="$JCODE_ADAPTER_STATE" \
+    bun "$ROOT/integration/jcode-adapter/src/main.ts"
 fi
 
 for _ in $(seq 1 60); do
@@ -65,8 +84,9 @@ echo "exporting e2e web bundle"
 # 4. Static server. serve-web.mjs adds the COOP/COEP headers expo-sqlite needs.
 if ! curl -sf "http://127.0.0.1:$WEB_PORT/" >/dev/null; then
   echo "starting e2e web server on 127.0.0.1:$WEB_PORT"
-  setsid -f bash -c "echo \$\$ > '$STAGE/web.pid'; exec env PORT=$WEB_PORT HOST=127.0.0.1 bun --bun '$ROOT/scripts/serve-web.mjs' '$STAGE/web'" \
-    >"$STAGE/web.log" 2>&1 </dev/null
+  launch_detached "$STAGE/web.pid" "$STAGE/web.log" \
+    env PORT="$WEB_PORT" HOST=127.0.0.1 \
+    bun --bun "$ROOT/scripts/serve-web.mjs" "$STAGE/web"
 fi
 
 for _ in $(seq 1 60); do
