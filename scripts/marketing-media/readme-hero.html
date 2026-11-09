@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JCode Mobile v0.2.0</title>
+<style>
+  @font-face {
+    font-family: "Bricolage";
+    font-weight: 600;
+    src: url("../../assets/fonts/BricolageGrotesque-SemiBold.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Hanken";
+    font-weight: 400;
+    src: url("../../assets/fonts/HankenGrotesk-Regular.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Hanken";
+    font-weight: 500;
+    src: url("../../assets/fonts/HankenGrotesk-Medium.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Plex Mono";
+    font-weight: 400;
+    src: url("../../assets/fonts/IBMPlexMono-Regular.ttf") format("truetype");
+  }
+
+  :root {
+    --bg: #111F20;
+    --surface: #192C2B;
+    --raised: #223735;
+    --ink: #E5F0EB;
+    --muted: #A0B6AD;
+    --line: #344D48;
+    --brand: #B5D6C5;
+    --accent: #F2B09A;
+    --on-brand: #18392E;
+    --display: "Bricolage", sans-serif;
+    --body: "Hanken", sans-serif;
+    --mono: "Plex Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 1600px;
+    height: 900px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    overflow: hidden;
+  }
+  img { user-select: none; }
+
+  .hero {
+    position: relative;
+    width: 1600px;
+    height: 900px;
+    overflow: hidden;
+    background: var(--bg);
+    isolation: isolate;
+  }
+
+  /* A single fixed grain plate. It keeps the flat tidal green from looking
+     like a default dark theme without turning into a decorative gradient. */
+  .grain {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    opacity: .045;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+  }
+
+  .top {
+    position: absolute;
+    left: 72px;
+    right: 72px;
+    top: 58px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand img { width: 48px; height: 48px; display: block; }
+  .brand span {
+    font-family: var(--display);
+    font-size: 46px;
+    line-height: 1;
+    letter-spacing: -.052em;
+  }
+  .meta {
+    font-family: var(--mono);
+    font-size: 17px;
+    line-height: 1.6;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+  }
+  .meta b { color: var(--brand); font-weight: 400; }
+
+  .rule {
+    position: absolute;
+    left: 72px;
+    right: 72px;
+    top: 154px;
+    height: 1px;
+    background: var(--line);
+  }
+  .spine {
+    position: absolute;
+    left: 878px;
+    top: 154px;
+    bottom: 72px;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .copy {
+    position: absolute;
+    left: 72px;
+    top: 218px;
+    width: 786px;
+  }
+  .eyebrow {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 19px;
+    line-height: 1.4;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--brand);
+  }
+  h1 {
+    margin: 30px 0 0;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 142px;
+    line-height: .88;
+    letter-spacing: -.066em;
+  }
+  h1 .dot { color: var(--accent); }
+  .lede {
+    margin: 40px 0 0;
+    max-width: 560px;
+    font-family: var(--body);
+    font-size: 32px;
+    line-height: 1.28;
+    color: var(--muted);
+    letter-spacing: -.012em;
+  }
+  .lede strong { color: var(--ink); font-weight: 500; }
+
+  .index {
+    position: absolute;
+    left: 72px;
+    bottom: 70px;
+    display: flex;
+    gap: 34px;
+    font-family: var(--mono);
+    font-size: 20px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .index b {
+    color: var(--accent);
+    font-weight: 400;
+    margin-right: 8px;
+  }
+  .foot {
+    position: absolute;
+    left: 72px;
+    bottom: 30px;
+    font-family: var(--mono);
+    font-size: 20px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .foot b { color: var(--brand); font-weight: 400; }
+
+  .stage {
+    position: absolute;
+    left: 878px;
+    top: 0;
+    width: 722px;
+    height: 900px;
+    overflow: hidden;
+  }
+  .phone {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    padding: 8px;
+    overflow: hidden;
+  }
+  .phone img {
+    display: block;
+    width: 100%;
+    border-radius: 18px;
+  }
+  .phone.secondary {
+    left: 34px;
+    top: 350px;
+    width: 248px;
+    padding: 6px;
+    border-radius: 22px;
+    z-index: 1;
+  }
+  .phone.secondary img { border-radius: 16px; }
+  .phone.primary {
+    left: 232px;
+    top: 76px;
+    width: 354px;
+    z-index: 2;
+  }
+
+  .caption {
+    position: absolute;
+    right: 16px;
+    bottom: 22px;
+    z-index: 3;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+  }
+  .caption b { color: var(--brand); font-weight: 400; }
+
+  .corner {
+    position: absolute;
+    right: 72px;
+    top: 154px;
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    z-index: 4;
+  }
+</style>
+</head>
+<body>
+<main class="hero">
+  <header class="top">
+    <div class="brand">
+      <img src="../../assets/mark/jcode-mark.png" alt="">
+      <span>jcode</span>
+    </div>
+  </header>
+
+  <div class="rule"></div>
+  <div class="spine"></div>
+  <div class="corner"></div>
+
+  <section class="copy">
+    <p class="eyebrow">The work keeps moving</p>
+    <h1>Your work.<br>In reach<span class="dot">.</span></h1>
+    <p class="lede"><strong>Your server runs JCode.</strong> This is where you stay close to the work.</p>
+  </section>
+
+  <div class="index">
+    <span><b>01</b>Sessions</span>
+    <span><b>02</b>Conversation</span>
+    <span><b>03</b>Work</span>
+  </div>
+
+  <section class="stage" aria-label="JCode Mobile v0.2.0 in Preview mode">
+    <figure class="phone secondary" style="margin:0">
+      <img src="../../docs/media/marketing/sessions-v020.png" alt="JCode Mobile sessions in Preview mode with sample data">
+    </figure>
+    <figure class="phone primary" style="margin:0">
+      <img src="../../docs/media/marketing/conversation-v020.png" alt="JCode Mobile conversation in Preview mode with sample data">
+    </figure>
+
+  </section>
+
+  <div class="foot"><b>v0.2.0 captures</b> / Preview build, sample data</div>
+  <div class="grain"></div>
+</main>
+</body>
+</html>
