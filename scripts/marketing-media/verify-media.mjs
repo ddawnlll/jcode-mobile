@@ -8,6 +8,7 @@
  * Usage:
  *   node scripts/marketing-media/verify-media.mjs
  */
+import { Buffer } from 'node:buffer';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
