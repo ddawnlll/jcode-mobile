@@ -89,7 +89,7 @@ Every build writes `build-manifest.json` beside the copied files:
   "schemaVersion": 1,
   "generator": "scripts/marketing/build.mjs",
   "entry": "index.html",
-  "productVersion": "0.2.0",
+  "productVersion": "0.2.1",
   "basePath": ".",
   "fileCount": 26,
   "totalBytes": 1234567,
@@ -165,10 +165,10 @@ MARKETING_ALLOWED_EXTERNAL_PREFIXES="https://example.com/product" \
 The exact primary CTA target is:
 
 ```text
-https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.0/jcode-mobile-0.2.0-android-release.apk
+https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.1/jcode-mobile-0.2.1-android-release.apk
 ```
 
-`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.2.0`
+`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.2.1`
 version, and `referrerpolicy="no-referrer"`.
 
 ## Commands
@@ -233,7 +233,7 @@ Assertions include:
 
 - no horizontal document/body overflow and a single visible `h1`
 - visible heading hierarchy with no skipped levels
-- exact v0.2.0 APK CTA and visible version text
+- exact v0.2.1 APK CTA and visible version text
 - every internal anchor and local image resolves
 - custom fonts load and all runtime requests stay inside `/jcode-mobile/`
 - scene tabs are keyboard operable (`ArrowRight`, `Home`, `End`, `Enter`),

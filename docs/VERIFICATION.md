@@ -2,6 +2,10 @@
 
 > v0.1.1 is a corrective release for the independent review of `a632a6a`. The finding-by-finding response is in [`REVIEW_FIXES.md`](REVIEW_FIXES.md). Native evidence below was collected on v0.1.0/0.1.1 staging and remains representative; new regression tests run in CI.
 
+Release records: [`V0_2_0_VERIFICATION.md`](V0_2_0_VERIFICATION.md) and
+[`V0_2_1_VERIFICATION.md`](V0_2_1_VERIFICATION.md). The tables below are the
+original v0.1.1 native evidence archive.
+
 Updated: 2026-11-08. Evidence is only recorded from commands that actually ran and outputs that exist.
 
 Environment: macOS 26.1 (M3 Pro, 18 GiB), Xcode 26.1.1, iPhone 17 Pro simulator (iOS 26.1), Android emulator `jcode-mobile` (API 36, arm64), Node 22.21.1, JCode 0.99.1 (`7206efd0c`). The live VPS was unreachable.

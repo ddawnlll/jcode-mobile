@@ -99,3 +99,18 @@ Status is DONE only with evidence in `docs/V0_2_0_VERIFICATION.md`.
 | 7.9 | Playwright full suite | DONE | 20/20 passed in 3.2 min; iPhone 14, Pixel 7, 320-wide |
 | 7.10 | PR for issue #1 | DONE | PR #13, candidate head, CI, coverage matrix and screenshots |
 | 7.11 | v0.2.0 Android APK release | DONE | CI release build, 63 MiB debug-signed APK, SHA-256, GitHub release v0.2.0 |
+
+## Phase 8 — v0.2.1 animated ASCII welcome (#14)
+
+Status is DONE only with evidence in `docs/V0_2_1_VERIFICATION.md`.
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 8.1 | Full-screen ASCII reveal with torus, field, noise and title silhouette | DONE (web) | 67 x 105 grid at 390 x 844; 1.6 s assembly; bitmap title handoff; `asciiTorus.test.ts` |
+| 8.2 | Idle spin with bounded redraw and reusable raster | DONE | Outside field reused verbatim; torus band only (32 of 105 rows); 80 ms idle interval |
+| 8.3 | Skip, Pause/Play, AppState and focus pause, Reduce Motion still | DONE (web) | `welcome.spec.ts` skip, pause/resume and reduced-motion tests; timer guards inspected |
+| 8.4 | Keep pairing, theme preview, Preview without connecting and saved-server routing | DONE | `welcome.spec.ts`; `welcome-screen.test.tsx`; existing connect/narrow specs |
+| 8.5 | Playwright and RNTL coverage | DONE | 81 Jest/RNTL tests; 25/25 app e2e; 6/6 welcome spec on rerun |
+| 8.6 | Android release APK | DONE (CI) / NOT_RUN (device install) | CI release build, checksum in `docs/BUILD_STATE.md` |
+| 8.7 | README, website, marketing tests and docs | DONE | Real 0.2.1 welcome captures; 76 marketing tests pass |
+| 8.8 | Native pacing, large text and screen reader | NOT_RUN | No physical Android/iOS device or macOS host in this session |

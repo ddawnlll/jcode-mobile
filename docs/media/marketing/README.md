@@ -1,16 +1,19 @@
 # Marketing media
 
 Owned assets for the README and marketing site. Everything here is either a
-capture of the real v0.2.0 app or a rendered capture of the v0.2.1 welcome
-design reference. No stock imagery and no hand-built fake app UI.
+capture of the real v0.2.0 app surfaces or a real capture of the shipped v0.2.1
+welcome. The older `welcome-preview.gif` and `welcome-poster.png` are kept as
+the historical issue #14 design reference, not as current product footage.
 
 ## Files
 
 | File | Dimensions | Bytes | What it is |
 | --- | --- | --- | --- |
 | `readme-hero.png` | 3200x1800 (1600x900 at 2x) | 1,637,132 | Typographic README hero. Real v0.2.0 Preview screenshots, Bricolage Grotesque, Hanken Grotesk, IBM Plex Mono, and Tidal Glass colors. |
-| `welcome-preview.gif` | 240x519, 60 frames, 20 fps, 3.0 s, infinite loop | 1,529,838 | **v0.2.1 DESIGN PREVIEW.** Animated capture of the ASCII welcome reference on `origin/design/v0.2.1-ascii-welcome`. Issue #14 is still OPEN. Not the shipping app. |
-| `welcome-poster.png` | 780x1688 | 599,535 | Still poster and reduced-motion fallback for the GIF. Same v0.2.1 design preview frame at 2.8 s. |
+| `welcome-v021.png` | 1170x2532 (390x844 at 3x) | 193,326 | **Shipped v0.2.1 welcome**, Tidal Light, captured from the Expo web verification build after the opening settled. |
+| `welcome-v021-night.png` | 1170x2532 (390x844 at 3x) | 199,776 | **Shipped v0.2.1 welcome**, Tidal Night, same capture path. Used by the README and website. |
+| `welcome-preview.gif` | 240x519, 60 frames, 20 fps, 3.0 s, infinite loop | 1,529,838 | **Historical design reference.** Animated capture of the issue #14 HTML reference. Superseded by `welcome-v021.png`; not the shipping app. |
+| `welcome-poster.png` | 780x1688 | 599,535 | Still poster for the historical design reference GIF. |
 | `sessions-v020.png` | 860x1800 (430x900 at 2x) | 131,832 | Current v0.2.0 Sessions surface in labelled Preview mode. |
 | `conversation-v020.png` | 860x1800 (430x900 at 2x) | 196,139 | Current v0.2.0 Conversation surface in labelled Preview mode, showing rich Markdown, table, quote, and math. |
 | `work-v020.png` | 860x1800 (430x900 at 2x) | 132,356 | Current v0.2.0 Session work surface in labelled Preview mode. |
@@ -18,14 +21,26 @@ design reference. No stock imagery and no hand-built fake app UI.
 
 ## Provenance and honesty
 
-### Welcome GIF and poster
+### Shipped v0.2.1 welcome captures
+
+- Source: Expo web export of the v0.2.1 app, `CI=1 expo export -p web`.
+- Driver: Playwright Chromium at 390x844 with device scale factor 3, light and
+  night color schemes. The capture waits for `window.__JCODE_WELCOME_PERF__`
+  to report at least one idle paint, so it is the settled screen, not a frame
+  during the opening.
+- Status: **shipped v0.2.1 welcome.** The same screen is in the native build.
+  The capture is from the web verification surface, not a device recording.
+- The title, actions, Skip/Pause control, theme strip, and ASCII torus are the
+  real components. No hand-built replacement UI.
+
+### Historical welcome GIF and poster
 
 - Source: `origin/design/v0.2.1-ascii-welcome`, file
   `docs/v0.2.1/JCode_Mobile_ASCII_Welcome.html`.
 - Driver: `scripts/marketing-media/capture-welcome.mjs`, which reads the file
   with `git show` and never switches branches.
-- Status: **v0.2.1 design preview.** Issue #14 remains OPEN. This is not the
-  current shipping app, and it is not a device screen recording.
+- Status: **historical design reference.** It was produced while issue #14 was
+  open and is superseded by `welcome-v021.png`.
 - The phrase `v0.2.1 DESIGN PREVIEW` is baked into every GIF frame and into the
   poster so the asset cannot be mistaken for v0.2.0 app footage.
 - Capture method: Playwright Chromium at 390x844, device scale factor 1 for the
@@ -72,17 +87,24 @@ design reference. No stock imagery and no hand-built fake app UI.
 
 ## Suggested captions and alt text
 
+`welcome-v021-night.png`
+
+> JCode Mobile 0.2.1 welcome. Real app capture, Tidal Night, 390x844.
+
+Alt: "An ASCII halftone torus spins above the words Welcome to jcode, with
+Get started and Preview without connecting actions."
+
 `welcome-preview.gif`
 
-> Design preview of the planned v0.2.1 ASCII welcome. Not recorded app footage.
-> Issue #14 is still open.
+> Historical design reference for the v0.2.1 ASCII welcome. Not current app
+> footage.
 
 Alt: "Animated portrait design preview: an ASCII torus assembles from noise,
 spins, and the words Welcome to jcode appear over a deep green screen."
 
 `welcome-poster.png`
 
-> v0.2.1 ASCII welcome design preview, still frame. Issue #14 is open.
+> Historical v0.2.1 ASCII welcome design reference, still frame.
 
 Alt: "Deep green portrait screen with a spinning ASCII torus above the words
 Welcome to jcode and a v0.2.1 design preview label."
@@ -153,10 +175,10 @@ Capture manifest for the final GIF:
 
 ## Constraints for website use
 
-- The welcome GIF is portrait 240x519. Do not crop it to 16:9 or 4:3. Place it
-  in a phone frame and keep the baked `v0.2.1 DESIGN PREVIEW` label visible.
-- Keep the caption "Design preview. Not recorded app footage." with the GIF.
-- Do not describe the GIF as v0.2.0 or as shipping functionality.
+- Use `welcome-v021-night.png` or `welcome-v021.png` for current product pages.
+  They are portrait 1170x2532. Do not crop them to 16:9 or 4:3.
+- The historical GIF/poster must keep their design-reference captions if used.
+  Do not present them as shipped app footage.
 - The v0.2.0 screenshots already say Preview and sample data. Do not crop that
   banner out.
 - The hero is 3200x1800 for a 1600x900 layout. It can be displayed at README

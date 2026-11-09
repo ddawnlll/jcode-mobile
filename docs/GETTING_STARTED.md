@@ -2,7 +2,7 @@
 
 JCode Mobile is a native iOS and Android client for [JCode](https://github.com/1jehuang/jcode). The phone directs the conversation. The server runs the agent. The exact thread is still there when you come back.
 
-This guide covers the supported path: a Linux or macOS host running JCode, the small mobile adapter, and the Android app. The current public artifact is Android 0.2.0. iOS is built from source.
+This guide covers the supported path: a Linux or macOS host running JCode, the small mobile adapter, and the Android app. The current public artifact is Android 0.2.1. iOS is built from source.
 
 ## What you need
 
@@ -11,7 +11,7 @@ This guide covers the supported path: a Linux or macOS host running JCode, the s
 | JCode on the server | 0.99.1 verified. `jcode pair` must be available. |
 | Bun on the server | 1.4.4. The adapter and repository tooling use Bun, not Node. |
 | TLS | A certificate and key, or a TLS reverse proxy in front of a loopback-bound adapter. |
-| Android | The 0.2.0 release APK, sideloaded with `adb`. |
+| Android | The 0.2.1 release APK, sideloaded with `adb`. |
 | iOS | Xcode 26.1 or newer and a source build. There is no signed phone or App Store artifact. |
 
 The adapter is a transport bridge. It opens the daemon socket, authenticates the phone, forwards the curated mobile envelope, and keeps a bounded delivery ledger. It does not run a second agent, keep a second canonical transcript, or call a model provider.
@@ -81,21 +81,21 @@ The six-digit code is valid for five minutes and is exchanged once for a device 
 
 Download the current release directly:
 
-[**jcode-mobile-0.2.0-android-release.apk**](https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.0/jcode-mobile-0.2.0-android-release.apk) (about 63 MiB)
+[**jcode-mobile-0.2.1-android-release.apk**](https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.1/jcode-mobile-0.2.1-android-release.apk) (about 63 MiB)
 
 Then install it on a connected phone or emulator:
 
 ```sh
-adb install -r jcode-mobile-0.2.0-android-release.apk
+adb install -r jcode-mobile-0.2.1-android-release.apk
 ```
 
 The APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`. It is debug-signed for sideloading. It is not a Play Store artifact.
 
-The checksum is attached to the release as `jcode-mobile-0.2.0-android-release.apk.sha256` and recorded in [`BUILD_STATE.md`](BUILD_STATE.md).
+The checksum is attached to the release as `jcode-mobile-0.2.1-android-release.apk.sha256` and recorded in [`BUILD_STATE.md`](BUILD_STATE.md).
 
 ### iOS
 
-There is no v0.2.0 iOS artifact and no signed IPA. The historical v0.1.3 artifact is a Simulator `.app` only. Build iOS from source with Xcode 26.1 or newer:
+There is no v0.2.1 iOS artifact and no signed IPA. The historical v0.1.3 artifact is a Simulator `.app` only. Build iOS from source with Xcode 26.1 or newer:
 
 ```sh
 bun install --frozen-lockfile

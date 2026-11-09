@@ -15,12 +15,12 @@ test.describe('static marketing layout', () => {
     await expect(page.locator('h1')).toBeVisible();
   });
 
-  test('primary CTA is the exact v0.2.0 Android APK', async ({ page }) => {
+  test('primary CTA is the exact v0.2.1 Android APK', async ({ page }) => {
     await openSite(page);
     const cta = page.locator('a#download-apk[data-cta="download"]');
     await expect(cta).toBeVisible();
     await expect(cta).toHaveAttribute('href', APK_URL);
-    await expect(cta).toHaveAccessibleName(/0\.2\.0/);
+    await expect(cta).toHaveAccessibleName(/0\.2\.1/);
     await expect(cta).toHaveAccessibleName(/android|apk/i);
     await expect(cta).toHaveAttribute('referrerpolicy', 'no-referrer');
   });

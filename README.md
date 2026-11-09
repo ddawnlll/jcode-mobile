@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.0"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
+  <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.1"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>
   <br />
   <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the live site</strong></a>
@@ -21,8 +21,8 @@
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <sub><code>ANDROID / 0.2.0 / 63 MiB</code></sub><br /><br />
-      <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.0/jcode-mobile-0.2.0-android-release.apk"><strong>Download the APK</strong></a><br />
+      <sub><code>ANDROID / 0.2.1 / 63 MiB</code></sub><br /><br />
+      <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.1/jcode-mobile-0.2.1-android-release.apk"><strong>Download the APK</strong></a><br />
       <sub>Debug-signed sideload. No Play Store listing.</sub>
     </td>
     <td width="50%" align="center" valign="top">
@@ -36,12 +36,12 @@
 ## A first launch, in motion
 
 <p align="center">
-  <img src="docs/media/marketing/welcome-preview.gif" alt="Design preview of the animated ASCII welcome planned for JCode Mobile v0.2.1" width="240" />
+  <img src="docs/media/marketing/welcome-v021-night.png" alt="JCode Mobile 0.2.1 welcome: an ASCII halftone torus spinning above the words Welcome to jcode" width="240" />
 </p>
 
 <p align="center">
-  <strong>v0.2.1 DESIGN PREVIEW</strong><br />
-  <sub>The enhanced full-screen reveal and idle spin are a v0.2.1 design preview. <a href="https://github.com/ddawnlll/jcode-mobile/issues/14">Issue #14</a> is open. 0.2.0 has a shorter first-launch character reveal.</sub>
+  <strong>v0.2.1 · SHIPPED WELCOME</strong><br />
+  <sub>The first unpaired launch assembles the full screen from ASCII noise in 1.6 seconds, resolves the title silhouette into real type, then keeps the torus turning. Skip and Pause are always available. Reduce Motion paints one readable still frame.</sub>
 </p>
 
 ## Work in orbit
@@ -67,7 +67,7 @@ Send a prompt. Put the phone down. Come back to the same server, the same sessio
   </tr>
 </table>
 
-<p align="center"><sub>v0.2.0 preview build with sample data, labelled Preview in the app. Nothing runs in these captures.</sub></p>
+<p align="center"><sub>Captured in the v0.2.0 Preview build with sample data. The session, conversation, and Work surfaces are unchanged in 0.2.1. Nothing runs in these captures.</sub></p>
 
 ## Three things worth holding
 
@@ -125,7 +125,7 @@ Bun 1.4.4 only. The web target is a verification surface, not a second product. 
 
 ## Availability and proof
 
-Android 0.2.0 shipped on 9 November 2026. It is a release build with an embedded Hermes bundle,
+Android 0.2.1 shipped on 9 November 2026. It is a release build with an embedded Hermes bundle,
 debug-signed for sideloading. There is no Play Store listing, no App Store listing, and no signed
 iPhone artifact. iOS builds from source with Xcode 26.1 or newer. The historical v0.1.3 iOS artifact
 is a Simulator `.app` only. Android release flows are verified against real JCode 0.99.1 staging,

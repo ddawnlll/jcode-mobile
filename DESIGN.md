@@ -14,7 +14,7 @@ replace them.
 | Artifact | Single-page static marketing site for a native developer tool |
 | Audience | Developers who already run JCode on a Linux VPS, or are close to doing so |
 | Job | Explain the continuity model, prove it with real captures, and offer the one real Android artifact |
-| Primary outcome | Download the v0.2.0 Android APK with an honest sideload caveat, or read the setup path |
+| Primary outcome | Download the v0.2.1 Android APK with an honest sideload caveat, or read the setup path |
 | Positioning | Precise personal instrument, not an operations dashboard and not a terminal toy |
 | Adjectives | Precise, kinetic, tactile, self-assured, composed |
 | Aesthetic essence | **Work in orbit.** |
@@ -242,7 +242,7 @@ through a lerp, not a tween library.
 - The social card is a 1200 by 630 composition built from the real mark, the
   real v0.2.0 Preview capture, the bundled fonts, and the ASCII orbit specimen.
   It adds no invented product UI.
-- The Android CTA points to the exact v0.2.0 release asset. The visible label and
+- The Android CTA points to the exact v0.2.1 release asset. The visible label and
   caveat state that the APK is debug-signed for sideloading and is not a Play
   Store artifact.
 - No iOS download CTA. The page states that no physical-iPhone artifact exists
@@ -256,7 +256,7 @@ through a lerp, not a tween library.
 - Plain technical English. Short sentences. No hype adjectives.
 - No em dashes. No "supercharge", "seamless", "world-class", "enterprise-grade".
 - No aphoristic pair constructions used as a substitute for information.
-- Every number must be source-backed: 11 theme families, 22 palettes, 0.2.0,
+- Every number must be source-backed: 11 theme families, 22 palettes, 0.2.1,
   1.6s welcome, five-minute pairing code, 63 MiB APK.
 - Claims about continuity follow the app contract: `continue_on_disconnect`,
   exact server and session restore, honest missing-target recovery, distinct

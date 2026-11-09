@@ -148,7 +148,7 @@ test.describe('semantics, accessibility, and SEO', () => {
     expect(structuredData).toHaveLength(1);
     const json = JSON.parse(structuredData[0]) as Record<string, unknown>;
     expect(String(json['@context'])).toContain('schema.org');
-    expect(json.softwareVersion).toBe('0.2.0');
+    expect(json.softwareVersion).toBe('0.2.1');
     expect(json.downloadUrl).toBe(APK_URL);
 
     await assertNoHorizontalOverflow(page);

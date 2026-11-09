@@ -6,9 +6,9 @@ Updated: 2026-11-09
 
 | Item | Value |
 | --- | --- |
-| Branch | `feature/v0.2.0-tidal-glass` |
+| Branch | `main` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.2.0 |
+| App version | 0.2.1 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -36,11 +36,28 @@ Updated: 2026-11-09
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
+| `artifacts/jcode-mobile-0.2.1-android-release.apk` | pending CI | pending CI |
 | `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
 | `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
 | `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
 
-The 0.2.0 APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. It is attached to release `v0.2.0`. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
+The 0.2.1 APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. It is attached to release `v0.2.1`. The 0.2.0 APK remains the previous release. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
+
+## v0.2.1 welcome release
+
+Issue #14 is implemented on `main`: full-screen character grid, bitmap title
+silhouette, torus-band idle redraw, Skip, Pause/Play, Reduce Motion still frame,
+saved-server routing, and retained theme preview. Evidence is in
+`docs/V0_2_1_VERIFICATION.md`.
+
+| Check | Result |
+| --- | --- |
+| `bun run check` | PASS, 11 suites / 81 tests |
+| `bun run adapter:test` | PASS, 16 tests |
+| `bun run e2e` | PASS, 25/25 |
+| `bun run marketing:test` | PASS, 76 passed / 3 skipped |
+| Android release APK | pending CI |
+| Native device pacing, large text, screen reader | NOT_RUN |
 
 ## Commands verified for v0.2.0
 
