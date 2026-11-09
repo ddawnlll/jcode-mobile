@@ -341,7 +341,7 @@ export class MobileAdapter {
         this.reply(client, id, {
           ev: 'hello_ok',
           version: 1,
-          server: 'jcode-mobile-adapter/0.1.3',
+          server: 'jcode-mobile-adapter/0.1.4',
           capabilities: ADAPTER_CAPABILITIES,
         });
         return;
@@ -359,7 +359,7 @@ export class MobileAdapter {
         daemonVersion = this.observedDaemonVersion() ?? daemonVersion;
         this.reply(client, id, {
           ev: 'server_info',
-          server: 'jcode-mobile-adapter/0.1.3',
+          server: 'jcode-mobile-adapter/0.1.4',
           daemon_version: daemonVersion,
           continuation: true,
           capabilities: ADAPTER_CAPABILITIES,
@@ -481,8 +481,19 @@ export class MobileAdapter {
       case 'rename_session': {
         const attachment = this.requireAttachment(client, id, frame);
         if (!attachment) return;
-        attachment.rename(typeof frame.title === 'string' ? frame.title : null);
-        this.reply(client, id, { ev: 'ok' });
+        try {
+          const result = await attachment.rename(
+            typeof frame.title === 'string' ? frame.title : null,
+          );
+          this.reply(client, id, {
+            ev: 'ok',
+            session_id: attachment.sessionId,
+            title: result.title,
+            display_title: result.displayTitle,
+          });
+        } catch (error) {
+          this.error(client, id, 'internal', (error as Error).message);
+        }
         return;
       }
       case 'set_session_saved': {
