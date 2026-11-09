@@ -54,7 +54,7 @@ saved-server routing, and retained theme preview. Evidence is in
 | --- | --- |
 | `bun run check` | PASS, 11 suites / 81 tests |
 | `bun run adapter:test` | PASS, 16 tests |
-| `bun run e2e` | PASS, 25/25 |
+| `bun run e2e` | PASS, 26/26 |
 | `bun run marketing:test` | PASS, 76 passed / 3 skipped |
 | Android release APK | pending CI |
 | Native device pacing, large text, screen reader | NOT_RUN |

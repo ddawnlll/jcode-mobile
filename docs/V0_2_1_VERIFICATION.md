@@ -55,7 +55,7 @@ release metadata and marketing updates.
 | Lint | `bun run lint` | PASS, one pre-existing `registry.ts` warning |
 | Jest / RNTL | `bun run test` | PASS, 11 suites / 81 tests |
 | Adapter contract | `bun run adapter:test` | PASS, 16 tests |
-| Playwright app e2e | `bun run e2e` | PASS, 25/25 (first full run 24/25; the saved-server spec used the Appearance screen's `Theme family` heading instead of its `appearance-screen` test id, then passed 6/6 on rerun) |
+| Playwright app e2e | `bun run e2e` | PASS, 26/26 in 3.8 min (the first full run was 24/25 because the saved-server spec used the Appearance screen's `Theme family` heading instead of its `appearance-screen` test id; after the fix the full suite passed) |
 | Marketing build | `bun run marketing:build` | PASS, 27 files |
 | Marketing tests | `bun run marketing:test` with the rootless Chromium `LD_LIBRARY_PATH` | PASS, 76 passed / 3 skipped |
 | Android release APK | CI `check.yml` workflow dispatch | PASS, artifact and SHA-256 recorded in `docs/BUILD_STATE.md` |

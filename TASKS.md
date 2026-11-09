@@ -110,7 +110,7 @@ Status is DONE only with evidence in `docs/V0_2_1_VERIFICATION.md`.
 | 8.2 | Idle spin with bounded redraw and reusable raster | DONE | Outside field reused verbatim; torus band only (32 of 105 rows); 80 ms idle interval |
 | 8.3 | Skip, Pause/Play, AppState and focus pause, Reduce Motion still | DONE (web) | `welcome.spec.ts` skip, pause/resume and reduced-motion tests; timer guards inspected |
 | 8.4 | Keep pairing, theme preview, Preview without connecting and saved-server routing | DONE | `welcome.spec.ts`; `welcome-screen.test.tsx`; existing connect/narrow specs |
-| 8.5 | Playwright and RNTL coverage | DONE | 81 Jest/RNTL tests; 25/25 app e2e; 6/6 welcome spec on rerun |
+| 8.5 | Playwright and RNTL coverage | DONE | 81 Jest/RNTL tests; 26/26 app e2e including the short-narrow welcome case |
 | 8.6 | Android release APK | DONE (CI) / NOT_RUN (device install) | CI release build, checksum in `docs/BUILD_STATE.md` |
 | 8.7 | README, website, marketing tests and docs | DONE | Real 0.2.1 welcome captures; 76 marketing tests pass |
 | 8.8 | Native pacing, large text and screen reader | NOT_RUN | No physical Android/iOS device or macOS host in this session |
