@@ -65,7 +65,7 @@ gate is not closed by a browser or Playwright result.
 | Clean environment | `bun install --frozen-lockfile` + check + adapter + export in a copied tree without `node_modules` | PASS; install 1.9 s, check 154.8 s, adapter 3.0 s, export 8.2 s |
 | Bun-only PATH | same checks with `PATH` excluding Node/npm/npx | PASS; check 154.4 s, adapter 16 tests, export 6.3 s |
 | Final clean + Bun-only PATH | fresh copied tree, `PATH` excludes Node/npm/npx | PASS; install 2.54 s, 64 Jest/RNTL, 16 adapter, web export 2.2 s |
-| CI | GitHub Actions `check.yml` run `42619046520` | PASS (`js`); `android-build` skipped by workflow design |
+| CI | GitHub Actions `check.yml` run `42620291129` | PASS (`js`, 35 s); `android-build` skipped by workflow design |
 | Android release | `bash scripts/build-android-release.sh` | NOT_RUN this session (no SDK/JDK on VPS) |
 | iOS release | `bash scripts/build-ios-simulator.sh` | NOT_RUN (macOS gate) |
 
