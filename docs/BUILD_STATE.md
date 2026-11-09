@@ -83,7 +83,7 @@ in `docs/V0_2_0_VERIFICATION.md`.
 | Images | bounded prompt images + controlled Markdown image loading |
 | Adapter additions | directory browse, config/effort, context snapshot, images, changes |
 | Web e2e | iPhone 14, Pixel 7, and 320-wide projects |
-| Native v0.2 gates | NOT_RUN on this VPS |
+| Native v0.2 gates | Android debug CI PASS (`assembleDebug`); device release NOT_RUN |
 
 ## Web target (verified 2026-11-09 on Debian 13)
 

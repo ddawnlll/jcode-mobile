@@ -73,6 +73,7 @@ gate is not closed by a browser or Playwright result.
 | Expo Android prebuild | `bunx --bun expo prebuild --platform android --no-install` | PASS; generated `nodeExecutableAndArgs.set(["bun", "--bun"])`, five direct `node` calls rewritten, manifest `adjustResize` |
 | CI | GitHub Actions `check.yml` run `42629879571` | PASS (`js`); `android-build` skipped by workflow design |
 | Android release | `bash scripts/build-android-release.sh` | NOT_RUN this session (no JDK/Android SDK on VPS) |
+| Android debug CI | `gh workflow run check.yml` at `56f13c9` | PASS; `assembleDebug`, 15 m 52 s, generated Gradle uses Bun |
 | iOS release | `bash scripts/build-ios-simulator.sh` | NOT_RUN (macOS gate) |
 
 ### Bun vs Node adapter baseline
@@ -165,9 +166,10 @@ changes/copy/image/math flows on both mobile widths, and the 320-wide reflow.
 - Native release-build scroll/frame-time/peak-memory results are NOT_RUN.
 - Glass compositing contrast on varied native backdrops is NOT_RUN; opaque
   token contrast is recorded by the design source, not re-certified here.
-- The Android prebuild configuration is verified, but a full Gradle release
-  build and native bundling are NOT_RUN because this VPS has no JDK or Android
-  SDK. The iOS build remains a macOS gate.
+- The Android prebuild configuration is verified and the debug `assembleDebug`
+  job passes in CI. A full Gradle release build, a Node-free host proof, and
+  native device checks remain NOT_RUN; this VPS has no JDK or Android SDK, and
+  the iOS build remains a macOS gate.
 - F16 Work-memory/virtualization, F20 registry coordination, and F22 native
   focus/accessibility are characterized by existing tests but not fully closed
   for 0.2.0.
