@@ -48,6 +48,7 @@ npx tsc --noEmit            # pass
 npx eslint .                # pass
 npm test                    # 34/34 pass
 node --test integration/jcode-adapter/test/*.test.ts   # 7/7 pass
+npm run e2e                 # 7/7 Playwright tests pass (isolated staging)
 bash scripts/staging-run.sh integration/jcode-adapter/test/continuity.ts  # PASS
 bash scripts/staging-run.sh integration/jcode-adapter/test/daemon-death.ts # PASS
 npx expo run:ios --device "iPhone 17 Pro"  # dev build + launch, pass
@@ -55,6 +56,24 @@ bash scripts/build-android-release.sh        # release APK, pass
 bash scripts/build-ios-simulator.sh          # release Simulator .app, pass
 gh workflow run check.yml --ref main         # Android 36 build, pass
 ```
+
+## Web target (verified 2026-11-09 on Debian 13)
+
+| Item | Value |
+| --- | --- |
+| Web runtime | Expo export with `react-native-web`; expo-sqlite WASM with COOP/COEP |
+| Web server | `scripts/serve-web.mjs`, or the adapter with `JCODE_ADAPTER_WEB_DIR` |
+| Playwright | 1.65 / Chromium, iPhone 14 and Pixel 7 profiles |
+| E2E environment | isolated `.staging/jcode` daemon, adapter 7645, web 8091 |
+| E2E coverage | Connect, sessions, conversation reply, Work activity, Plan, New session |
+| Result | `npm run e2e`: 7 passed |
+| Live deployment | Caddy `https://dawnll.duckdns.org` proxies to adapter `127.0.0.1:7644` |
+| Rootless browsers | Chromium libraries extracted under `~/playwright-deps` |
+
+The e2e seed is gated by the build-time `EXPO_PUBLIC_E2E=1` constant and is
+inert in a normal web export. Web tokens live in localStorage, so the web
+target is a preview/test surface, not a replacement for the native
+Keystore/Keychain build.
 
 ## Commands that failed and why
 

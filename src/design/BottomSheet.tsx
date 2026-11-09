@@ -4,6 +4,7 @@ import {
   BackHandler,
   Keyboard,
   findNodeHandle,
+  Platform,
   Pressable,
   StyleSheet,
   useWindowDimensions,
@@ -105,6 +106,7 @@ export function BottomSheet({
   useEffect(() => {
     if (visible) return;
     const timer = setTimeout(() => {
+      if (Platform.OS === 'web') return; // findNodeHandle is native-only.
       const handle =
         returnFocusRef?.current ? findNodeHandle(returnFocusRef.current) : null;
       if (handle) AccessibilityInfo.setAccessibilityFocus(handle);
@@ -115,6 +117,7 @@ export function BottomSheet({
   useEffect(() => {
     if (!visible) return;
     const timeout = setTimeout(() => {
+      if (Platform.OS === 'web') return; // findNodeHandle is native-only.
       const handle = headingRef?.current ? findNodeHandle(headingRef.current) : null;
       if (handle) AccessibilityInfo.setAccessibilityFocus(handle);
     }, 120);

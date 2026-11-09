@@ -11,7 +11,11 @@ describe('parseServerAddress', () => {
   it('accepts explicit secure schemes and strips paths', () => {
     expect(parseServerAddress('https://studio.example.net/path')).toMatchObject({
       ok: true,
-      endpoint: { host: 'studio.example.net', port: 7643, tls: true },
+      endpoint: { host: 'studio.example.net', port: 443, tls: true },
+    });
+    expect(parseServerAddress('wss://studio.example.net')).toMatchObject({
+      ok: true,
+      endpoint: { host: 'studio.example.net', port: 443, tls: true },
     });
     expect(parseServerAddress('wss://studio.example.net:9000')).toMatchObject({
       ok: true,

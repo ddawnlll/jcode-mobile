@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, Linking, StyleSheet, View } from 'react-native';
+import { AppState, Linking, StyleSheet, Text as RNText, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
@@ -101,9 +101,13 @@ function BootstrapSurface() {
   return (
     <View style={[styles.bootstrap, { paddingTop: insets.top }]}>
       <JCodeMark size={28} color="#173B3A" />
-      <Text variant="small" color="muted" style={{ marginTop: space.sm }}>
-        Opening your sessions…
-      </Text>
+      {/*
+        This surface paints while `useFonts` is still fetching. Rendering the
+        app's custom families here made the browser start a CSS font request
+        before expo-font's own load, which aborted one of the two requests and
+        left every HankenGrotesk-Medium run with zero height on web.
+      */}
+      <RNText style={styles.bootstrapLabel}>Opening your sessions…</RNText>
       <View style={styles.placeholders}>
         {[0, 1, 2].map((index) => (
           <View key={index} style={styles.placeholderRow} />
@@ -146,6 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 40,
   },
+  bootstrapLabel: { marginTop: 8, fontSize: 14, color: '#536B65' },
   placeholders: { marginTop: 48, gap: 20 },
   placeholderRow: {
     height: 76,

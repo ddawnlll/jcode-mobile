@@ -23,6 +23,17 @@ export interface AdapterConfig {
   logLevel: 'debug' | 'info' | 'warn';
   /** Test-only fault injection; disabled unless explicitly set. */
   faultAfterSend: boolean;
+  /**
+   * Browser origins allowed to call the HTTP endpoints and open a WebSocket.
+   * Native clients send no Origin and are unaffected. Loopback origins are
+   * allowed by default so the web preview can pair with a local adapter.
+   */
+  allowedOrigins: string[];
+  /**
+   * Optional exported web build to serve from the adapter. The browser client
+   * then shares an origin with /pair and /ws, so CORS does not apply.
+   */
+  webDir?: string;
 }
 
 function runtimeDir(): string {
@@ -36,6 +47,13 @@ function runtimeDir(): string {
 function numberFrom(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function listFrom(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export function loadConfig(): AdapterConfig {
@@ -61,7 +79,42 @@ export function loadConfig(): AdapterConfig {
     maxHistoryBytes: numberFrom(process.env.JCODE_ADAPTER_HISTORY_BYTES, 3 * 1024 * 1024),
     logLevel: (process.env.JCODE_ADAPTER_LOG as AdapterConfig['logLevel']) ?? 'info',
     faultAfterSend: process.env.JCODE_ADAPTER_FAULT === 'drop_after_send',
+    allowedOrigins: listFrom(process.env.JCODE_ADAPTER_ALLOWED_ORIGINS),
+    webDir: process.env.JCODE_ADAPTER_WEB_DIR,
   };
+}
+
+/** The web preview runs on a loopback origin; everything else is opt-in. */
+export function isAllowedOrigin(config: AdapterConfig, origin: string): boolean {
+  let normalizedOrigin = origin;
+  try {
+    normalizedOrigin = new URL(origin).origin;
+  } catch {
+    return false;
+  }
+  if (
+    config.allowedOrigins.some((allowed) => {
+      try {
+        return new URL(allowed).origin === normalizedOrigin;
+      } catch {
+        return false;
+      }
+    })
+  ) {
+    return true;
+  }
+  try {
+    const url = new URL(normalizedOrigin);
+    return (
+      url.protocol === 'http:' &&
+      (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]' || url.hostname === '::1')
+    ) || (
+      url.protocol === 'https:' &&
+      (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]' || url.hostname === '::1')
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function assertBindable(config: AdapterConfig): void {

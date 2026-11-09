@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, userEvent } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { Button, Field } from '../controls';
 import { Text } from '../typography';
@@ -12,7 +12,6 @@ function wrap(node: React.ReactElement) {
 describe('shared controls', () => {
   it('exposes a disabled primary action with its reason and does not fire', async () => {
     const onPress = jest.fn();
-    const user = userEvent.setup();
     await render(
       wrap(
         <Button
@@ -26,15 +25,14 @@ describe('shared controls', () => {
     const button = screen.getByRole('button', { name: 'Start session' });
     expect(button).toBeDisabled();
     expect(screen.getByText('Reconnect to start a session.')).toBeOnTheScreen();
-    await user.press(button);
+    fireEvent.press(button);
     expect(onPress).not.toHaveBeenCalled();
   });
 
   it('fires a press once and exposes a loading busy state', async () => {
     const onPress = jest.fn();
-    const user = userEvent.setup();
     await render(wrap(<Button label="Send" onPress={onPress} />));
-    await user.press(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.press(screen.getByRole('button', { name: 'Send' }));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 

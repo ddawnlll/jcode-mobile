@@ -3,6 +3,8 @@
  * in-flight reconnection attempt, correlated requests, and no automatic
  * mutation retries.
  */
+import { Platform } from 'react-native';
+
 import { budgets } from '../../design/tokens';
 import { decodeFrame, encodeFrame } from '../protocol/decode';
 import type { ServerEvent } from '../protocol/frames';
@@ -81,9 +83,14 @@ export class MobileClient {
         protocols?: string | string[] | null,
         options?: { headers?: Record<string, string> },
       ) => WebSocket;
-      const socket = new SocketCtor(wsUrl(this.endpoint), undefined, {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
+      // Browsers cannot set Authorization on a WebSocket. The adapter accepts
+      // `jcode-v1` plus `token.<bearer>` as an offered subprotocol instead.
+      const socket =
+        Platform.OS === 'web'
+          ? new SocketCtor(wsUrl(this.endpoint), ['jcode-v1', `token.${this.token}`])
+          : new SocketCtor(wsUrl(this.endpoint), undefined, {
+              headers: { Authorization: `Bearer ${this.token}` },
+            });
       this.socket = socket;
       let settled = false;
       const timer = setTimeout(() => {
@@ -235,10 +242,13 @@ export function parseServerAddress(
   if (!trimmed) return { ok: false, error: 'Enter the server address.' };
   let value = trimmed;
   let tls = true;
+  let explicitScheme = false;
   if (/^wss?:\/\//i.test(value)) {
+    explicitScheme = true;
     tls = value.toLowerCase().startsWith('wss://');
     value = value.replace(/^wss?:\/\//i, '');
   } else if (/^https?:\/\//i.test(value)) {
+    explicitScheme = true;
     tls = value.toLowerCase().startsWith('https://');
     value = value.replace(/^https?:\/\//i, '');
   }
@@ -249,7 +259,10 @@ export function parseServerAddress(
   const match = /^(\[[^\]]+\]|[^:]+)(?::(\d+))?$/.exec(value);
   if (!match) return { ok: false, error: 'Enter an address like studio.example.net:7643.' };
   const host = match[1].replace(/^\[|\]$/g, '');
-  const port = match[2] ? Number(match[2]) : defaultPort;
+  // An explicit https:// or wss:// URL without a port means the standard TLS
+  // port. A bare host keeps the adapter's 7643 default, which is what native
+  // pairing documentation shows.
+  const port = match[2] ? Number(match[2]) : explicitScheme && tls ? 443 : defaultPort;
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return { ok: false, error: 'That port is not valid.' };
   }

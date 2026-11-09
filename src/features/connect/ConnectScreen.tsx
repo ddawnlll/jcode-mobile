@@ -40,6 +40,25 @@ export function ConnectScreen() {
 
   const parsed = address.trim() ? parseServerAddress(address) : null;
 
+  // A web build served by the adapter shares its origin. Detect that case and
+  // prefill the address so pairing is a code and a tap, without prefilling an
+  // unrelated static host that happens to serve this bundle.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (window.location.protocol !== 'https:') return;
+    let cancelled = false;
+    void fetch(`${window.location.origin}/info`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((info: { service?: string } | null) => {
+        if (cancelled || info?.service !== 'jcode-mobile-adapter') return;
+        setAddress((current) => current || `https://${window.location.host}`);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!busy) {
       pulse.stopAnimation();

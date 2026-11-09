@@ -6,12 +6,13 @@
 import { createServer as createHttpServer } from 'node:http';
 import type { IncomingMessage, ServerResponse, Server } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
+import { extname, join, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { AdapterConfig } from './config.ts';
-import { log } from './config.ts';
+import { isAllowedOrigin, log } from './config.ts';
 import { ControlBridge } from './bridge.ts';
 import { DeviceRegistry } from './registry.ts';
 import { Attachment } from './attachment.ts';
@@ -40,6 +41,85 @@ const MAX_REQUESTS_PER_WINDOW = 120;
 const RATE_WINDOW_MS = 10_000;
 const MAX_CONTENT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
+
+/**
+ * Browsers cannot set an Authorization header on WebSocket. They can offer a
+ * subprotocol, so a web client sends `jcode-v1` plus `token.<bearer>`. Native
+ * clients keep using the Authorization header and never send an Origin.
+ */
+function websocketToken(request: IncomingMessage): string | null {
+  const header = request.headers.authorization;
+  const bearer = typeof header === 'string' ? /^Bearer\s+([0-9a-f]{64})$/i.exec(header.trim()) : null;
+  if (bearer) return bearer[1];
+  const protocols = String(request.headers['sec-websocket-protocol'] ?? '')
+    .split(',')
+    .map((item) => item.trim());
+  if (!protocols.includes('jcode-v1')) return null;
+  const match = protocols.map((item) => /^token\.([0-9a-f]{64})$/i.exec(item)).find(Boolean);
+  return match ? match[1] : null;
+}
+
+const WEB_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ttf': 'font/ttf',
+  '.woff2': 'font/woff2',
+  '.wasm': 'application/wasm',
+  '.map': 'application/json; charset=utf-8',
+};
+
+/** Serve an exported Expo web build with an SPA fallback. */
+async function serveWebFile(
+  root: string,
+  pathname: string,
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<boolean> {
+  const base = resolve(root);
+  let relative: string;
+  try {
+    relative = decodeURIComponent(pathname);
+  } catch {
+    return false;
+  }
+  let target = resolve(base, `.${relative}`);
+  if (target !== base && !target.startsWith(`${base}${sep}`)) return false;
+
+  try {
+    const info = await stat(target);
+    if (info.isDirectory()) target = join(target, 'index.html');
+  } catch {
+    // SPA route: fall back to index.html, but never invent an asset.
+    if (extname(relative)) return false;
+    target = join(base, 'index.html');
+  }
+
+  try {
+    const info = await stat(target);
+    if (!info.isFile()) return false;
+    response.writeHead(200, {
+      'Content-Type': WEB_TYPES[extname(target)] ?? 'application/octet-stream',
+      'Content-Length': info.size,
+    });
+    if (request.method === 'HEAD') {
+      response.end();
+      return true;
+    }
+    createReadStream(target)
+      .on('error', () => response.destroy())
+      .pipe(response);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const CREATE_CACHE_TTL_MS = 10 * 60_000;
 const LEDGER_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
@@ -97,7 +177,11 @@ export class MobileAdapter {
     } else {
       this.server = createHttpServer(handler);
     }
-    this.wss = new WebSocketServer({ noServer: true, maxPayload: this.config.maxFrameBytes });
+    this.wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: this.config.maxFrameBytes,
+      handleProtocols: (protocols) => (protocols.has('jcode-v1') ? 'jcode-v1' : false),
+    });
     this.server.on('upgrade', (request, socket, head) => {
       void this.handleUpgrade(request, socket as never, head);
     });
@@ -122,16 +206,22 @@ export class MobileAdapter {
       socket.destroy();
       return;
     }
-    const header = request.headers.authorization;
-    const match = typeof header === 'string' ? /^Bearer\s+([0-9a-f]{64})$/i.exec(header.trim()) : null;
-    if (!match) {
+    const origin = request.headers.origin;
+    if (typeof origin === 'string' && !isAllowedOrigin(this.config, origin)) {
+      log(this.config, 'warn', 'rejected WebSocket origin', { origin });
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    const token = websocketToken(request);
+    if (!token) {
       socket.write(
         'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{"error":"missing_token"}',
       );
       socket.destroy();
       return;
     }
-    const device = await this.registry.validateTokenAsync(match[1]);
+    const device = await this.registry.validateTokenAsync(token);
     if (!device) {
       log(this.config, 'warn', 'rejected unknown or revoked device token');
       socket.write(
@@ -149,7 +239,7 @@ export class MobileAdapter {
       const client: ClientState = {
         id: newId('cli'),
         deviceId: device.id,
-        token: match[1],
+        token,
         socket: ws,
         attachments: new Map(),
         greeted: false,
@@ -738,6 +828,25 @@ export class MobileAdapter {
     const url = new URL(request.url ?? '/', 'http://localhost');
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
+    // expo-sqlite's web driver needs SharedArrayBuffer. Every document served
+    // here is cross-origin isolated, including API responses so a proxy cannot
+    // drop the headers between the document and its assets.
+    response.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    response.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+    response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    const origin = request.headers.origin;
+    if (typeof origin === 'string' && isAllowedOrigin(this.config, origin)) {
+      response.setHeader('Access-Control-Allow-Origin', origin);
+      response.setHeader('Vary', 'Origin');
+      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      response.setHeader('Access-Control-Allow-Headers', 'authorization, content-type');
+      response.setHeader('Access-Control-Max-Age', '600');
+    }
+    if (request.method === 'OPTIONS') {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ ok: true, service: 'jcode-mobile-adapter', version: 1 }));
@@ -802,6 +911,9 @@ export class MobileAdapter {
         }),
       );
       return;
+    }
+    if ((request.method === 'GET' || request.method === 'HEAD') && this.config.webDir) {
+      if (await serveWebFile(this.config.webDir, url.pathname, request, response)) return;
     }
     response.writeHead(404, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ ok: false, error: 'Not found' }));

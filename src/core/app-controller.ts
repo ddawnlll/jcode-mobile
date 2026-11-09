@@ -35,6 +35,7 @@ import {
 } from './persistence/db';
 import { deleteToken, loadToken, saveToken } from './persistence/credentials';
 import { importDevPairingFile } from './dev/pairing-import';
+import { importE2ECredentials } from './dev/e2e-seed';
 import {
   deriveSeam,
   formatClock,
@@ -93,6 +94,7 @@ class AppControllerImpl {
     this.booted = true;
     try {
       await initDatabase();
+      await importE2ECredentials();
       await importDevPairingFile();
       const [appearance, privacy, deviceName] = await Promise.all([
         getPref(APPEARANCE),

@@ -18,6 +18,7 @@ function configFor(socketPath: string, stateDir: string, overrides: Partial<Adap
     host: '127.0.0.1',
     port: 0,
     allowInsecureBind: false,
+    allowedOrigins: [],
     jcodeHome: stateDir,
     daemonSocket: socketPath,
     apiSocket: join(stateDir, 'api.sock'),

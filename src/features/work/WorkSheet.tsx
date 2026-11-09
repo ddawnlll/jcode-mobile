@@ -82,10 +82,15 @@ export function WorkSheet({
 
   const showPlanTab = (conversation.plan?.state.todos.length ?? 0) > 0;
 
+  // The adapter exposes todo state by request, not as a live frame. Opening the
+  // sheet before the agent has written its plan would otherwise leave the Plan
+  // tab hidden forever. Refresh when a tool row appears or changes state, and
+  // once more when the turn settles.
+  const toolRevision = conversation.tools.map((row) => `${row.callId}:${row.state}`).join('|');
   useEffect(() => {
     if (!visible) return;
     void controller.loadPlan();
-  }, [visible]);
+  }, [visible, toolRevision, conversation.execution.kind]);
 
   useEffect(() => {
     if (!showPlanTab && tab === 'plan') setTab('activity');
