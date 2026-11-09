@@ -9,7 +9,7 @@ gate is not closed by a browser or Playwright result.
 | --- | --- |
 | Branch | `feature/v0.2.0-tidal-glass` |
 | Base | `cac75d0` (PR #12 merge) |
-| Candidate SHA | `b9cfa0d` (updated if follow-up commits land) |
+| Candidate SHA | `5bcb691` |
 | Bun | 1.4.4 (`/home/quant/local/bun/bin/bun`) |
 | Host | Debian 13 x86_64 VPS, Chromium headless shell 1254 |
 | JCode | 0.99.1 (`7206efd0c`) |

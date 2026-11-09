@@ -26,17 +26,6 @@ const SYMBOLS: Record<string, string> = {
   lim: 'lim', max: 'max', min: 'min', det: 'det',
 };
 
-const SUPERS: Record<string, string> = {
-  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶',
-  '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽',
-  ')': '⁾',
-};
-const SUBS: Record<string, string> = {
-  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆',
-  '7': '₇', '8': '₈', '9': '₉', '+': '₊', '-': '₋', '=': '₌', '(': '₍',
-  ')': '₎',
-};
-
 export function mathToText(latex: string): string {
   let value = latex.trim();
   // Fractions become a readable quotient; nested fractions still flatten.
@@ -50,20 +39,12 @@ export function mathToText(latex: string): string {
   }
   value = value.replace(/\\sqrt\s*\{([^{}]*)\}/g, (_match, inner: string) => `√(${inner})`);
   value = value.replace(/\\([A-Za-z]+)/g, (match, name: string) => SYMBOLS[name] ?? match);
-  value = value.replace(/\^\{([^{}]*)\}/g, (_match, inner: string) => {
-    const mapped = [...inner].map((char) => SUPERS[char]);
-    return mapped.every(Boolean) ? mapped.join('') : `^(${inner})`;
-  });
-  value = value.replace(/\^([A-Za-z0-9+\-=()])/g, (_match, char: string) =>
-    SUPERS[char] ?? `^${char}`,
-  );
-  value = value.replace(/_\{([^{}]*)\}/g, (_match, inner: string) => {
-    const mapped = [...inner].map((char) => SUBS[char]);
-    return mapped.every(Boolean) ? mapped.join('') : `_(${inner})`;
-  });
-  value = value.replace(/_([A-Za-z0-9+\-=()])/g, (_match, char: string) =>
-    SUBS[char] ?? `_${char}`,
-  );
+  // Use ASCII scripts rather than Unicode blocks the bundled mono font does
+  // not cover; an unsupported glyph must never become tofu in a transcript.
+  value = value.replace(/\^\{([^{}]*)\}/g, (_match, inner: string) => `^(${inner})`);
+  value = value.replace(/\^([A-Za-z0-9+\-=()])/g, (_match, char: string) => `^${char}`);
+  value = value.replace(/_\{([^{}]*)\}/g, (_match, inner: string) => `_(${inner})`);
+  value = value.replace(/_([A-Za-z0-9+\-=()])/g, (_match, char: string) => `_${char}`);
   value = value.replace(/\\begin\{[^{}]+\}|\\end\{[^{}]+\}/g, '');
   value = value.replace(/\\\\/g, ' ');
   value = value.replace(/&/g, ' ');

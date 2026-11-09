@@ -1775,10 +1775,10 @@ export class AppController {
   ): Promise<{ ok: boolean; error?: string }> {
     const state = store.get();
     const conversation = state.conversation;
+    if (state.demo) return this.sendDemo(content.trim(), images);
     if (!this.profile || !conversation.sessionId) return { ok: false, error: 'No session is open.' };
     const trimmed = content.trim();
     if (!trimmed && images.length === 0) return { ok: false, error: 'Write a message first.' };
-    if (state.demo) return this.sendDemo(trimmed, images);
     if (!this.client?.isOpen) return { ok: false, error: 'Reconnect to send.' };
     if (conversation.execution.kind === 'working') return this.sendGuidance(trimmed, images);
     const gate = this.canSend();
