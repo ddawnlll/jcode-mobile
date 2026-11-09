@@ -25,7 +25,7 @@ socket and the live adapter on 7644 were not restarted or used by tests.
 | iOS simulator/device | NOT_RUN: no macOS/Xcode on this VPS |
 
 Playwright evidence: `.staging/e2e/report/index.html`.
-UI captures: `.staging/e2e/screens/{sessions,conversation,work,plan,connect}.png`.
+UI captures: `docs/evidence/v0.1.4/{sessions,conversation,work,plan,connect}.png`.
 Failure artifacts are under `.staging/e2e/results/` when a test fails; the
 final run has no failure traces.
 
