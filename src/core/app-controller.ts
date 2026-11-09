@@ -114,11 +114,16 @@ export class AppController {
   /** Pairing attempt identity and cancellation owner. */
   private pairAttempt = 0;
   private pairAbort: AbortController | null = null;
+  private pairWriteSeq = 0;
+  private pairWrites = new Map<string, { seq: number; token: string }>();
+  /** A profile whose credential is being loaded; connections are blocked. */
+  private credentialLoading: { epoch: number; profileId: string } | null = null;
   /** Confirmed titles newer than a pending inventory/attach response. */
   private confirmedTitles = new Map<
     string,
-    { title: string | null; displayTitle: string; at: number }
+    { title: string | null; displayTitle: string; at: number; revision: number }
   >();
+  private titleRevision = 0;
 
   /* ------------------------------------------------------------- ownership */
 
@@ -177,6 +182,7 @@ export class AppController {
    */
   private invalidateLifecycle(): void {
     this.lifecycleEpoch += 1;
+    this.credentialLoading = null;
     this.clientGeneration += 1;
     this.clearReconnect();
     this.stopHealthChecks();
@@ -231,10 +237,10 @@ export class AppController {
   private mergeConfirmedTitle(
     serverId: string,
     session: SessionInfo,
-    requestStartedAt: number,
+    revisionAtStart: number,
   ): SessionInfo {
     const confirmed = this.confirmedTitles.get(this.titleKey(serverId, session.session_id));
-    if (confirmed && confirmed.at > requestStartedAt) {
+    if (confirmed && confirmed.revision > revisionAtStart) {
       return { ...session, title: confirmed.title ?? confirmed.displayTitle };
     }
     return session;
@@ -251,7 +257,8 @@ export class AppController {
     const existing = this.confirmedTitles.get(key);
     if (existing && existing.at > at) return;
     const visible = displayTitle || title || '';
-    this.confirmedTitles.set(key, { title, displayTitle: visible, at });
+    const revision = ++this.titleRevision;
+    this.confirmedTitles.set(key, { title, displayTitle: visible, at, revision });
     store.setState((state) => {
       const conversation = state.conversation;
       const sameConversation =
@@ -498,19 +505,23 @@ export class AppController {
       daemon_version: existing?.daemon_version ?? null,
       capabilities_json: existing?.capabilities_json ?? null,
     };
+    const writeSeq = ++this.pairWriteSeq;
+    this.pairWrites.set(profileId, { seq: writeSeq, token: payload.token });
     await saveToken(profileId, payload.token);
     if (!owns()) {
-      await deleteToken(profileId).catch(() => undefined);
+      await this.cleanupPairWrites(profileId, writeSeq, payload.token);
       return cancelled();
     }
     await saveServer(profile);
     if (!owns()) {
-      await deleteServer(profileId).catch(() => undefined);
-      await deleteToken(profileId).catch(() => undefined);
+      await this.cleanupPairWrites(profileId, writeSeq, payload.token);
       return cancelled();
     }
     await setPref(LAST_SERVER, profileId);
-    if (!owns()) return cancelled();
+    if (!owns()) {
+      await this.cleanupPairWrites(profileId, writeSeq, payload.token);
+      return cancelled();
+    }
     // Pairing is complete once the token is stored. Connect in the background
     // so a slow or broken WebSocket cannot leave the Pair button spinning.
     await this.activateProfile(profile, { restore: false, deferConnect: true });
@@ -521,6 +532,44 @@ export class AppController {
     }
   }
 
+  /**
+   * Remove only this attempt's local writes. A newer overlapping pair owns a
+   * later lease; if this attempt's paused save landed after it, restore the
+   * newer token instead of deleting it.
+   */
+  private async cleanupPairWrites(
+    profileId: string,
+    seq: number,
+    token: string,
+  ): Promise<void> {
+    const lease = this.pairWrites.get(profileId);
+    if (!lease || lease.seq !== seq) {
+      if (lease) {
+        const current = await loadToken(profileId).catch(() => null);
+        if (current !== lease.token) {
+          await saveToken(profileId, lease.token).catch(() => undefined);
+        }
+      } else {
+        // No live lease: a forget removed it, or the profile was cleared.
+        // Delete only this attempt's token if its paused write landed late.
+        const current = await loadToken(profileId).catch(() => null);
+        if (current === token) {
+          await deleteToken(profileId).catch(() => undefined);
+        }
+        if (!this.pairWrites.has(profileId)) {
+          await deleteServer(profileId).catch(() => undefined);
+        }
+      }
+      return;
+    }
+    const current = await loadToken(profileId).catch(() => null);
+    if (current !== null && current !== token) return;
+    await deleteToken(profileId).catch(() => undefined);
+    if (this.pairWrites.get(profileId)?.seq !== seq) return;
+    this.pairWrites.delete(profileId);
+    await deleteServer(profileId).catch(() => undefined);
+  }
+
   private defaultPort(): number {
     return 7643;
   }
@@ -528,9 +577,31 @@ export class AppController {
   async activateProfile(profile: ServerProfileRow, options: { restore: boolean; deferConnect?: boolean }): Promise<void> {
     this.invalidateLifecycle();
     const epoch = this.lifecycleEpoch;
+    this.profile = null;
+    this.token = null;
+    this.credentialLoading = { epoch, profileId: profile.id };
+    store.setState((state) => ({
+      connection: {
+        ...state.connection,
+        state: 'connecting',
+        lastCheckedAt: null,
+        lastContactAt: null,
+        error: null,
+      },
+    }));
+    let token: string | null;
+    try {
+      token = await loadToken(profile.id);
+    } catch {
+      if (this.credentialLoading?.epoch === epoch) this.credentialLoading = null;
+      return;
+    }
+    // A later activation may have won while the keychain read was pending.
+    // Never publish this profile or its bearer over the winner.
+    if (this.lifecycleEpoch !== epoch) return;
     this.profile = profile;
-    this.token = await loadToken(profile.id);
-    if (!this.owns(epoch, profile.id)) return;
+    this.token = token;
+    this.credentialLoading = null;
     store.setState((state) => ({
       profileId: profile.id,
       connection: {
@@ -575,6 +646,12 @@ export class AppController {
   }
 
   async connectNow(options: { immediate?: boolean; force?: boolean; retry?: boolean } = {}): Promise<void> {
+    if (
+      this.credentialLoading &&
+      this.credentialLoading.epoch === this.lifecycleEpoch
+    ) {
+      return;
+    }
     if (!this.profile) return;
     if (!this.token) {
       this.setConnectionState('pair_again', 'Pair this phone again.');
@@ -699,7 +776,7 @@ export class AppController {
         if (!this.ownsClient(epoch, profileId, generation, client)) return;
         this.client = null;
         client.close();
-        await this.classifyFailure(error, epoch, profileId);
+        await this.classifyFailure(error, epoch, profileId, generation);
       } finally {
         if (this.connectAttempt === attempt) {
           this.connectAttempt = null;
@@ -724,6 +801,7 @@ export class AppController {
         new TransportError('The connection attempt did not complete in time.', 'attempt_timeout'),
         epoch,
         profileId,
+        generation,
       );
     }, budgets.connectAttemptMs);
     return promise;
@@ -754,19 +832,22 @@ export class AppController {
     error: unknown,
     epoch: number,
     profileId: string | null,
+    generation: number,
   ): Promise<void> {
+    const ownsAttempt = () =>
+      this.owns(epoch, profileId) && this.clientGeneration === generation;
     const message = errorMessage(error);
     if (
       error instanceof TransportError &&
       (error.code === 'unsupported_version' || error.code === 'unsupported_capability')
     ) {
-      if (this.owns(epoch, profileId)) {
+      if (ownsAttempt()) {
         this.setConnectionState('incompatible', message);
       }
       return;
     }
     if (error instanceof TransportError && error.code === 'unauthorized') {
-      if (this.owns(epoch, profileId)) {
+      if (ownsAttempt()) {
         this.setConnectionState('pair_again', 'This phone is no longer authorized.');
       }
       return;
@@ -787,7 +868,7 @@ export class AppController {
         } finally {
           clearTimeout(timer);
         }
-        if (!this.owns(epoch, profileId)) return;
+        if (!ownsAttempt()) return;
         if (response.status === 401) {
           this.setConnectionState('pair_again', 'This phone is no longer authorized.');
           return;
@@ -797,7 +878,7 @@ export class AppController {
         // Network-level failure: fall through to reconnect.
       }
     }
-    if (!this.owns(epoch, profileId)) return;
+    if (!ownsAttempt()) return;
     const hadContent = store.get().conversation.messages.length > 0;
     const offline = !this.online || this.reconnectAttempt >= 4;
     const detail =
@@ -843,7 +924,12 @@ export class AppController {
     this.markDeliveriesUnconfirmed();
     const hadContent = store.get().conversation.messages.length > 0;
     this.setConnectionState(hadContent ? 'reconnecting' : 'offline', message);
-    await this.classifyFailure(new TransportError(message, 'health_timeout'), epoch, profileId);
+    await this.classifyFailure(
+      new TransportError(message, 'health_timeout'),
+      epoch,
+      profileId,
+      generation,
+    );
   }
 
   private startHealthChecks(): void {
@@ -997,7 +1083,7 @@ export class AppController {
     const generation = this.clientGeneration;
     const profileId = this.profile?.id;
     const epoch = this.lifecycleEpoch;
-    const startedAt = Date.now();
+    const titleRevisionAtStart = this.titleRevision;
     this.noteAttempt();
     store.setState((current) => ({ inventory: { ...current.inventory, loading: true, error: null } }));
     try {
@@ -1012,7 +1098,7 @@ export class AppController {
       this.noteContact();
       this.lastSessionRefresh = Date.now();
       const mergedSessions = frame.sessions.map((session) =>
-        this.mergeConfirmedTitle(profileId!, session, startedAt),
+        this.mergeConfirmedTitle(profileId!, session, titleRevisionAtStart),
       );
       store.setState((current) => ({
         inventory: {
@@ -1025,9 +1111,60 @@ export class AppController {
           includeArchived,
         },
       }));
-      if (profileId) await upsertSessions(profileId, mergedSessions);
+      if (profileId) {
+        await upsertSessions(profileId, mergedSessions).catch(() => undefined);
+      }
+      if (!this.ownsClient(epoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed.' };
+      }
+      // A rename may have been confirmed while the older inventory write was
+      // pending. Reapply it after the write so SQLite, the list, and the open
+      // header cannot revert to the pre-rename title.
+      let effectiveSessions = mergedSessions;
+      if (profileId && this.titleRevision > titleRevisionAtStart) {
+        effectiveSessions = frame.sessions.map((session) =>
+          this.mergeConfirmedTitle(profileId, session, titleRevisionAtStart),
+        );
+        const changed = effectiveSessions.filter(
+          (session, index) =>
+            (session.title ?? null) !== (mergedSessions[index].title ?? null),
+        );
+        for (const session of changed) {
+          const title = session.title ?? null;
+          await updateSessionTitle(profileId, session.session_id, title).catch(
+            () => undefined,
+          );
+          store.setState((current) => {
+            const conversation = current.conversation;
+            const sameConversation =
+              conversation.serverId === profileId &&
+              conversation.sessionId === session.session_id;
+            return {
+              inventory: {
+                ...current.inventory,
+                sessions: current.inventory.sessions.map((item) =>
+                  item.session_id === session.session_id
+                    ? { ...item, title }
+                    : item,
+                ),
+              },
+              ...(sameConversation
+                ? {
+                    conversation: {
+                      ...conversation,
+                      title: title ?? conversation.title,
+                      session: conversation.session
+                        ? { ...conversation.session, title }
+                        : conversation.session,
+                    },
+                  }
+                : null),
+            };
+          });
+        }
+      }
       const currentConversation = store.get().conversation;
-      const currentSession = mergedSessions.find(
+      const currentSession = effectiveSessions.find(
         (entry) => entry.session_id === currentConversation.sessionId,
       );
       const authoritativeTitle = currentSession?.title ?? currentSession?.save_label ?? null;
@@ -1836,6 +1973,9 @@ export class AppController {
     const profileId = this.profile.id;
     this.invalidateLifecycle();
     const epoch = this.lifecycleEpoch;
+    this.profile = null;
+    this.token = null;
+    this.pairWrites.delete(profileId);
     this.inventoryRequested = false;
     this.suspendInventoryPolling();
     await deleteToken(profileId).catch(() => undefined);
@@ -1877,6 +2017,7 @@ export class AppController {
   }
 
   async reconnect(): Promise<void> {
+    if (this.credentialLoading) return;
     this.reconnectAttempt = 0;
     this.clearReconnect();
     this.recoveryRequested = true;

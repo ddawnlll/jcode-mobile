@@ -20,6 +20,8 @@ export interface AdapterConfig {
   maxHistoryMessages: number;
   historyWindow: number;
   maxHistoryBytes: number;
+  /** How long the adapter waits for an authoritative rename result. */
+  renameTimeoutMs: number;
   logLevel: 'debug' | 'info' | 'warn';
   /** Test-only fault injection; disabled unless explicitly set. */
   faultAfterSend: boolean;
@@ -77,6 +79,7 @@ export function loadConfig(): AdapterConfig {
     maxHistoryMessages: numberFrom(process.env.JCODE_ADAPTER_MAX_HISTORY, 5000),
     historyWindow: numberFrom(process.env.JCODE_ADAPTER_HISTORY_WINDOW, 60),
     maxHistoryBytes: numberFrom(process.env.JCODE_ADAPTER_HISTORY_BYTES, 3 * 1024 * 1024),
+    renameTimeoutMs: numberFrom(process.env.JCODE_ADAPTER_RENAME_TIMEOUT, 8_000),
     logLevel: (process.env.JCODE_ADAPTER_LOG as AdapterConfig['logLevel']) ?? 'info',
     faultAfterSend: process.env.JCODE_ADAPTER_FAULT === 'drop_after_send',
     allowedOrigins: listFrom(process.env.JCODE_ADAPTER_ALLOWED_ORIGINS),

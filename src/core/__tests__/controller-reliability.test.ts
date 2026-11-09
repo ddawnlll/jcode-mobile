@@ -9,8 +9,15 @@ import type { SessionInfo } from '../protocol/frames';
 import { resetConversation, store } from '../state/store';
 import { AppController } from '../app-controller';
 import { TransportError } from '../connection/client';
-import { listServers, saveServer, updateSessionTitle } from '../persistence/db';
-import { saveToken } from '../persistence/credentials';
+import {
+  clearServerCache,
+  deleteServer,
+  listServers,
+  saveServer,
+  updateSessionTitle,
+  upsertSessions,
+} from '../persistence/db';
+import { deleteToken, loadToken, saveToken } from '../persistence/credentials';
 
 interface FakeConfig {
   sessions?: SessionInfo[];
@@ -25,6 +32,7 @@ interface FakeConfig {
 
 interface FakeClient {
   endpoint: { host: string; port: number; tls: boolean };
+  token: string;
   events: { onEvent: (frame: Record<string, unknown>) => void; onState: (state: string) => void };
   isOpen: boolean;
   isTransportOpen: boolean;
@@ -53,6 +61,7 @@ jest.mock('../connection/client', () => {
   }
   class FakeMobileClient {
     readonly endpoint: { host: string; port: number; tls: boolean };
+    readonly token: string;
     readonly events: {
       onEvent: (frame: Record<string, unknown>) => void;
       onState: (state: string) => void;
@@ -64,8 +73,9 @@ jest.mock('../connection/client', () => {
     requests: Array<Record<string, unknown>> = [];
     closed = false;
 
-    constructor(endpoint: { host: string; port: number; tls: boolean }, _token: string, events: FakeClient['events']) {
+    constructor(endpoint: { host: string; port: number; tls: boolean }, token: string, events: FakeClient['events']) {
       this.endpoint = endpoint;
+      this.token = token;
       this.events = events;
       (globalThis as unknown as { __fakeClients: FakeClient[] }).__fakeClients.push(this);
     }
@@ -188,7 +198,12 @@ jest.mock('../connection/client', () => {
 
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,
-  default: { addEventListener: jest.fn(() => () => undefined) },
+  default: {
+    addEventListener: (listener: (state: { isConnected: boolean }) => void) => {
+      (globalThis as unknown as { __netListener: typeof listener }).__netListener = listener;
+      return () => undefined;
+    },
+  },
 }));
 
 jest.mock('../persistence/credentials', () => ({
@@ -312,8 +327,14 @@ beforeEach(() => {
   for (const key of Object.keys(fakeConfig)) delete (fakeConfig as Record<string, unknown>)[key];
   resetStore();
   jest.clearAllMocks();
+  (listServers as jest.Mock).mockResolvedValue([]);
+  (loadToken as jest.Mock).mockResolvedValue('a'.repeat(64));
   (saveToken as jest.Mock).mockResolvedValue(undefined);
+  (deleteToken as jest.Mock).mockResolvedValue(undefined);
   (saveServer as jest.Mock).mockResolvedValue(undefined);
+  (deleteServer as jest.Mock).mockResolvedValue(undefined);
+  (clearServerCache as jest.Mock).mockResolvedValue(undefined);
+  (upsertSessions as jest.Mock).mockResolvedValue(undefined);
   (updateSessionTitle as jest.Mock).mockResolvedValue(undefined);
   global.fetch = jest.fn(async () => ({
     status: 200,
@@ -631,15 +652,15 @@ describe('authoritative rename and title fencing', () => {
     );
     const merged = (
       controller as unknown as {
-        mergeConfirmedTitle: (serverId: string, session: SessionInfo, startedAt: number) => SessionInfo;
+        mergeConfirmedTitle: (serverId: string, session: SessionInfo, revisionAtStart: number) => SessionInfo;
       }
-    ).mergeConfirmedTitle('A', { session_id: 'S', title: 'Old' }, 1_000);
+    ).mergeConfirmedTitle('A', { session_id: 'S', title: 'Old' }, 0);
     expect(merged.title).toBe('Confirmed');
     const later = (
       controller as unknown as {
-        mergeConfirmedTitle: (serverId: string, session: SessionInfo, startedAt: number) => SessionInfo;
+        mergeConfirmedTitle: (serverId: string, session: SessionInfo, revisionAtStart: number) => SessionInfo;
       }
-    ).mergeConfirmedTitle('A', { session_id: 'S', title: 'Server title' }, 3_000);
+    ).mergeConfirmedTitle('A', { session_id: 'S', title: 'Server title' }, 1);
     expect(later.title).toBe('Server title');
   });
 
@@ -666,5 +687,221 @@ describe('authoritative rename and title fencing', () => {
     expect(rejected.ok).toBe(false);
     expect(rejected.error).toMatch(/rejected/);
     expect(store.get().conversation.title).toBe('Old');
+  });
+});
+
+describe('review race regressions', () => {
+  it('does not publish a losing activation token over the winner', async () => {
+    const lateToken = deferred<string>();
+    (loadToken as jest.Mock).mockImplementation(async (id: string) =>
+      id === 'A' ? lateToken.promise : 'b'.repeat(64),
+    );
+    const controller = makeController(B);
+    (controller as unknown as { token: string }).token = 'b'.repeat(64);
+
+    const losing = controller.activateProfile(A, { restore: false, deferConnect: true });
+    await flush();
+    await controller.activateProfile(B, { restore: false, deferConnect: true });
+    await flush();
+
+    lateToken.resolve('a'.repeat(64));
+    await losing;
+    await flush();
+
+    expect((controller as unknown as { profile: { id: string } }).profile.id).toBe('B');
+    expect((controller as unknown as { token: string }).token).toBe('b'.repeat(64));
+    expect(fakeClients.every((client) => client.token === 'b'.repeat(64))).toBe(true);
+    expect(store.get().profileId).toBe('B');
+  });
+
+  it('blocks reconnect while the winning credential is still loading', async () => {
+    const bToken = deferred<string>();
+    (loadToken as jest.Mock).mockImplementation(async (id: string) =>
+      id === 'A' ? 'a'.repeat(64) : bToken.promise,
+    );
+    const controller = makeController(A);
+    (controller as unknown as { installListeners: () => void }).installListeners();
+    const network = (globalThis as unknown as {
+      __netListener: (state: { isConnected: boolean }) => void;
+    }).__netListener;
+
+    const activating = controller.activateProfile(B, { restore: false, deferConnect: true });
+    await flush();
+    network({ isConnected: false });
+    network({ isConnected: true });
+    await flush();
+    expect(fakeClients).toHaveLength(0);
+
+    bToken.resolve('b'.repeat(64));
+    await activating;
+    await flush();
+    expect(fakeClients.length).toBeGreaterThan(0);
+    expect(fakeClients.every((client) => client.token === 'b'.repeat(64))).toBe(true);
+    expect(store.get().connection.state).toBe('current');
+  });
+
+  it('does not let a cancelled pair delete a newer overlapping pair', async () => {
+    const tokens = new Map<string, string>();
+    const servers = new Map<string, typeof A>();
+    servers.set(A.id, A);
+    const firstSave = deferred<void>();
+    let writes = 0;
+    const t1 = '1'.repeat(64);
+    const t2 = '2'.repeat(64);
+
+    (loadToken as jest.Mock).mockImplementation(async (id: string) => tokens.get(id) ?? null);
+    (saveToken as jest.Mock).mockImplementation(async (id: string, token: string) => {
+      writes += 1;
+      if (writes === 1) await firstSave.promise;
+      tokens.set(id, token);
+    });
+    (deleteToken as jest.Mock).mockImplementation(async (id: string) => {
+      tokens.delete(id);
+    });
+    (saveServer as jest.Mock).mockImplementation(async (profile: typeof A) => {
+      servers.set(profile.id, profile);
+    });
+    (deleteServer as jest.Mock).mockImplementation(async (id: string) => {
+      servers.delete(id);
+    });
+    (listServers as jest.Mock).mockImplementation(async () => [...servers.values()]);
+
+    let fetchCalls = 0;
+    global.fetch = jest.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({ ok: true, token: fetchCalls++ === 0 ? t1 : t2 }),
+    })) as unknown as typeof fetch;
+
+    const controller = makeController(A);
+    const first = controller.pair({
+      address: 'https://a.example.test:443',
+      code: '123456',
+      label: 'A',
+      deviceName: 'Phone',
+    });
+    await flush();
+    expect(writes).toBe(1);
+
+    const second = controller.pair({
+      address: 'https://a.example.test:443',
+      code: '654321',
+      label: 'A',
+      deviceName: 'Phone',
+    });
+    await second;
+    await flush();
+    expect(tokens.get(A.id)).toBe(t2);
+
+    firstSave.resolve();
+    await first;
+    await flush();
+
+    expect(tokens.get(A.id)).toBe(t2);
+    expect(servers.has(A.id)).toBe(true);
+    expect(await loadToken(A.id)).toBe(t2);
+  });
+
+  it('retires a forgotten profile before cleanup and ignores network restoration', async () => {
+    const cleanup = deferred<void>();
+    (clearServerCache as jest.Mock).mockImplementation(() => cleanup.promise);
+    (listServers as jest.Mock).mockResolvedValue([]);
+    const controller = makeController(A);
+    (controller as unknown as { installListeners: () => void }).installListeners();
+    const network = (globalThis as unknown as {
+      __netListener: (state: { isConnected: boolean }) => void;
+    }).__netListener;
+
+    const forgetting = controller.forgetServer();
+    await flush();
+    expect((controller as unknown as { profile: unknown }).profile).toBeNull();
+
+    network({ isConnected: false });
+    network({ isConnected: true });
+    await flush();
+    expect(fakeClients).toHaveLength(0);
+    expect(saveServer).not.toHaveBeenCalled();
+
+    cleanup.resolve();
+    await forgetting;
+    await flush();
+    expect(store.get().profileId).toBeNull();
+    expect((controller as unknown as { token: string | null }).token).toBeNull();
+  });
+
+  it('fences a delayed 401 from an old attempt after the same profile reconnects', async () => {
+    const who = deferred<{ status: number; ok: boolean }>();
+    global.fetch = jest.fn(() => who.promise) as unknown as typeof fetch;
+    fakeConfig.request = async (_client, request) => {
+      if (request.req === 'list_sessions') {
+        return { ev: 'sessions', sessions: [], partial: false };
+      }
+      if (request.req === 'ping') throw new Error('The server did not answer in time.');
+      return { ev: 'ok' };
+    };
+    const controller = makeController(A);
+    await connect(controller);
+    expect(store.get().connection.state).toBe('current');
+
+    await jest.advanceTimersByTimeAsync(15_100);
+    await flush();
+    expect((controller as unknown as { client: unknown }).client).toBeNull();
+
+    await controller.connectNow({ force: true });
+    await flush();
+    expect(store.get().connection.state).toBe('current');
+
+    who.resolve({ status: 401, ok: false });
+    await flush();
+    expect(store.get().connection.state).toBe('current');
+  });
+
+  it('reapplies a confirmed title after an older inventory write lands', async () => {
+    const write = deferred<void>();
+    const cachedTitles = new Map<string, string | null>();
+    (updateSessionTitle as jest.Mock).mockImplementation(async (_profileId, sessionId, title) => {
+      cachedTitles.set(sessionId, title);
+    });
+
+    const controller = makeController(A);
+    await connect(controller);
+    (upsertSessions as jest.Mock).mockImplementation(async (_profileId, sessions) => {
+      await write.promise;
+      for (const session of sessions) cachedTitles.set(session.session_id, session.title ?? null);
+    });
+    fakeConfig.request = async (_client, request) => {
+      if (request.req === 'list_sessions') {
+        return {
+          ev: 'sessions',
+          sessions: [{ session_id: 'S', title: 'Old', working_dir: '/test' }],
+          partial: false,
+        };
+      }
+      return { ev: 'ok' };
+    };
+    store.setState({
+      conversation: resetConversation({ serverId: 'A', sessionId: 'S', title: 'Old' }),
+    });
+
+    const refreshing = controller.refreshSessions({ force: true });
+    await flush();
+    (controller as unknown as { onFrame: (frame: unknown) => void }).onFrame({
+      ev: 'session_renamed',
+      session_id: 'S',
+      title: 'New',
+      display_title: 'New',
+    });
+    await flush();
+    expect(cachedTitles.get('S')).toBe('New');
+
+    write.resolve();
+    await refreshing;
+    await flush();
+
+    expect(cachedTitles.get('S')).toBe('New');
+    expect(store.get().conversation.title).toBe('New');
+    expect(
+      store.get().inventory.sessions.find((session) => session.session_id === 'S')?.title,
+    ).toBe('New');
   });
 });

@@ -25,14 +25,15 @@ test.describe('paired mobile app', () => {
 
     await createSession(page, 'Reply with exactly E2E-OK. Do not use tools.');
 
-    await expect(
-      page.locator('[aria-label^="You said:"]').filter({ hasText: 'E2E-OK' }).first(),
-    ).toBeVisible({ timeout: 30_000 });
-
     // The reply is a real provider turn against the isolated staging daemon.
     await expect(
       page.locator('[aria-label^="jcode said:"]').filter({ hasText: 'E2E-OK' }).first(),
     ).toBeVisible({ timeout: 120_000 });
+
+    // The user instruction is committed to authoritative history with the turn.
+    await expect(
+      page.locator('[aria-label^="You said:"]').filter({ hasText: 'E2E-OK' }).first(),
+    ).toBeVisible({ timeout: 30_000 });
 
     await screenshot(page, 'conversation');
     expect(errors).toEqual([]);
