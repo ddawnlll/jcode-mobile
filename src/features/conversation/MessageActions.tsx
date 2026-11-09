@@ -89,8 +89,8 @@ function CopyAction({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', marginTop: space.xxs, gap: space.xxs },
   action: {
-    minHeight: 40,
-    minWidth: target / 2,
+    minHeight: target,
+    minWidth: target,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: space.xxs,

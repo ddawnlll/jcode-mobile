@@ -387,7 +387,7 @@ const styles = StyleSheet.create({
   configHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xxs, marginTop: space.xxs },
   chip: {
-    minHeight: 40,
+    minHeight: target,
     paddingHorizontal: space.sm,
     borderWidth: 1,
     borderRadius: radius.control,

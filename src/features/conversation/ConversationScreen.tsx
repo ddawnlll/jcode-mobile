@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
     marginBottom: space.xxs,
   },
   configButton: {
-    minHeight: 40,
+    minHeight: target,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,

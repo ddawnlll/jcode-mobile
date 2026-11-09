@@ -260,6 +260,7 @@ export function SessionsScreen() {
 
       <ScrollView
         horizontal
+        style={styles.scopeScroll}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scopeRow}
         testID="project-scope"
@@ -764,8 +765,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: space.sm,
   },
+  scopeScroll: { flexGrow: 0, flexShrink: 0, maxHeight: 64 },
   scopeChip: {
-    minHeight: 40,
+    minHeight: target,
     paddingHorizontal: space.sm,
     borderWidth: 1,
     borderRadius: radius.control,
