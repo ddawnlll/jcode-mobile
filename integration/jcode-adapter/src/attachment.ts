@@ -97,6 +97,7 @@ export class Attachment {
   private daemonVersion: string | null = null;
   private historyImages: Array<Record<string, unknown>> = [];
   private historyImageBytes = 0;
+  private emptyHistorySeen = false;
   private tokenUsage: TokenUsageSnapshot | null = null;
   private contextWindow: number | null = null;
   private providerName: string | null = null;
@@ -924,6 +925,27 @@ export class Attachment {
       .filter((message): message is NonNullable<typeof message> => message !== null);
 
     const total = parsed.length;
+    // Some daemon paths emit an empty history frame after the authoritative
+    // one while an attachment is still settling. Never let that erase a
+    // transcript the server already delivered.
+    if (total === 0) {
+      if (this.history.length > 0) {
+        this.historyReceived = true;
+        return;
+      }
+      if (!this.emptyHistorySeen) {
+        // Attach can observe a transient empty history before the daemon has
+        // loaded the persisted transcript. Ask once more instead of publishing
+        // an empty authoritative window that hides readable history.
+        this.emptyHistorySeen = true;
+        this.historyReceived = true;
+        setTimeout(() => {
+          if (!this.closed && this.history.length === 0) this.requestHistory();
+        }, 300).unref?.();
+        return;
+      }
+    }
+    if (total > 0) this.emptyHistorySeen = false;
     const keep = Math.min(total, this.options.config.maxHistoryMessages);
     this.historyOffset = total - keep;
     // Parsed indexes are already absolute. Do not add the offset twice.

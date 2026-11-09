@@ -72,10 +72,19 @@ test.describe('paired mobile app', () => {
     await page.goto('/');
     await expectSessions(page);
 
-    // The plan session is the most recent one and has recorded tool activity.
-    const firstSession = page.locator('[data-testid^="session-"]').first();
-    await expect(firstSession).toBeVisible();
-    await firstSession.click();
+    // The app restores the last exact session on launch. Give that restore a
+    // moment to win; only click the row if the list is still showing.
+    await page.waitForTimeout(2_000);
+    if (
+      await page
+        .getByRole('heading', { name: 'Your sessions' })
+        .isVisible()
+        .catch(() => false)
+    ) {
+      const firstSession = page.locator('[data-testid^="session-"]').first();
+      await expect(firstSession).toBeVisible();
+      await firstSession.click();
+    }
     await expectConversation(page);
 
     const dock = page.getByRole('button', { name: /Open session work/ });

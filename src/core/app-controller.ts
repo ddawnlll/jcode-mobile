@@ -1554,7 +1554,22 @@ export class AppController {
 
   /* ------------------------------------------------------------- conversation */
 
+  private openingSession: { id: string; promise: Promise<void> } | null = null;
+
   async openSession(session: SessionInfo): Promise<void> {
+    // A row tap and the route-param effect can both request the same exact
+    // session. Share one attach; two racing opens would discard history.
+    if (this.openingSession?.id === session.session_id) {
+      return this.openingSession.promise;
+    }
+    const promise = this.openSessionInternal(session).finally(() => {
+      if (this.openingSession?.promise === promise) this.openingSession = null;
+    });
+    this.openingSession = { id: session.session_id, promise };
+    return promise;
+  }
+
+  private async openSessionInternal(session: SessionInfo): Promise<void> {
     if (store.get().demo) {
       this.openDemoSession(session.session_id);
       return;
@@ -1653,6 +1668,10 @@ export class AppController {
       }),
     });
     // Render the cached conversation now; attach reconciles in the background.
+    // A restore may already have attached this exact session before the user
+    // tapped its row. Reset the marker so the reopened view still gets an
+    // authoritative history frame instead of an empty conversation.
+    this.attachedSessionId = null;
     void this.attachSession(session.session_id);
   }
 
@@ -3409,6 +3428,13 @@ export class AppController {
   private async applyHistory(frame: Extract<ServerEvent, { ev: 'history' }>): Promise<void> {
     const state = store.get();
     const conversation = state.conversation;
+    if (
+      frame.messages.length === 0 &&
+      frame.total_messages === 0 &&
+      conversation.messages.length > 0
+    ) {
+      return;
+    }
     if (!this.profile || !conversation.sessionId) return;
     const serverId = this.profile.id;
     const sessionId = conversation.sessionId;
