@@ -11,5 +11,5 @@ export const BASE_URL = `http://${E2E_HOST}:${E2E_PORT}${BASE_PATH}/`;
 export const ORIGIN = `http://${E2E_HOST}:${E2E_PORT}`;
 
 export const APK_URL =
-  'https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.1/jcode-mobile-0.2.1-android-release.apk';
+  'https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.2/jcode-mobile-0.2.2-android-release.apk';
 export const REPO_URL = 'https://github.com/ddawnlll/jcode-mobile';

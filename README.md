@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.1"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
+  <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.2"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>
   <br />
   <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the live site</strong></a>
@@ -21,8 +21,8 @@
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <sub><code>ANDROID / 0.2.1 / 63 MiB</code></sub><br /><br />
-      <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.1/jcode-mobile-0.2.1-android-release.apk"><strong>Download the APK</strong></a><br />
+      <sub><code>ANDROID / 0.2.2 / 63 MiB</code></sub><br /><br />
+      <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.2/jcode-mobile-0.2.2-android-release.apk"><strong>Download the APK</strong></a><br />
       <sub>Debug-signed sideload. No Play Store listing.</sub>
     </td>
     <td width="50%" align="center" valign="top">
@@ -125,10 +125,10 @@ Bun 1.4.4 only. The web target is a verification surface, not a second product. 
 
 ## Availability and proof
 
-Android 0.2.1 shipped on 9 November 2026. It is a release build with an embedded Hermes bundle,
+Android 0.2.2 shipped on 10 November 2026. It is a release build with an embedded Hermes bundle,
 debug-signed for sideloading. There is no Play Store listing, no App Store listing, and no signed
-iPhone artifact. iOS builds from source with Xcode 26.1 or newer. The historical v0.1.3 iOS artifact
-is a Simulator `.app` only. Android release flows are verified against real JCode 0.99.1 staging,
+iPhone artifact. iOS builds from source with Xcode 26.1 or newer. The 0.2.2 iOS artifact
+is a Release Simulator `.app` zip, not an IPA. Android release flows are verified against real JCode 0.99.1 staging,
 as are continuation, daemon death, ambiguous delivery, reading position, and server switching.
 Physical devices and a human screen-reader pass are not run. Full matrix:
 [`docs/VERIFICATION.md`](docs/VERIFICATION.md).

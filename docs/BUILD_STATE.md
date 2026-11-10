@@ -36,6 +36,7 @@ Updated: 2026-11-10
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
+| `artifacts/jcode-mobile-0.2.2-android-release.apk` | 62.7 MiB (65,731,410 B) | `f2ee7c4f0eae836c8361f956cd3ffe0403ddae389bac4c3a2fd59a17c001ddf9` |
 | `artifacts/jcode-mobile-0.2.2-ios-simulator.app.zip` | 29 MiB | `33269e4e09d34d3da5d35653451172c4f49225edee0e22966d8343c84e8e3859` |
 | `artifacts/jcode-mobile-0.2.1-android-release.apk` | 62.7 MiB (65,709,266 B) | `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
 | `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
