@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { listDirectories } from '../src/directory.ts';
+import { createDirectory, listDirectories } from '../src/directory.ts';
 import { parseImages } from '../src/images.ts';
 import { splitReasoningMarkup } from '../src/attachment.ts';
+import { effortLadders, inferredEfforts } from '../src/efforts.ts';
 
 test('directory listing stays inside canonical roots and hides dotfolders', async () => {
   const root = await mkdtemp(join(tmpdir(), 'jcode-directory-'));
@@ -79,4 +80,60 @@ test('persisted reasoning markup is separated from assistant prose', () => {
   );
   assert.equal(split.reasoning, 'The user asks for E2E-OK.*No tools*.');
   assert.equal(split.content, 'E2E-OK');
+});
+
+test('ordinary Markdown keeps every byte when no reasoning wrapper exists', () => {
+  const source = 'Intro\n\n\n    indented code\n\n\n- list\n';
+  const split = splitReasoningMarkup(source);
+  assert.equal(split.content, source);
+  assert.equal(split.reasoning, '');
+});
+
+test('reasoning ladders follow the daemon model capabilities', () => {
+  assert.deepEqual(inferredEfforts('anthropic', 'claude-sonnet-4-6'), [
+    'none',
+    'low',
+    'medium',
+    'high',
+    'max',
+    'swarm',
+  ]);
+  assert.deepEqual(inferredEfforts('anthropic', 'claude-opus-4-7'), [
+    'none',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+    'swarm',
+  ]);
+  assert.deepEqual(inferredEfforts('anthropic', 'claude-3-5-sonnet'), []);
+  assert.deepEqual(inferredEfforts('openrouter', 'anything'), [
+    'none',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'swarm',
+  ]);
+  assert.deepEqual(effortLadders('anthropic', ['claude-sonnet-4-6', 'unknown']), {
+    'claude-sonnet-4-6': ['none', 'low', 'medium', 'high', 'max', 'swarm'],
+  });
+});
+
+test('folder creation stays inside a permitted root and refuses traversal', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'jcode-mkdir-'));
+  try {
+    const created = await createDirectory([root], root, 'new-project');
+    assert.equal(created.ok, true);
+    if (!created.ok) return;
+    assert.equal(created.path, join(await realpath(root), 'new-project'));
+    const again = await createDirectory([root], root, 'new-project');
+    assert.equal(again.ok, false);
+    const escape = await createDirectory([root], root, '../outside');
+    assert.equal(escape.ok, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

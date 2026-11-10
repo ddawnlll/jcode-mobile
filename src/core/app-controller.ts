@@ -94,8 +94,36 @@ const PROJECTS = 'projects';
 const PINNED_SESSIONS = 'pinnedSessions';
 const DEVICE_ID = 'deviceId';
 
+/**
+ * Features this mobile build uses. When an older adapter omits them the app
+ * must say so instead of opening empty sheets (DEP-1).
+ */
+const CLIENT_CAPABILITIES = [
+  'mobile_continuation',
+  'bounded_history',
+  'identity_fencing',
+  'delivery_receipts',
+  'session_config',
+  'context_snapshot',
+  'directory_browse',
+  'directory_create',
+  'image_input',
+  'changes',
+] as const;
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
+}
+
+function adapterVersionOf(server: string | undefined, explicit?: string): string | null {
+  if (explicit) return explicit;
+  // hello_ok carries `server: jcode-mobile-adapter/<build>`.
+  const match = /^jcode-mobile-adapter\/(.+)$/.exec(server ?? '');
+  return match ? match[1] : null;
+}
+
+function capabilityGapOf(capabilities: string[]): string[] {
+  return CLIENT_CAPABILITIES.filter((name) => !capabilities.includes(name));
 }
 
 function parseStringList(raw: string | null): string[] {
@@ -162,6 +190,10 @@ export class AppController {
   private inventoryTimer: ReturnType<typeof setInterval> | null = null;
   private streamTimer: ReturnType<typeof setTimeout> | null = null;
   private streamText = '';
+  private reasoningTimer: ReturnType<typeof setTimeout> | null = null;
+  private reasoningBuffer = '';
+  private attemptBlockIds: string[] = [];
+  private stepSequence = 0;
   private draftTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingDraft: string | null = null;
   private lastTurnId = 0;
@@ -172,6 +204,8 @@ export class AppController {
   private booted = false;
   private firstVisit = false;
   private creating: Promise<string> | null = null;
+  /** A create request owns the next attached frame, even from another session. */
+  private creatingSession = false;
   /** Profile/lifecycle epoch. Every async operation captures this value. */
   private lifecycleEpoch = 0;
   /** The one in-flight connection attempt, owned by epoch + profile. */
@@ -543,6 +577,17 @@ export class AppController {
     }));
   }
 
+  private onDecodeError(reason: string, detail?: string): void {
+    if (reason !== 'too_large' && reason !== 'bad_event') return;
+    const message =
+      reason === 'too_large'
+        ? `The server sent an update larger than this phone can decode${detail ? ` (${detail})` : ''}. Ask the server to resend a smaller history window.`
+        : `The server sent an update this app does not understand${detail ? ` (${detail})` : ''}.`;
+    store.setState((state) => ({
+      conversation: { ...state.conversation, lastError: message },
+    }));
+  }
+
   async pair(input: {
     address: string;
     code: string;
@@ -863,6 +908,10 @@ export class AppController {
           this.onTransportClosed();
         }
       },
+      onDecodeError: (reason, detail) => {
+        if (generation !== this.clientGeneration || this.client !== client) return;
+        this.onDecodeError(reason, detail);
+      },
     });
     this.client = client;
 
@@ -887,6 +936,7 @@ export class AppController {
         this.reconnectAttempt = 0;
         const capabilities = hello.capabilities;
         const daemonVersion = hello.daemon_version ?? null;
+        const adapterVersion = adapterVersionOf(hello.server, hello.adapter_version);
         this.serverInfoObserved = false;
         this.noteContact();
         store.setState((state) => ({
@@ -895,6 +945,8 @@ export class AppController {
             state: 'reconciling',
             capabilities,
             daemonVersion,
+            adapterVersion,
+            capabilityGap: capabilityGapOf(capabilities),
             error: null,
             attempt: 0,
           },
@@ -1163,6 +1215,11 @@ export class AppController {
           ...state.connection,
           daemonVersion: frame.daemon_version ?? state.connection.daemonVersion,
           capabilities: frame.capabilities,
+          adapterVersion: adapterVersionOf(
+            frame.server,
+            frame.adapter_version,
+          ) ?? state.connection.adapterVersion,
+          capabilityGap: capabilityGapOf(frame.capabilities),
         },
       }));
       if (this.profile) {
@@ -1633,6 +1690,7 @@ export class AppController {
       error: row.error ?? undefined,
       createdAt: row.created_at,
       guidance: row.kind === 'guidance',
+      ...(row.images?.length ? { images: row.images } : null),
     }));
     store.setState({
       conversation: resetConversation({
@@ -1840,6 +1898,7 @@ export class AppController {
       state: 'sending',
       error: null,
       created_at: record.createdAt,
+      ...(images.length ? { images } : null),
     });
     if (!owns() || this.client !== client) {
       await savePendingSend(profileId, sessionId, {
@@ -1848,6 +1907,7 @@ export class AppController {
         state: 'unconfirmed',
         error: 'The server changed before this message was sent.',
         created_at: record.createdAt,
+        ...(images.length ? { images } : null),
       });
       return { ok: false, error: 'The server changed before this message was sent.' };
     }
@@ -1876,6 +1936,7 @@ export class AppController {
           state: 'rejected',
           error: frame.message,
           created_at: record.createdAt,
+          ...(images.length ? { images } : null),
         });
         return { ok: false, error: frame.message };
       }
@@ -1886,6 +1947,7 @@ export class AppController {
         state: 'sent_to_server',
         error: null,
         created_at: record.createdAt,
+        ...(images.length ? { images } : null),
       });
       return { ok: true };
     } catch {
@@ -1902,6 +1964,7 @@ export class AppController {
         state: 'unconfirmed',
         error: 'Delivery unconfirmed.',
         created_at: record.createdAt,
+        ...(images.length ? { images } : null),
       });
       return { ok: false, error: 'Delivery unconfirmed. Check the conversation before sending again.' };
     }
@@ -1959,6 +2022,7 @@ export class AppController {
       kind: 'guidance',
       error: null,
       created_at: createdAt,
+      ...(images.length ? { images } : null),
     });
     if (!owns() || this.client !== client) {
       return { ok: false, error: 'The server changed before this instruction was sent.' };
@@ -1989,6 +2053,7 @@ export class AppController {
           kind: 'guidance',
           error: frame.message,
           created_at: createdAt,
+          ...(images.length ? { images } : null),
         });
         return { ok: false, error: frame.message };
       }
@@ -2000,6 +2065,7 @@ export class AppController {
         kind: 'guidance',
         error: null,
         created_at: createdAt,
+        ...(images.length ? { images } : null),
       });
       return { ok: true };
     } catch {
@@ -2015,6 +2081,7 @@ export class AppController {
         kind: 'guidance',
         error: 'Instruction delivery unconfirmed.',
         created_at: createdAt,
+        ...(images.length ? { images } : null),
       });
       return { ok: false, error: 'Instruction delivery unconfirmed.' };
     }
@@ -2083,7 +2150,9 @@ export class AppController {
       .conversation.delivery.find((entry) => entry.clientMessageId === clientMessageId);
     if (!record) return { ok: false, error: 'Message not found.' };
     await this.dismissDelivery(clientMessageId);
-    return this.send(record.content);
+    // Retry carries the original images and instruction intent (SESS-3).
+    if (record.guidance) return this.sendGuidance(record.content, record.images ?? []);
+    return this.send(record.content, record.images ?? []);
   }
 
   async dismissDelivery(clientMessageId: string): Promise<void> {
@@ -2144,6 +2213,7 @@ export class AppController {
           state: 'unconfirmed',
           error: record.error ?? null,
           created_at: record.createdAt,
+          ...(record.images?.length ? { images: record.images } : null),
         });
       }
     }
@@ -2218,6 +2288,14 @@ export class AppController {
             planLoading: false,
           },
         }));
+      } else if (frame.ev === 'error') {
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            planLoading: false,
+            lastError: frame.message,
+          },
+        }));
       }
     } catch {
       if (generation === this.clientGeneration) {
@@ -2231,7 +2309,8 @@ export class AppController {
   /* ------------------------------------------------------------- new session */
 
   async createSession(workingDir: string, instruction: string): Promise<{ ok: true; sessionId: string } | { ok: false; error: string }> {
-    if (!this.client?.isOpen) return { ok: false, error: 'Reconnect before starting a session.' };
+    const client = this.client;
+    if (!client?.isOpen) return { ok: false, error: 'Reconnect before starting a session.' };
     if (!workingDir.startsWith('/') || workingDir.trim().length < 2) {
       return { ok: false, error: 'Enter an absolute folder path on the server.' };
     }
@@ -2240,24 +2319,49 @@ export class AppController {
     }
     const profileId = this.profile?.id;
     if (!profileId) return { ok: false, error: 'No server is selected.' };
-    const createKey = `pendingCreate:${profileId}:${workingDir.trim()}`;
-    const existingKey = await getPref(createKey);
-    const requestKey = existingKey || newClientId('create');
-    if (!existingKey) await setPref(createKey, requestKey);
-    const client = this.client;
+    const epoch = this.lifecycleEpoch;
     const generation = this.clientGeneration;
-    this.creating = client
-      .request({ req: 'create_session', working_dir: workingDir.trim(), client_request_id: requestKey }, 30_000)
-      .then((frame) => {
-        if (frame.ev !== 'attached') throw new Error(frame.ev === 'error' ? frame.message : 'The server did not return a session.');
-        return String(frame.session.session_id);
-      })
+    const owns = () =>
+      this.client === client &&
+      this.clientGeneration === generation &&
+      this.lifecycleEpoch === epoch &&
+      this.profile?.id === profileId;
+    const createKey = `pendingCreate:${profileId}:${workingDir.trim()}`;
+    // A create request owns the next attached frame, even if the previous
+    // session's attach fence is still set.
+    this.creatingSession = true;
+    this.expectedAttachSessionId = null;
+    // Reserve the operation before the first await: a second tap must not race
+    // a preference read (SESS-1).
+    const work = (async (): Promise<string> => {
+      const existingKey = await getPref(createKey);
+      if (!owns()) throw new Error('The server changed while this session was starting.');
+      const requestKey = existingKey || newClientId('create');
+      if (!existingKey) {
+        await setPref(createKey, requestKey);
+        if (!owns()) throw new Error('The server changed while this session was starting.');
+      }
+      if (!owns()) throw new Error('The server changed while this session was starting.');
+      // The request goes to the client captured at entry, never a newer one.
+      const frame = await client.request(
+        { req: 'create_session', working_dir: workingDir.trim(), client_request_id: requestKey },
+        30_000,
+      );
+      if (frame.ev !== 'attached') {
+        throw new Error(frame.ev === 'error' ? frame.message : 'The server did not return a session.');
+      }
+      return String(frame.session.session_id);
+    })();
+    this.creating = work;
+    void work
       .finally(() => {
-        this.creating = null;
-      });
+        if (this.creating === work) this.creating = null;
+        this.creatingSession = false;
+      })
+      .catch(() => undefined);
     try {
-      const sessionId = await this.creating;
-      if (generation !== this.clientGeneration || this.client !== client || this.profile?.id !== profileId) {
+      const sessionId = await work;
+      if (!owns()) {
         return { ok: false, error: 'The server changed while this session was starting.' };
       }
       await setPref(createKey, '');
@@ -2336,6 +2440,8 @@ export class AppController {
         serverLabel: '',
         host: '',
         daemonVersion: null,
+        adapterVersion: null,
+        capabilityGap: [],
         serverName: null,
         capabilities: [],
         error: null,
@@ -2442,6 +2548,8 @@ export class AppController {
         serverLabel: 'Preview · sample data',
         host: 'On this phone',
         daemonVersion: 'preview',
+        adapterVersion: 'preview',
+        capabilityGap: [],
         serverName: 'Preview',
         capabilities: [
           'mobile_continuation',
@@ -2492,6 +2600,8 @@ export class AppController {
           model: 'claude-sonnet-preview',
           effort: 'high',
           efforts: ['none', 'low', 'medium', 'high', 'max'],
+          effortsByModel: {},
+          routes: [],
           modelConfirmed: true,
           effortConfirmed: true,
           source: 'server',
@@ -2534,6 +2644,8 @@ export class AppController {
         serverLabel: '',
         host: '',
         daemonVersion: null,
+        adapterVersion: null,
+        capabilityGap: [],
         serverName: null,
         capabilities: [],
         error: null,
@@ -2572,6 +2684,8 @@ export class AppController {
           model: 'claude-sonnet-preview',
           effort: 'high',
           efforts: ['none', 'low', 'medium', 'high', 'max'],
+          effortsByModel: {},
+          routes: [],
           modelConfirmed: true,
           effortConfirmed: true,
           source: 'server',
@@ -2643,9 +2757,15 @@ export class AppController {
           model: frame.current ?? state.conversation.config.model,
           modelConfirmed: frame.current !== undefined && frame.current !== null,
           efforts: frame.efforts ?? state.conversation.config.efforts,
-          effort: frame.current_effort ?? state.conversation.config.effort,
-          effortConfirmed:
-            frame.current_effort !== undefined && frame.current_effort !== null,
+          effortsByModel: frame.efforts_by_model ?? state.conversation.config.effortsByModel,
+          routes: frame.routes ?? state.conversation.config.routes,
+          // An explicit null means "this route has no effort" (confirmed), not
+          // "keep whatever the previous route used" (CFG-3).
+          effort:
+            frame.current_effort !== undefined
+              ? frame.current_effort
+              : state.conversation.config.effort,
+          effortConfirmed: frame.current_effort !== undefined,
           source: 'server',
           observedAt: Date.now(),
         },
@@ -2714,8 +2834,6 @@ export class AppController {
       this.clientGeneration === generation &&
       (this.profile?.id ?? null) === profileId &&
       store.get().conversation.sessionId === sessionId;
-    const model = input.model ?? conversation.config.model;
-    const effort = input.effort ?? conversation.config.effort;
     store.setState((state) => ({
       conversation: {
         ...state.conversation,
@@ -2730,17 +2848,21 @@ export class AppController {
       },
     }));
     try {
+      let confirmed: Extract<ServerEvent, { ev: 'session_config' }> | null = null;
+      let requestedMutation = false;
       if (
         input.model !== undefined &&
         input.model !== null &&
         input.model !== conversation.config.model
       ) {
+        requestedMutation = true;
         const reply = await client.request(
           { req: 'set_model', session_id: sessionId, model: input.model ?? '' },
           15_000,
           { suppressEvent: true },
         );
         if (reply.ev === 'error') throw new Error(reply.message);
+        if (reply.ev === 'session_config') confirmed = reply;
       }
       if (!owns()) {
         return {
@@ -2749,12 +2871,14 @@ export class AppController {
         };
       }
       if (input.effort !== undefined && input.effort !== null) {
+        requestedMutation = true;
         const reply = await client.request(
           { req: 'set_effort', session_id: sessionId, effort: input.effort },
           15_000,
           { suppressEvent: true },
         );
         if (reply.ev === 'error') throw new Error(reply.message);
+        if (reply.ev === 'session_config') confirmed = reply;
       }
       if (!owns()) {
         return {
@@ -2762,21 +2886,54 @@ export class AppController {
           error: 'The open session changed while configuration was pending.',
         };
       }
+      if (!requestedMutation) {
+        // Nothing changed; the existing confirmed server values stand.
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            config: {
+              ...state.conversation.config,
+              applying: false,
+              pendingModel: null,
+              pendingEffort: null,
+            },
+          },
+        }));
+        return { ok: true };
+      }
+      if (!confirmed) {
+        throw new Error('The server did not confirm this configuration change.');
+      }
+      const confirmedConfig = confirmed;
       store.setState((state) => ({
         conversation: {
           ...state.conversation,
           config: {
             ...state.conversation.config,
-            model: model ?? state.conversation.config.model,
-            effort,
-            modelConfirmed: model !== null,
-            effortConfirmed: input.effort === null || effort !== null,
+            // Only the correlated server reply is a confirmation. The
+            // requested value is never written back as confirmed (CFG-3).
+            model: confirmedConfig.model ?? state.conversation.config.model,
+            effort: confirmedConfig.effort,
+            efforts: confirmedConfig.efforts.length
+              ? confirmedConfig.efforts
+              : state.conversation.config.efforts,
+            effortsByModel:
+              confirmedConfig.efforts_by_model ?? state.conversation.config.effortsByModel,
+            modelConfirmed: confirmedConfig.confirmed && confirmedConfig.model !== null,
+            effortConfirmed: confirmedConfig.confirmed,
             applying: false,
             pendingModel: null,
             pendingEffort: null,
             source: 'server',
+            error: null,
             observedAt: Date.now(),
           },
+          context:
+            confirmedConfig.model && confirmedConfig.model !== state.conversation.config.model
+              ? state.conversation.context
+                ? { ...state.conversation.context, freshness: 'stale' as const }
+                : null
+              : state.conversation.context,
         },
       }));
       return { ok: true };
@@ -2814,13 +2971,18 @@ export class AppController {
   private applyContext(frame: Extract<ServerEvent, { ev: 'context_snapshot' }>): void {
     const conversation = store.get().conversation;
     if (frame.session_id !== conversation.sessionId) return;
+    const modelMatches =
+      frame.model === null ||
+      conversation.config.model === null ||
+      frame.model === conversation.config.model;
     const next: ContextSnapshot = {
       usedTokens: frame.used_tokens,
       limitTokens: frame.limit_tokens,
       basis: frame.basis,
       model: frame.model,
       observedAt: frame.observed_at_ms,
-      freshness: 'current',
+      // A snapshot from another route is last-known, never current (CFG-2).
+      freshness: modelMatches && frame.cached !== true ? 'current' : 'stale',
       source: 'adapter',
     };
     store.setState((state) => ({ conversation: { ...state.conversation, context: next } }));
@@ -2872,6 +3034,38 @@ export class AppController {
   async setPrivacyPreview(value: boolean): Promise<void> {
     store.setState({ privacyPreview: value });
     await setPref(PRIVACY, value ? '1' : '0');
+  }
+
+  /** Create one folder inside a permitted server root. */
+  async createDirectory(
+    parentPath: string,
+    name: string,
+  ): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+    const client = this.client;
+    if (!client?.isOpen) return { ok: false, error: 'Reconnect to create a folder.' };
+    const capabilities =
+      client.hello?.ev === 'hello_ok' ? client.hello.capabilities : [];
+    if (!capabilities.includes('directory_create')) {
+      return {
+        ok: false,
+        error: 'This server adapter does not support creating folders. Update it to 0.2.2 or later.',
+      };
+    }
+    try {
+      const frame = await client.request(
+        { req: 'create_directory', path: parentPath, name },
+        12_000,
+        { suppressEvent: true },
+      );
+      if (frame.ev === 'error') return { ok: false, error: frame.message };
+      if (frame.ev !== 'directory') {
+        return { ok: false, error: 'The server returned no folder.' };
+      }
+      if (frame.error) return { ok: false, error: frame.error };
+      return { ok: true, path: frame.canonical_path };
+    } catch (error) {
+      return { ok: false, error: errorMessage(error) };
+    }
   }
 
   async restoreIntent(): Promise<string | null> {
@@ -2936,10 +3130,17 @@ export class AppController {
   /* ---------------------------------------------------------------- frames */
 
   private onFrame(frame: ServerEvent & { reply_to?: number }): void {
-    const conversation = store.get().conversation;
-    const currentAttachment = conversation.attachmentId;
-    const belongs = (attachmentId?: string) =>
-      !!attachmentId && attachmentId === currentAttachment;
+    // Fence on every identity field the adapter sends (STR-5). An attachment
+    // id alone is not enough: a reattach to another session can reuse the
+    // controller while that id is briefly stale.
+    const belongs = (attachmentId?: string, sessionId?: string) => {
+      const current = store.get().conversation;
+      return (
+        !!attachmentId &&
+        attachmentId === current.attachmentId &&
+        (sessionId === undefined || sessionId === current.sessionId)
+      );
+    };
 
     switch (frame.ev) {
       case 'hello_ok':
@@ -2951,6 +3152,7 @@ export class AppController {
           : frame.session;
         const previous = store.get().conversation;
         if (
+          !this.creatingSession &&
           this.expectedAttachSessionId &&
           session.session_id !== this.expectedAttachSessionId &&
           session.session_id !== previous.sessionId
@@ -2970,9 +3172,15 @@ export class AppController {
               serverId: this.profile?.id ?? previous.serverId,
               sessionId: session.session_id,
             });
+        const capabilities = frame.capabilities;
+        const capabilityGap = CLIENT_CAPABILITIES.filter((name) => !capabilities.includes(name));
+        store.setState((state) => ({
+          connection: { ...state.connection, capabilityGap },
+        }));
         store.setState({
           conversation: {
             ...base,
+            capabilities,
             // A new attachment identity fences every older event.
             attachmentId: frame.attachment_id,
             sessionId: session.session_id,
@@ -3011,95 +3219,116 @@ export class AppController {
         return;
       }
       case 'history': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         void this.applyHistory(frame);
         return;
       }
       case 'text_delta': {
-        if (!belongs(frame.attachment_id)) return;
-        if (store.get().conversation.reasoningPhase === 'thinking') {
-          store.setState((state) => ({
-            conversation: { ...state.conversation, reasoningPhase: 'working' },
-          }));
-        }
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
+        // Turn fencing happens before any state mutation (STR-5).
         if (frame.turn_id < this.lastTurnId) return;
         this.lastTurnId = frame.turn_id;
-        this.streamText += frame.text;
-        if (this.streamText.length > 512 * 1024) {
-          this.streamText = this.streamText.slice(-256 * 1024);
-        }
+        this.appendStreamText(frame.text);
         this.setWorking(frame.turn_id, undefined);
         this.scheduleStreamFlush();
         return;
       }
       case 'text_replace': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        this.streamText = frame.text;
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.replaceActiveStep(frame.text);
         if (!frame.text) this.flushStream(true);
         else this.scheduleStreamFlush();
         return;
       }
       case 'text_suffix_replace': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        if (this.streamText.endsWith(frame.old_text)) {
-          this.streamText = `${this.streamText.slice(0, -frame.old_text.length)}${frame.new_text}`;
-        }
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.replaceActiveSuffix(frame.old_text, frame.new_text);
         this.scheduleStreamFlush();
         return;
       }
       case 'reasoning_delta': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        store.setState((state) => ({
-          conversation: {
-            ...state.conversation,
-            reasoning: `${state.conversation.reasoning}${frame.text}`.slice(-16_000),
-            reasoningPhase: 'thinking',
-            reasoningStartedAt: state.conversation.reasoningStartedAt ?? Date.now(),
-          },
-        }));
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.lastTurnId = frame.turn_id;
+        this.pushReasoning(frame.text);
         return;
       }
       case 'reasoning_done': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
+        if (frame.turn_id < this.lastTurnId) return;
+        this.finishReasoning(frame.duration_secs);
+        return;
+      }
+      case 'text_done': {
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        // Assistant-message boundary: close this step but keep earlier ones.
+        this.flushStream(true, true);
+        return;
+      }
+      case 'message_end': {
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.flushStream(true, true);
+        // A new provider response starts a new rollback unit.
+        this.attemptBlockIds = [];
+        return;
+      }
+      case 'retry_rollback': {
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.rollbackAttempt();
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
-            reasoningPhase: 'working',
-            reasoningDurationSecs:
-              frame.duration_secs ??
-              (state.conversation.reasoningStartedAt
-                ? (Date.now() - state.conversation.reasoningStartedAt) / 1000
-                : null),
+            execution: {
+              ...state.conversation.execution,
+              phase: `retrying (${frame.attempt}/${frame.max})`,
+            },
           },
         }));
         return;
       }
-      case 'text_done': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        this.flushStream();
+      case 'control_error': {
+        if (frame.attachment_id && !belongs(frame.attachment_id, frame.session_id)) return;
+        store.setState((state) => ({
+          conversation: { ...state.conversation, lastError: frame.message },
+        }));
         return;
       }
       case 'message_accepted': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         const record = store
           .get()
           .conversation.delivery.find((entry) => entry.clientMessageId === frame.client_message_id);
         if (record) {
-          this.updateDelivery(frame.client_message_id, { state: 'accepted' });
-          if (this.profile && conversation.sessionId) {
-            void deletePendingSend(this.profile.id, conversation.sessionId, frame.client_message_id);
+          // Keep the visible prompt until committed history contains it
+          // (SESS-2). `messageIndex` is the expected committed position.
+          this.updateDelivery(frame.client_message_id, {
+            state: 'accepted',
+            messageIndex: store.get().conversation.totalMessages,
+          });
+          const profile = this.profile;
+          const sessionId = store.get().conversation.sessionId;
+          if (profile && sessionId) {
+            // Keep the durable row until committed history retires it: a cold
+            // start in between must still show the accepted prompt.
+            void savePendingSend(profile.id, sessionId, {
+              client_message_id: frame.client_message_id,
+              content: record.content,
+              state: 'accepted',
+              error: null,
+              created_at: record.createdAt,
+              ...(record.images?.length ? { images: record.images } : null),
+            });
           }
         }
         this.setWorking(frame.turn_id, undefined);
         return;
       }
       case 'send_rejected': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         this.updateDelivery(frame.client_message_id, { state: 'rejected', error: frame.message });
         return;
       }
       case 'tool_start': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
         const row: ToolRow = {
           callId: frame.call_id,
           name: frame.name,
@@ -3123,38 +3352,49 @@ export class AppController {
         return;
       }
       case 'tool_exec': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        store.setState((state) => ({
-          conversation: {
-            ...state.conversation,
-            tools: this.boundTools(state.conversation.tools.map((tool) =>
-              tool.callId === frame.call_id
-                ? { ...tool, input: frame.input ?? tool.input, name: frame.name, state: 'running' }
-                : tool,
-            )),
-          },
-        }));
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        store.setState((state) => {
+          const exists = state.conversation.tools.some((tool) => tool.callId === frame.call_id);
+          const row: ToolRow = exists
+            ? { ...state.conversation.tools.find((tool) => tool.callId === frame.call_id)! }
+            : { callId: frame.call_id, name: frame.name, state: 'running', startedAt: Date.now() };
+          return {
+            conversation: {
+              ...state.conversation,
+              // A client that attaches after tool_start still gets the row.
+              tools: this.boundTools([
+                ...state.conversation.tools.filter((tool) => tool.callId !== frame.call_id),
+                { ...row, input: frame.input ?? row.input, name: frame.name, state: 'running' },
+              ]),
+            },
+          };
+        });
         this.setWorking(frame.turn_id, frame.name);
         return;
       }
       case 'tool_done': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
         store.setState((state) => {
-          const tools = this.boundTools(
-            state.conversation.tools.map((tool) =>
-              tool.callId === frame.call_id
-                ? {
-                    ...tool,
-                    name: frame.name,
-                    output: frame.output?.slice(0, 8 * 1024),
-                    error: frame.error ?? null,
-                    truncated: frame.truncated,
-                    state: frame.error ? 'failed' : 'done',
-                    completedAt: Date.now(),
-                  }
-                : tool,
-            ),
-          );
+          const bounded = frame.output?.slice(0, 8 * 1024);
+          const exists = state.conversation.tools.some((tool) => tool.callId === frame.call_id);
+          const tools = this.boundTools([
+            ...state.conversation.tools.filter((tool) => tool.callId !== frame.call_id),
+            {
+              callId: frame.call_id,
+              name: frame.name,
+              input: state.conversation.tools.find((tool) => tool.callId === frame.call_id)?.input,
+              output: bounded,
+              error: frame.error ?? null,
+              // A client-side slice must be labelled, not presented as complete.
+              truncated: frame.truncated === true || (frame.output?.length ?? 0) > 8 * 1024,
+              state: frame.error ? 'failed' : 'done',
+              startedAt:
+                state.conversation.tools.find((tool) => tool.callId === frame.call_id)?.startedAt ??
+                Date.now(),
+              completedAt: Date.now(),
+              ...(exists ? null : { historical: false }),
+            },
+          ]);
           return {
             conversation: {
               ...state.conversation,
@@ -3169,8 +3409,8 @@ export class AppController {
         return;
       }
       case 'turn_done': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        this.flushStream(true);
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.flushStream(true, true);
         this.commitProvisional();
         this.setExecution({
           kind: 'ready',
@@ -3182,11 +3422,7 @@ export class AppController {
           conversation: {
             ...state.conversation,
             reasoningPhase: 'none',
-            reasoningDurationSecs:
-              state.conversation.reasoningDurationSecs ??
-              (state.conversation.reasoningStartedAt
-                ? (Date.now() - state.conversation.reasoningStartedAt) / 1000
-                : null),
+            reasoningDurationSecs: state.conversation.reasoningDurationSecs,
           },
         }));
         void this.refreshContext();
@@ -3198,8 +3434,8 @@ export class AppController {
         return;
       }
       case 'turn_stopped': {
-        if (!belongs(frame.attachment_id) || frame.turn_id < this.lastTurnId) return;
-        this.flushStream(true);
+        if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.flushStream(true, true);
         this.commitProvisional();
         this.setExecution({
           kind: 'stopped',
@@ -3214,12 +3450,26 @@ export class AppController {
           turnId: frame.turn_id,
         });
         store.setState((state) => ({
-          conversation: { ...state.conversation, reasoningPhase: 'none' },
+          conversation: {
+            ...state.conversation,
+            reasoningPhase: 'none',
+            // A running tool did not finish; do not leave it looking active.
+            tools: state.conversation.tools.map((tool) =>
+              tool.state === 'running'
+                ? {
+                    ...tool,
+                    state: 'failed' as const,
+                    error: tool.error ?? 'The turn ended before this tool finished.',
+                    completedAt: Date.now(),
+                  }
+                : tool,
+            ),
+          },
         }));
         return;
       }
       case 'session_status': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         const working = frame.status === 'running' || frame.status === 'processing';
         const idle = frame.status === 'idle' || frame.status === 'ready';
         if (working) this.setWorking(this.lastTurnId, undefined);
@@ -3229,6 +3479,14 @@ export class AppController {
             previous.kind === 'stopped' && Date.now() - previous.observedAt < 8_000;
           if (recentlyStopped) return;
           this.commitProvisional();
+          store.setState((state) => ({
+            conversation: {
+              ...state.conversation,
+              reasoningPhase: 'none',
+              reasoning: '',
+              reasoningStartedAt: null,
+            },
+          }));
           this.setExecution({
             kind: 'ready',
             label: 'Ready',
@@ -3255,7 +3513,7 @@ export class AppController {
         return;
       }
       case 'connection_phase': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
@@ -3265,7 +3523,7 @@ export class AppController {
         return;
       }
       case 'soft_interrupt_injected': {
-        if (!belongs(frame.attachment_id)) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         for (const clientId of frame.client_ids) {
           const record = store
             .get()
@@ -3299,13 +3557,27 @@ export class AppController {
         return;
       }
       case 'peer_user_message': {
-        if (!belongs(frame.attachment_id)) return;
-        // Another client's prompt belongs in the committed transcript, which
-        // arrives from authoritative history on the next reconciliation.
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
+        // Hold another client's prompt visibly until authoritative history
+        // contains it; discarding the content made it invisible (SESS-2).
+        if (frame.content) {
+          const id = `peer_${frame.content.length}_${Date.now()}_${Math.random()
+            .toString(36)
+            .slice(2, 8)}`;
+          this.addDelivery({
+            clientMessageId: id,
+            content: frame.content,
+            state: 'accepted',
+            createdAt: Date.now(),
+            peer: true,
+            messageIndex: store.get().conversation.totalMessages,
+          });
+        }
         this.setWorking(this.lastTurnId, undefined);
         return;
       }
       case 'todo_state': {
+        if (frame.session_id !== store.get().conversation.sessionId) return;
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
@@ -3320,33 +3592,43 @@ export class AppController {
         return;
       }
       case 'context_snapshot': {
-        if (frame.session_id !== conversation.sessionId) return;
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
         this.applyContext(frame);
         return;
       }
       case 'session_config': {
-        if (frame.session_id !== conversation.sessionId) return;
-        store.setState((state) => ({
-          conversation: {
-            ...state.conversation,
-            config: {
-              ...state.conversation.config,
-              model: frame.model ?? state.conversation.config.model,
-              effort: frame.effort,
-              efforts: frame.efforts.length
-                ? frame.efforts
-                : state.conversation.config.efforts,
-              modelConfirmed: frame.confirmed && frame.model !== null,
-              effortConfirmed: frame.confirmed,
-              applying: false,
-              pendingModel: null,
-              pendingEffort: null,
-              source: frame.confirmed ? 'server' : 'unknown',
-              error: null,
-              observedAt: Date.now(),
+        if (frame.session_id !== store.get().conversation.sessionId) return;
+        store.setState((state) => {
+          const modelChanged = frame.model !== null && frame.model !== state.conversation.config.model;
+          return {
+            conversation: {
+              ...state.conversation,
+              config: {
+                ...state.conversation.config,
+                model: frame.model ?? state.conversation.config.model,
+                effort: frame.effort,
+                efforts: frame.efforts.length
+                  ? frame.efforts
+                  : frame.efforts_by_model && frame.model
+                    ? (frame.efforts_by_model[frame.model] ?? state.conversation.config.efforts)
+                    : state.conversation.config.efforts,
+                effortsByModel: frame.efforts_by_model ?? state.conversation.config.effortsByModel,
+                modelConfirmed: frame.confirmed && frame.model !== null,
+                effortConfirmed: frame.confirmed,
+                applying: false,
+                pendingModel: null,
+                pendingEffort: null,
+                source: frame.confirmed ? 'server' : 'unknown',
+                error: null,
+                observedAt: Date.now(),
+              },
+              context:
+                modelChanged && state.conversation.context
+                  ? { ...state.conversation.context, freshness: 'stale' as const }
+                  : state.conversation.context,
             },
-          },
-        }));
+          };
+        });
         return;
       }
       case 'directory':
@@ -3446,17 +3728,89 @@ export class AppController {
 
   private scheduleStreamFlush(): void {
     if (this.streamTimer) return;
+    // Reparsing a long answer is the dominant cost; slow the cadence as the
+    // active step grows instead of rebuilding the whole document at 10 Hz.
+    const delay =
+      this.streamText.length > 256 * 1024
+        ? 500
+        : this.streamText.length > 64 * 1024
+          ? 250
+          : budgets.streamCoalesceMs;
     this.streamTimer = setTimeout(() => {
       this.streamTimer = null;
       this.flushStream();
-    }, budgets.streamCoalesceMs);
+    }, delay);
   }
 
-  private flushStream(force = false): void {
+  private appendStreamText(text: string): void {
+    if (!text) return;
+    if (this.streamText && this.streamText.length + text.length > 256 * 1024) {
+      // A long answer must not silently lose its beginning. Close this step
+      // and continue in a new block (TXT-4).
+      this.flushStream(true, true);
+    }
+    this.streamText += text;
+  }
+
+  private replaceActiveStep(text: string): void {
+    if (this.streamText || !text) {
+      this.streamText = text;
+      return;
+    }
+    // No active text: a non-empty replacement is the start of a new step.
+    // An empty replacement must not erase earlier steps (STR-3).
+    this.streamText = text;
+  }
+
+  private replaceActiveSuffix(oldText: string, newText: string): void {
+    if (this.streamText.endsWith(oldText)) {
+      this.streamText = `${this.streamText.slice(0, -oldText.length)}${newText}`;
+      return;
+    }
+    store.setState((state) => {
+      const blocks = [...state.conversation.provisionalBlocks];
+      for (let index = blocks.length - 1; index >= 0; index -= 1) {
+        if (!blocks[index].text.endsWith(oldText)) continue;
+        blocks[index] = {
+          ...blocks[index],
+          text: `${blocks[index].text.slice(0, -oldText.length)}${newText}`,
+        };
+        return { conversation: { ...state.conversation, provisionalBlocks: blocks } };
+      }
+      return {};
+    });
+  }
+
+  /**
+   * Publish the active step. `finalize` closes it as its own assistant message
+   * so a later response can never be merged into it (STR-3).
+   */
+  private flushStream(force = false, finalize = false): void {
     if (this.streamTimer) clearTimeout(this.streamTimer);
     this.streamTimer = null;
-    if (!this.streamText && !force) return;
+    if (!this.streamText && !force && !finalize) return;
     const text = this.streamText;
+    if (finalize) {
+      this.streamText = '';
+      store.setState((state) => {
+        const blocks = [...state.conversation.provisionalBlocks];
+        if (text.trim()) {
+          const id = `step_${++this.stepSequence}`;
+          blocks.push({ id, text });
+          this.attemptBlockIds.push(id);
+        }
+        const shouldNotify = !this.nearBottom && state.conversation.totalMessages > 0;
+        return {
+          conversation: {
+            ...state.conversation,
+            provisionalText: '',
+            provisionalBlocks: blocks,
+            hasNewActivity: shouldNotify || state.conversation.hasNewActivity,
+          },
+        };
+      });
+      return;
+    }
     store.setState((state) => {
       const conversation = state.conversation;
       const shouldNotify =
@@ -3465,36 +3819,135 @@ export class AppController {
         conversation: {
           ...conversation,
           provisionalText: text,
-          reasoning: '',
           hasNewActivity: shouldNotify || conversation.hasNewActivity,
         },
       };
     });
   }
 
-  private commitProvisional(): void {
-    const conversation = store.get().conversation;
-    if (!conversation.provisionalText.trim()) {
-      this.streamText = '';
-      store.setState((state) => ({ conversation: { ...state.conversation, provisionalText: '' } }));
-      return;
-    }
-    const index = conversation.totalMessages;
-    const message: HistoryMessage = {
-      index,
-      role: 'assistant',
-      content: conversation.provisionalText,
-    };
+  private scheduleReasoningFlush(): void {
+    if (this.reasoningTimer) return;
+    this.reasoningTimer = setTimeout(() => {
+      this.reasoningTimer = null;
+      this.flushReasoningBuffer();
+    }, budgets.streamCoalesceMs);
+  }
+
+  private flushReasoningBuffer(): void {
+    if (this.reasoningTimer) clearTimeout(this.reasoningTimer);
+    this.reasoningTimer = null;
+    const add = this.reasoningBuffer;
+    this.reasoningBuffer = '';
+    if (!add) return;
     store.setState((state) => ({
       conversation: {
         ...state.conversation,
-        messages: [...state.conversation.messages, message],
-        totalMessages: index + 1,
-        provisionalText: '',
-        hasOlder: state.conversation.hasOlder || state.conversation.baseIndex > 0,
+        reasoning: `${state.conversation.reasoning}${add}`.slice(-16_000),
+        reasoningPhase: 'thinking',
+        reasoningStartedAt: state.conversation.reasoningStartedAt ?? Date.now(),
       },
     }));
+  }
+
+  private pushReasoning(text: string): void {
+    const phase = store.get().conversation.reasoningPhase;
+    if (phase !== 'thinking') {
+      // A new reasoning step never inherits the previous step's clock (THINK-2).
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          reasoning: '',
+          reasoningPhase: 'thinking',
+          reasoningStartedAt: Date.now(),
+          reasoningDurationSecs: null,
+        },
+      }));
+    }
+    this.reasoningBuffer = `${this.reasoningBuffer}${text}`.slice(-16_000);
+    this.scheduleReasoningFlush();
+  }
+
+  private finishReasoning(durationSecs?: number): void {
+    this.flushReasoningBuffer();
+    store.setState((state) => ({
+      conversation: {
+        ...state.conversation,
+        reasoningPhase: 'working',
+        reasoningDurationSecs:
+          durationSecs ??
+          (state.conversation.reasoningStartedAt
+            ? (Date.now() - state.conversation.reasoningStartedAt) / 1000
+            : null),
+      },
+    }));
+  }
+
+  /** Discard exactly this provider attempt's partial output. */
+  private rollbackAttempt(): void {
+    if (this.streamTimer) clearTimeout(this.streamTimer);
+    this.streamTimer = null;
+    if (this.reasoningTimer) clearTimeout(this.reasoningTimer);
+    this.reasoningTimer = null;
     this.streamText = '';
+    this.reasoningBuffer = '';
+    const discard = new Set(this.attemptBlockIds);
+    this.attemptBlockIds = [];
+    store.setState((state) => ({
+      conversation: {
+        ...state.conversation,
+        provisionalText: '',
+        provisionalBlocks: state.conversation.provisionalBlocks.filter(
+          (block) => !discard.has(block.id),
+        ),
+        reasoning: '',
+        reasoningPhase: 'none',
+        reasoningStartedAt: null,
+        reasoningDurationSecs: null,
+        tools: state.conversation.tools.filter((tool) => tool.state !== 'running'),
+      },
+    }));
+  }
+
+  private commitProvisional(): void {
+    this.flushStream(true, true);
+    if (this.reasoningTimer) clearTimeout(this.reasoningTimer);
+    this.reasoningTimer = null;
+    this.reasoningBuffer = '';
+    const conversation = store.get().conversation;
+    const blocks = conversation.provisionalBlocks.filter((block) => block.text.trim());
+    if (blocks.length === 0) {
+      this.attemptBlockIds = [];
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          provisionalText: '',
+          provisionalBlocks: [],
+        },
+      }));
+      return;
+    }
+    this.attemptBlockIds = [];
+    store.setState((state) => {
+      let messages = [...state.conversation.messages];
+      let total = state.conversation.totalMessages;
+      for (const block of blocks) {
+        const last = messages[messages.length - 1];
+        // History may already contain this exact final message.
+        if (last && last.role === 'assistant' && last.content === block.text) continue;
+        messages.push({ index: total, role: 'assistant', content: block.text });
+        total += 1;
+      }
+      return {
+        conversation: {
+          ...state.conversation,
+          messages,
+          totalMessages: total,
+          provisionalText: '',
+          provisionalBlocks: [],
+          hasOlder: state.conversation.hasOlder || state.conversation.baseIndex > 0,
+        },
+      };
+    });
   }
 
   private async applyHistory(frame: Extract<ServerEvent, { ev: 'history' }>): Promise<void> {
@@ -3510,6 +3963,7 @@ export class AppController {
     if (!this.profile || !conversation.sessionId) return;
     const serverId = this.profile.id;
     const sessionId = conversation.sessionId;
+    const attachmentId = conversation.attachmentId;
     const epoch = this.lifecycleEpoch;
     const generation = this.clientGeneration;
     const client = this.client;
@@ -3520,45 +3974,110 @@ export class AppController {
       generation !== this.clientGeneration ||
       this.client !== client ||
       this.profile?.id !== serverId ||
-      store.get().conversation.sessionId !== sessionId
+      store.get().conversation.sessionId !== sessionId ||
+      // A delayed bookmark read must not let a retired attachment overwrite
+      // the newer reconciliation (STR-2).
+      store.get().conversation.attachmentId !== attachmentId
     ) {
       return;
     }
-    const messages = attachHistoryImages(frame.messages, frame.images);
+    const incoming = attachHistoryImages(frame.messages, frame.images);
+    const currentConversation = store.get().conversation;
+    // A live snapshot must not drop pages the user already loaded.
+    const older = currentConversation.messages.filter(
+      (message) => message.index < frame.base_index,
+    );
+    const messages = [...older, ...incoming]
+      .filter(
+        (message, index, list) =>
+          list.findIndex((entry) => entry.index === message.index) === index,
+      )
+      .sort((a, b) => a.index - b.index);
+    const baseIndex = older.length
+      ? Math.min(currentConversation.baseIndex, frame.base_index)
+      : frame.base_index;
     const firstVisit = bookmark === null && this.firstVisit;
-    const seam = deriveSeam(messages, frame.total_messages, frame.base_index, bookmark, firstVisit);
+    const seam = deriveSeam(messages, frame.total_messages, baseIndex, bookmark, firstVisit);
     if (firstVisit) this.firstVisit = false;
 
     // Acceptance must come from the adapter's correlated ledger, never from
     // equal text elsewhere in the window.
     const accepted = new Set(frame.accepted_client_ids);
-    const delivery = conversation.delivery.map((record) =>
-      accepted.has(record.clientMessageId) && record.state !== 'accepted'
-        ? { ...record, state: 'accepted' as const, error: undefined }
-        : record,
-    );
-    for (const record of delivery) {
-      if (record.state === 'accepted') {
-        void deletePendingSend(serverId, sessionId, record.clientMessageId);
-      }
+    const retired: string[] = [];
+    const delivery = currentConversation.delivery
+      .map((record) =>
+        accepted.has(record.clientMessageId) && record.state !== 'accepted'
+          ? {
+              ...record,
+              state: 'accepted' as const,
+              error: undefined,
+              messageIndex: record.messageIndex ?? frame.total_messages,
+            }
+          : record,
+      )
+      .filter((record) => {
+        // Keep an accepted or peer prompt visible until committed history
+        // actually contains it (SESS-2), then retire the optimistic row.
+        if (record.state !== 'accepted') return true;
+        const expected = record.messageIndex ?? frame.total_messages;
+        const committed = messages.some(
+          (message) =>
+            message.role === 'user' &&
+            message.index >= expected &&
+            message.content === record.content,
+        );
+        if (committed) retired.push(record.clientMessageId);
+        return !committed;
+      });
+    for (const clientMessageId of retired) {
+      void deletePendingSend(serverId, sessionId, clientMessageId);
     }
 
+    // Drop only assistant steps that committed history now contains, in
+    // order. Live steps stay visible while the turn is still running.
+    const tail = messages.filter((message) => message.role === 'assistant').slice(-20);
+    const remainingBlocks = [...currentConversation.provisionalBlocks];
+    while (
+      remainingBlocks.length > 0 &&
+      tail.length > 0 &&
+      remainingBlocks[remainingBlocks.length - 1].text === tail[tail.length - 1].content
+    ) {
+      remainingBlocks.pop();
+      tail.pop();
+    }
+    const liveActive =
+      (currentConversation.execution.kind === 'working' &&
+        (!!this.streamText ||
+          remainingBlocks.length > 0 ||
+          !!currentConversation.reasoning ||
+          currentConversation.reasoningPhase !== 'none')) ||
+      !!this.streamText ||
+      remainingBlocks.length > 0 ||
+      !!currentConversation.reasoning ||
+      currentConversation.reasoningPhase !== 'none';
+
     const hasNewActivity =
-      frame.total_messages > conversation.totalMessages && !this.nearBottom;
+      frame.total_messages > currentConversation.totalMessages && !this.nearBottom;
 
     store.setState((current) => ({
       conversation: {
         ...current.conversation,
         messages,
         totalMessages: frame.total_messages,
-        baseIndex: frame.base_index,
-        hasOlder: frame.base_index > 0,
+        baseIndex,
+        hasOlder: baseIndex > 0,
         loadingOlder: false,
-        provisionalText: '',
-        reasoning: '',
-        reasoningPhase: 'none',
-        reasoningStartedAt: null,
-        reasoningDurationSecs: null,
+        // Committed history reconciles independently from live output.
+        provisionalText: liveActive ? current.conversation.provisionalText : '',
+        provisionalBlocks: liveActive ? remainingBlocks : [],
+        reasoning: liveActive ? current.conversation.reasoning : '',
+        reasoningPhase: liveActive ? current.conversation.reasoningPhase : 'none',
+        reasoningStartedAt: liveActive
+          ? current.conversation.reasoningStartedAt
+          : null,
+        reasoningDurationSecs: liveActive
+          ? current.conversation.reasoningDurationSecs
+          : null,
         changes: deriveChanges(messages, current.conversation.tools),
         delivery,
         seam: seam.index !== null ? { index: seam.index, count: seam.count } : null,
@@ -3567,6 +4086,12 @@ export class AppController {
         interrupted: frame.interrupted_at_attach === true,
         recovery: frame.recovery ?? null,
         lastError: null,
+        imageNotice:
+          (frame.images_omitted ?? 0) > 0
+            ? `${frame.images_omitted} image${frame.images_omitted === 1 ? '' : 's'} ${
+                frame.images_omitted === 1 ? 'was' : 'were'
+              } too large for this phone and not loaded.`
+            : null,
         execution:
           current.conversation.execution.kind === 'unknown'
             ? {
@@ -3593,7 +4118,7 @@ export class AppController {
     // Persist asynchronously; a big transcript must not block the frame loop.
     setTimeout(() => {
       if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
-      void upsertMessages(serverId, sessionId, messages);
+      void upsertMessages(serverId, sessionId, messages, frame.total_messages);
     }, 0);
   }
 
@@ -3603,6 +4128,7 @@ export class AppController {
     const sessionId = conversation.sessionId;
     const client = this.client;
     const profileId = this.profile?.id;
+    const attachmentId = conversation.attachmentId;
     if (!client?.isOpen || !sessionId) return;
     if (conversation.loadingOlder || !conversation.hasOlder) return;
     store.setState((state) => ({
@@ -3620,11 +4146,18 @@ export class AppController {
         { suppressEvent: true },
       );
       if (frame.ev !== 'history') throw new Error('Unexpected history reply.');
-      if (this.profile?.id !== profileId || this.client !== client) return;
+      if (
+        this.profile?.id !== profileId ||
+        this.client !== client ||
+        store.get().conversation.attachmentId !== attachmentId
+      ) {
+        return;
+      }
+      const page = attachHistoryImages(frame.messages, frame.images);
       store.setState((state) => {
         if (state.conversation.sessionId !== sessionId) return state;
         const existing = state.conversation.messages;
-        const merged = [...frame.messages, ...existing].filter(
+        const merged = [...page, ...existing].filter(
           (message, index, list) => list.findIndex((entry) => entry.index === message.index) === index,
         );
         merged.sort((a, b) => a.index - b.index);
@@ -3635,6 +4168,12 @@ export class AppController {
             baseIndex: frame.base_index,
             hasOlder: frame.has_older ?? (frame.messages.length > 0 && frame.base_index > 0),
             loadingOlder: false,
+            imageNotice:
+              (frame.images_omitted ?? 0) > 0
+                ? `${frame.images_omitted} image${frame.images_omitted === 1 ? '' : 's'} ${
+                    frame.images_omitted === 1 ? 'was' : 'were'
+                  } too large for this phone and not loaded.`
+                : state.conversation.imageNotice,
           },
         };
       });

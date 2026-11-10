@@ -13,7 +13,7 @@ import { useTheme } from '../design/theme';
 
 export type RootStackParamList = {
   Welcome: undefined;
-  Sessions: { scope?: string } | undefined;
+  Sessions: { scope?: string; newSession?: boolean } | undefined;
   Conversation: { sessionId: string };
   Connect: undefined;
   ServerDetails: undefined;

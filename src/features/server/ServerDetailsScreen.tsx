@@ -133,6 +133,11 @@ export function ServerDetailsScreen() {
         ) : null}
 
         <Group title="Connection">
+          <SettingRow
+            label="Adapter version"
+            value={connection.adapterVersion ?? 'Not reported'}
+            valueColor={connection.adapterVersion ? 'success' : 'warning'}
+          />
           <SettingRow label="JCode version" value={connection.daemonVersion ?? 'Not reported yet'} />
           <SettingRow
             label="Last contact"
@@ -146,6 +151,13 @@ export function ServerDetailsScreen() {
           <SettingRow label="Transport" value={details?.tls ? 'TLS (wss)' : 'Local development (ws)'} />
           {details?.capabilities.length ? (
             <SettingRow label="Capabilities" value={`${details.capabilities.length} negotiated`} />
+          ) : null}
+          {connection.capabilityGap.length ? (
+            <SettingRow
+              label="Missing features"
+              value={connection.capabilityGap.join(', ')}
+              valueColor="warning"
+            />
           ) : null}
         </Group>
 

@@ -11,6 +11,8 @@ import type { AdapterConfig } from './config.ts';
 import { log } from './config.ts';
 import { RawDaemonConnection } from './rawDaemon.ts';
 import { newId, tailFingerprint, truncate } from './util.ts';
+import { effortLadders, inferredEfforts } from './efforts.ts';
+import type { ContextCache } from './context-cache.ts';
 
 export type Emit = (frame: Record<string, unknown>) => void;
 
@@ -18,9 +20,12 @@ export interface AttachmentOptions {
   config: AdapterConfig;
   replyTo: number;
   emit: Emit;
+  /** Negotiated client frame budget; keeps every outgoing frame decodable. */
+  maxFrameBytes?: number;
   sessionId?: string;
   workingDir?: string;
   lookupSession?: (sessionId: string) => Record<string, unknown> | undefined;
+  contextCache?: ContextCache;
   acceptedClientIds?: () => string[];
   onAccepted?: (clientMessageId: string) => void;
   onClosed?: () => void;
@@ -55,7 +60,14 @@ const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;
 const MAX_HISTORY_MESSAGE_BYTES = 256 * 1024;
 const MAX_RECOVERY_MESSAGE_BYTES = 8 * 1024;
 const BOOTSTRAP_QUEUE_LIMIT = 2000;
-const MAX_HISTORY_IMAGE_BYTES = 20 * 1024 * 1024;
+/** Fraction of the client budget reserved for the rest of the frame envelope. */
+const HISTORY_FRAME_RESERVE = 96 * 1024;
+const HISTORY_IMAGE_SHARE = 0.55;
+
+interface CatalogWaiter {
+  resolve: (value: { models: string[]; current: string | null }) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 interface TokenUsageSnapshot {
   input: number;
@@ -63,6 +75,9 @@ interface TokenUsageSnapshot {
   cacheRead: number;
   cacheCreate: number;
   at: number;
+  /** Route the usage belongs to; a switch invalidates the old measurement. */
+  model: string | null;
+  fromCache?: boolean;
 }
 
 interface ConfigWaiter {
@@ -97,6 +112,7 @@ export class Attachment {
   private daemonVersion: string | null = null;
   private historyImages: Array<Record<string, unknown>> = [];
   private historyImageBytes = 0;
+  private historyImagesOmitted = 0;
   private emptyHistorySeen = false;
   private tokenUsage: TokenUsageSnapshot | null = null;
   private contextWindow: number | null = null;
@@ -104,7 +120,15 @@ export class Attachment {
   private modelName: string | null = null;
   private currentEffort: string | null = null;
   private modelsList: string[] = [];
+  private modelRoutes: Array<{ model: string; provider: string; available: boolean }> = [];
   private configWaiters = new Map<number, ConfigWaiter>();
+  private catalogWaiters = new Map<number, CatalogWaiter>();
+  private runtimeWaiters = new Map<number, { resolve: () => void; timer: ReturnType<typeof setTimeout> }>();
+  /**
+   * Request ids that are not agent turns. A `done` (or `ack`) for one of these
+   * is a control reply, never turn completion or execution evidence (STR-4).
+   */
+  private controlIds = new Set<number>();
 
   constructor(options: AttachmentOptions) {
     this.options = options;
@@ -128,8 +152,30 @@ export class Attachment {
     return this.daemonVersion;
   }
 
+  currentConfig(): {
+    model: string | null;
+    effort: string | null;
+    efforts: string[];
+    effortsByModel: Record<string, string[]>;
+    modelConfirmed: boolean;
+    effortConfirmed: boolean;
+  } {
+    return {
+      model: this.modelName,
+      effort: this.currentEffort,
+      efforts: inferredEfforts(this.providerName, this.modelName),
+      effortsByModel: effortLadders(this.providerName, this.modelsList),
+      modelConfirmed: this.modelName !== null,
+      effortConfirmed: this.modelName !== null,
+    };
+  }
+
   private emit(frame: Record<string, unknown>, replyTo?: number): void {
     this.options.emit(replyTo !== undefined ? { ...frame, reply_to: replyTo } : frame);
+  }
+
+  private frameBudget(): number {
+    return this.options.maxFrameBytes ?? this.options.config.maxFrameBytes;
   }
 
   private identity(): Record<string, unknown> {
@@ -143,7 +189,29 @@ export class Attachment {
     return this.nextLegacyId++;
   }
 
+  private trackControl(id: number): void {
+    this.controlIds.add(id);
+    if (this.controlIds.size > 200) {
+      const oldest = this.controlIds.values().next().value;
+      if (typeof oldest === 'number') this.controlIds.delete(oldest);
+    }
+  }
+
   async start(): Promise<void> {
+    const cached = this.options.contextCache?.get(this.sessionId);
+    if (cached) {
+      this.tokenUsage = {
+        input: cached.input,
+        output: cached.output,
+        cacheRead: cached.cacheRead,
+        cacheCreate: cached.cacheCreate,
+        at: cached.at,
+        model: cached.model,
+        fromCache: true,
+      };
+      this.contextWindow = cached.contextWindow;
+      if (cached.model) this.modelName = cached.model;
+    }
     this.connection.onEvent((event) => this.onDaemonEvent(event));
     this.connection.onClose(() => this.onSocketClose());
     await this.connection.connect();
@@ -246,7 +314,10 @@ export class Attachment {
         this.requestHistory();
       }, 1200).unref();
     }
+    // Live delivery starts here. History is a separate reconciliation stream;
+    // waiting for it would hold deltas behind a snapshot (STR-1).
     this.flushPreHistory();
+    void this.refreshRuntimeContext();
   }
 
   private lastTerminal: { message: string; at: number } | null = null;
@@ -285,29 +356,49 @@ export class Attachment {
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
       ...(this.historyImages.length ? { images: this.historyImages } : null),
+      ...(this.historyImagesOmitted ? { images_omitted: this.historyImagesOmitted } : null),
       ...(interrupted ? { interrupted_at_attach: true } : null),
       ...(recovery ? { recovery } : null),
     });
   }
 
-  /** Enforce an outgoing UTF-8 budget, independent of message count. */
+  /**
+   * Enforce an outgoing UTF-8 budget, independent of message count. The
+   * returned copies carry the truncation marker; sizing a clone and then
+   * returning the original slice made the budget lie (HIST-1).
+   */
   private boundHistory(
     messages: Array<{ index: number; role: string; content: string; response_stats?: unknown }>,
     baseIndex: number,
   ): { messages: typeof messages; baseIndex: number } {
-    const budget = this.options.config.maxHistoryBytes;
+    const budget = Math.max(
+      64 * 1024,
+      Math.min(
+        this.options.config.maxHistoryBytes,
+        // Text and images share one frame, so text gets what media does not.
+        this.frameBudget() - HISTORY_FRAME_RESERVE - this.historyImageBytes,
+      ),
+    );
+    // A single large message must fit too: the previous loop always kept the
+    // newest message even when it alone exceeded the budget.
+    const perMessageCap = Math.max(
+      1024,
+      Math.min(MAX_HISTORY_MESSAGE_BYTES, Math.floor(budget * 0.75)),
+    );
     let bytes = 0;
     let start = messages.length;
+    const kept: typeof messages = [];
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = { ...messages[index] };
-      const limited = truncate(message.content, MAX_HISTORY_MESSAGE_BYTES);
+      const limited = truncate(message.content, perMessageCap);
       message.content = limited.truncated ? `${limited.text}\n[truncated by adapter]` : limited.text;
       const size = Buffer.byteLength(JSON.stringify(message), 'utf8') + 1;
       if (start < messages.length && bytes + size > budget) break;
       bytes += size;
       start = index;
+      kept.unshift(message);
     }
-    return { messages: messages.slice(start), baseIndex: baseIndex + start };
+    return { messages: kept, baseIndex: baseIndex + start };
   }
 
   private lastHistoryFlags: {
@@ -319,7 +410,7 @@ export class Attachment {
   private historyOffset = 0;
 
   private flushPreHistory(): void {
-    if (!this.historyReceived) return;
+    if (!this.ready) return;
     const queue = this.preHistoryQueue.splice(0);
     for (const frame of queue) this.options.emit(frame);
   }
@@ -341,6 +432,8 @@ export class Attachment {
       this.renameWaiter = null;
     }
     this.orphanedRename = null;
+    for (const waiter of this.catalogWaiters.values()) clearTimeout(waiter.timer);
+    this.catalogWaiters.clear();
     this.options.onClosed?.();
     this.options.emit({
       ev: 'error',
@@ -375,6 +468,7 @@ export class Attachment {
       }
       case 'ack': {
         const id = typeof event.id === 'number' ? event.id : -1;
+        if (this.controlIds.delete(id)) return;
         const pending = this.pending.get(id);
         if (!pending) return;
         // The pinned daemon writes ACK before dispatching the message and can
@@ -386,18 +480,34 @@ export class Attachment {
           const oldest = this.turnByRequest.keys().next().value;
           if (typeof oldest === 'number') this.turnByRequest.delete(oldest);
         }
-        this.status = 'working';
-        this.stoppedThisTurn = false;
-        this.emitStatus();
+        // Do NOT publish execution state from a raw ACK (STR-4). The daemon's
+        // `state`, stream or accepted evidence owns that claim.
         return;
       }
       case 'error': {
         const id = typeof event.id === 'number' ? event.id : -1;
         const message = typeof event.message === 'string' ? event.message : 'The server rejected the request.';
+        const runtimeWaiter = this.runtimeWaiters.get(id);
+        if (runtimeWaiter) {
+          this.runtimeWaiters.delete(id);
+          clearTimeout(runtimeWaiter.timer);
+          this.controlIds.delete(id);
+          runtimeWaiter.resolve();
+          return;
+        }
+        const catalogWaiter = this.catalogWaiters.get(id);
+        if (catalogWaiter) {
+          this.catalogWaiters.delete(id);
+          clearTimeout(catalogWaiter.timer);
+          this.controlIds.delete(id);
+          catalogWaiter.resolve({ models: this.modelsList, current: this.modelName });
+          return;
+        }
         const configWaiter = this.configWaiters.get(id);
         if (configWaiter) {
           this.configWaiters.delete(id);
           clearTimeout(configWaiter.timer);
+          this.controlIds.delete(id);
           configWaiter.resolve({ error: message });
           return;
         }
@@ -413,6 +523,14 @@ export class Attachment {
           waiter.reject(new Error(message));
           return;
         }
+        if (this.controlIds.delete(id)) {
+          this.emit({
+            ev: 'control_error',
+            ...this.identity(),
+            message,
+          });
+          return;
+        }
         if (this.isDuplicateTerminal(message)) return;
         const pending = this.pending.get(id);
         if (pending) {
@@ -425,6 +543,11 @@ export class Attachment {
           };
           if (this.ready && this.historyReceived) this.options.emit(frame);
           else this.queue(frame);
+          return;
+        }
+        const turnActive = this.pending.size > 0 || this.turnByRequest.size > 0 || this.tools.size > 0;
+        if (!turnActive) {
+          this.emit({ ev: 'control_error', ...this.identity(), message });
           return;
         }
         this.status = 'ready';
@@ -463,11 +586,19 @@ export class Attachment {
       case 'reasoning_delta': {
         const text = typeof event.text === 'string' ? event.text : '';
         if (!text) return;
+        this.status = 'working';
         this.push({ ev: 'reasoning_delta', ...this.identity(), turn_id: this.turnId, text });
         return;
       }
       case 'reasoning_done': {
-        this.push({ ev: 'reasoning_done', ...this.identity(), turn_id: this.turnId });
+        this.push({
+          ev: 'reasoning_done',
+          ...this.identity(),
+          turn_id: this.turnId,
+          ...(typeof event.duration_secs === 'number'
+            ? { duration_secs: event.duration_secs }
+            : null),
+        });
         return;
       }
       case 'text_done': {
@@ -475,12 +606,24 @@ export class Attachment {
         return;
       }
       case 'message_end': {
-        this.push({ ev: 'text_done', ...this.identity(), turn_id: this.turnId });
+        // A provider-response boundary is not an assistant-message boundary.
+        // Collapsing both into text_done merged separate responses (STR-3).
+        this.push({
+          ev: 'message_end',
+          ...this.identity(),
+          turn_id: this.turnId,
+          ...(typeof event.stop_reason === 'string' ? { stop_reason: event.stop_reason } : null),
+        });
         return;
       }
       case 'retry_rollback': {
-        this.push({ ev: 'text_replace', ...this.identity(), turn_id: this.turnId, text: '' });
-        this.push({ ev: 'reasoning_done', ...this.identity(), turn_id: this.turnId });
+        this.push({
+          ev: 'retry_rollback',
+          ...this.identity(),
+          turn_id: this.turnId,
+          attempt: typeof event.attempt === 'number' ? event.attempt : 0,
+          max: typeof event.max === 'number' ? event.max : 0,
+        });
         this.push({
           ev: 'connection_phase',
           ...this.identity(),
@@ -513,6 +656,7 @@ export class Attachment {
         if (!callId) return;
         const tool = this.tools.get(callId) ?? { name, input: '', startedAt: Date.now() };
         this.tools.set(callId, tool);
+        this.status = 'working';
         this.push({
           ev: 'tool_exec',
           ...this.identity(),
@@ -586,6 +730,9 @@ export class Attachment {
       }
       case 'done': {
         const id = typeof event.id === 'number' ? event.id : -1;
+        // A control reply (set_session_saved, rename, cancel, ...) must never
+        // finish a generation, bump turn_id, or clear tool state (STR-4).
+        if (this.controlIds.delete(id)) return;
         if (this.completedRenameIds.delete(id)) return;
         if (this.orphanedRename?.id === id) {
           this.orphanedRename = null;
@@ -602,7 +749,27 @@ export class Attachment {
           }
           return;
         }
-        const turnId = this.turnByRequest.get(id) ?? this.turnId;
+        const trackedTurn = this.turnByRequest.get(id);
+        const pendingMessage = this.pending.get(id);
+        if (trackedTurn === undefined && !pendingMessage) {
+          // Uncorrelated `done`: neither an agent turn nor a known control.
+          // Never invent a phantom turn completion from it.
+          return;
+        }
+        const turnId = trackedTurn ?? this.turnId;
+        if (pendingMessage) {
+          // A prompt that completed without an intervening processing state is
+          // still an ingested prompt, so publish its correlated acceptance.
+          this.pending.delete(id);
+          this.options.onAccepted?.(pendingMessage.clientMessageId);
+          this.push({
+            ev: 'message_accepted',
+            ...this.identity(),
+            client_message_id: pendingMessage.clientMessageId,
+            turn_id: turnId,
+          });
+        }
+        this.turnByRequest.delete(id);
         this.status = 'ready';
         if (this.stoppedThisTurn) {
           // `done` is the terminal confirmation of the stopped turn, not a
@@ -695,8 +862,8 @@ export class Attachment {
         return;
       }
       case 'compaction': {
-        this.historyReceived = false;
-        this.emitStatus();
+        // Compaction changes the persisted transcript, not live delivery.
+        // Re-arming a bootstrap gate here held deltas mid-turn (STR-1).
         this.requestHistory();
         return;
       }
@@ -725,22 +892,34 @@ export class Attachment {
           typeof event.cache_read_input === 'number' ? event.cache_read_input : 0;
         const cacheCreate =
           typeof event.cache_creation_input === 'number' ? event.cache_creation_input : 0;
-        this.tokenUsage = {
-          input,
-          output,
-          cacheRead,
-          cacheCreate,
-          at: Date.now(),
-        };
+        this.tokenUsage =
+          input + output + cacheRead + cacheCreate > 0
+            ? {
+                input,
+                output,
+                cacheRead,
+                cacheCreate,
+                at: Date.now(),
+                model: this.modelName,
+                fromCache: false,
+              }
+            : null;
+        if (this.tokenUsage) this.rememberContext();
         this.emitContextSnapshot();
         return;
       }
       case 'model_changed': {
         const id = typeof event.id === 'number' ? event.id : -1;
         const model = typeof event.model === 'string' ? event.model : this.modelName;
+        const modelChanged = model !== this.modelName;
         this.modelName = model ?? this.modelName;
         if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
-        if (typeof event.context_window === 'number') this.contextWindow = event.context_window;
+        // The daemon omits context_window when unknown. Carry-forward would
+        // combine the previous route's limit with the new route's usage.
+        this.contextWindow =
+          typeof event.context_window === 'number' ? event.context_window : null;
+        if (modelChanged) this.tokenUsage = null;
+        this.rememberContext();
         this.currentEffort =
           typeof event.reasoning_effort === 'string' ? event.reasoning_effort : null;
         const waiter = this.configWaiters.get(id);
@@ -749,6 +928,7 @@ export class Attachment {
           clearTimeout(waiter.timer);
           waiter.resolve({
             model: this.modelName,
+            effort: this.currentEffort,
             contextWindow: this.contextWindow,
             ...(typeof event.error === 'string' ? { error: event.error } : null),
           });
@@ -777,8 +957,27 @@ export class Attachment {
         this.requestHistory();
         return;
       }
+      case 'runtime_command_result': {
+        const id = typeof event.id === 'number' ? event.id : -1;
+        this.controlIds.delete(id);
+        this.applyRuntimeCommandData(event.data);
+        const waiter = this.runtimeWaiters.get(id);
+        if (waiter) {
+          this.runtimeWaiters.delete(id);
+          clearTimeout(waiter.timer);
+          waiter.resolve();
+        }
+        return;
+      }
       case 'available_models_updated': {
-        if (this.handleAuxEvent(event)) return;
+        if (Array.isArray(event.available_models)) {
+          this.modelsList = event.available_models.filter(
+            (value): value is string => typeof value === 'string',
+          );
+        }
+        if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
+        if (typeof event.provider_model === 'string') this.modelName = event.provider_model;
+        this.parseModelRoutes(event.available_model_routes);
         this.emitConfig();
         return;
       }
@@ -788,7 +987,9 @@ export class Attachment {
   }
 
   private push(frame: Record<string, unknown>): void {
-    if (this.ready && this.historyReceived) this.options.emit(frame);
+    // Only pre-attach events can be queued. Live delivery no longer waits for
+    // a transcript snapshot, so a slow history reply cannot reorder output.
+    if (this.ready) this.options.emit(frame);
     else this.queue(frame);
   }
 
@@ -832,12 +1033,35 @@ export class Attachment {
         turn_id: turnId,
       };
       this.options.onAccepted?.(pending.clientMessageId);
-      if (this.ready && this.historyReceived) this.options.emit(accepted);
+      if (this.ready) this.options.emit(accepted);
       else this.queue(accepted);
     }
   }
 
   private onHistory(event: Record<string, unknown>): void {
+    const replyId = typeof event.id === 'number' ? event.id : -1;
+    const catalogWaiter = this.catalogWaiters.get(replyId);
+    if (catalogWaiter) {
+      // `get_model_catalog` is answered with a request-id-bearing history
+      // event with zero messages. Route it by id so it can never enter the
+      // transcript bootstrap path or leave the caller waiting (CFG-1).
+      this.catalogWaiters.delete(replyId);
+      clearTimeout(catalogWaiter.timer);
+      if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
+      if (typeof event.provider_model === 'string') this.modelName = event.provider_model;
+      if (Array.isArray(event.available_models)) {
+        this.modelsList = event.available_models.filter(
+          (value): value is string => typeof value === 'string',
+        );
+      }
+      this.parseModelRoutes(event.available_model_routes);
+      catalogWaiter.resolve({
+        models: this.modelsList,
+        current: this.modelName,
+      });
+      this.emitConfig();
+      return;
+    }
     if (typeof event.server_version === 'string' && event.server_version) {
       this.daemonVersion = event.server_version;
     }
@@ -852,38 +1076,58 @@ export class Attachment {
         (value): value is string => typeof value === 'string',
       );
     }
-    if (Array.isArray(event.images)) {
-      const bounded: Array<Record<string, unknown>> = [];
-      let bytes = 0;
-      for (const image of event.images) {
-        if (!image || typeof image !== 'object') continue;
-        const record = image as Record<string, unknown>;
-        const mediaType = typeof record.media_type === 'string' ? record.media_type : '';
-        const data = typeof record.data === 'string' ? record.data : '';
-        if (!mediaType || !data) continue;
-        const size = data.length;
-        if (size > 8 * 1024 * 1024 || bytes + size > MAX_HISTORY_IMAGE_BYTES) continue;
-        bytes += size;
-        bounded.push({
-          media_type: mediaType,
-          data,
-          label: typeof record.label === 'string' ? record.label : null,
-          alt: typeof record.alt === 'string' ? record.alt : null,
-          source:
-            record.source && typeof record.source === 'object'
-              ? (record.source as Record<string, unknown>).kind ?? 'tool_result'
-              : 'tool_result',
-          ...(record.anchor && typeof record.anchor === 'object'
-            ? { anchor: record.anchor }
-            : null),
-          ...(typeof record.history_message_index === 'number'
-            ? { history_message_index: record.history_message_index }
-            : null),
-        });
+    this.parseModelRoutes(event.available_model_routes);
+    // Every full history reply is authoritative for the image set. An empty
+    // array means "no images"; keeping the previous set made deleted images
+    // survive reconciliation (HIST-2).
+    const imageBudget = Math.max(
+      0,
+      Math.floor((this.frameBudget() - HISTORY_FRAME_RESERVE) * HISTORY_IMAGE_SHARE),
+    );
+    const bounded: Array<Record<string, unknown>> = [];
+    let bytes = 0;
+    let omitted = 0;
+    const sourceImages = Array.isArray(event.images) ? event.images : [];
+    for (const image of sourceImages) {
+      if (!image || typeof image !== 'object') {
+        omitted += 1;
+        continue;
       }
-      this.historyImages = bounded;
-      this.historyImageBytes = bytes;
+      const record = image as Record<string, unknown>;
+      const mediaType = typeof record.media_type === 'string' ? record.media_type : '';
+      const data = typeof record.data === 'string' ? record.data : '';
+      if (!mediaType || !data) {
+        omitted += 1;
+        continue;
+      }
+      const size = Buffer.byteLength(data, 'utf8');
+      // Oversize media is omitted with an explicit count instead of producing
+      // a frame the phone must discard wholesale (HIST-1).
+      if (bytes + size > imageBudget) {
+        omitted += 1;
+        continue;
+      }
+      bytes += size;
+      bounded.push({
+        media_type: mediaType,
+        data,
+        label: typeof record.label === 'string' ? record.label : null,
+        alt: typeof record.alt === 'string' ? record.alt : null,
+        source:
+          record.source && typeof record.source === 'object'
+            ? (record.source as Record<string, unknown>).kind ?? 'tool_result'
+            : 'tool_result',
+        ...(record.anchor && typeof record.anchor === 'object'
+          ? { anchor: record.anchor }
+          : null),
+        ...(typeof record.history_message_index === 'number'
+          ? { history_message_index: record.history_message_index }
+          : null),
+      });
     }
+    this.historyImages = bounded;
+    this.historyImageBytes = bytes;
+    this.historyImagesOmitted = omitted;
     const messages = Array.isArray(event.messages) ? event.messages : [];
     const parsed = messages
       .map((message, index) => {
@@ -931,6 +1175,7 @@ export class Attachment {
     if (total === 0) {
       if (this.history.length > 0) {
         this.historyReceived = true;
+        if (this.ready) this.emitHistory();
         return;
       }
       if (!this.emptyHistorySeen) {
@@ -939,6 +1184,7 @@ export class Attachment {
         // an empty authoritative window that hides readable history.
         this.emptyHistorySeen = true;
         this.historyReceived = true;
+        if (this.ready) this.emitHistory();
         setTimeout(() => {
           if (!this.closed && this.history.length === 0) this.requestHistory();
         }, 300).unref?.();
@@ -951,6 +1197,28 @@ export class Attachment {
     // Parsed indexes are already absolute. Do not add the offset twice.
     this.history = parsed.slice(this.historyOffset);
     this.historyTotal = total;
+    if (!this.tokenUsage) {
+      // The daemon's in-memory last_usage is empty after a reload. Stored turn
+      // response stats still carry the last prompt size, which is a real
+      // observation from this session, so surface it as last-known.
+      for (let index = parsed.length - 1; index >= 0; index -= 1) {
+        const stats = parsed[index].response_stats;
+        if (!stats || typeof stats !== 'object') continue;
+        const record = stats as Record<string, unknown>;
+        const input = typeof record.input_tokens === 'number' ? record.input_tokens : null;
+        if (input === null || input <= 0) continue;
+        this.tokenUsage = {
+          input,
+          output: typeof record.output_tokens === 'number' ? record.output_tokens : 0,
+          cacheRead: 0,
+          cacheCreate: 0,
+          at: Date.now(),
+          model: this.modelName,
+          fromCache: true,
+        };
+        break;
+      }
+    }
     this.lastHistoryFlags = {
       interrupted: event.was_interrupted === true,
       recovery: parseRecovery(event.reload_recovery),
@@ -964,7 +1232,6 @@ export class Attachment {
     this.historyReceived = true;
     if (this.ready) {
       this.emitHistory();
-      this.flushPreHistory();
     }
   }
 
@@ -980,6 +1247,9 @@ export class Attachment {
     const startAbsolute = Math.max(start, endAbsolute - limit);
     const page = this.history.slice(startAbsolute - this.historyOffset, endAbsolute - this.historyOffset);
     const bounded = this.boundHistory(page, startAbsolute);
+    // With a zero-row page at the retention floor, reporting has_older made
+    // "Load older" loop forever (HIST-3).
+    const hasOlder = bounded.messages.length > 0 && bounded.baseIndex > 0;
     return {
       ev: 'history',
       session_id: this.sessionId,
@@ -989,15 +1259,18 @@ export class Attachment {
       total_messages: this.historyTotal,
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
-      has_older: bounded.baseIndex > 0,
+      has_older: hasOlder,
       ...(this.historyImages.length
         ? {
             images: this.historyImages.filter((image) => {
               const boundary = image.history_message_index;
-              return typeof boundary !== 'number' || boundary >= bounded.baseIndex;
+              if (typeof boundary !== 'number') return true;
+              const target = boundary - 1;
+              return target >= bounded.baseIndex && target < endAbsolute;
             }),
           }
         : null),
+      ...(this.historyImagesOmitted ? { images_omitted: this.historyImagesOmitted } : null),
     };
   }
 
@@ -1029,9 +1302,11 @@ export class Attachment {
     images: Array<[string, string]> = [],
   ): void {
     if (!this.connection.isOpen) return;
+    const id = this.nextId();
+    this.trackControl(id);
     this.connection.send({
       type: 'soft_interrupt',
-      id: this.nextId(),
+      id,
       content,
       client_id: clientId,
       ...(images.length ? { images } : null),
@@ -1040,9 +1315,11 @@ export class Attachment {
 
   cancelSoftInterrupts(clientIds: string[]): void {
     if (!this.connection.isOpen) return;
+    const id = this.nextId();
+    this.trackControl(id);
     this.connection.send({
       type: 'cancel_soft_interrupts',
-      id: this.nextId(),
+      id,
       client_ids: clientIds,
     });
   }
@@ -1060,7 +1337,9 @@ export class Attachment {
 
   cancel(): void {
     if (!this.connection.isOpen) return;
-    this.connection.send({ type: 'cancel', id: this.nextId() });
+    const id = this.nextId();
+    this.trackControl(id);
+    this.connection.send({ type: 'cancel', id });
   }
 
   rename(title: string | null): Promise<{ title: string | null; displayTitle: string }> {
@@ -1100,9 +1379,11 @@ export class Attachment {
 
   setSaved(saved: boolean, label?: string | null): void {
     if (!this.connection.isOpen) return;
+    const id = this.nextId();
+    this.trackControl(id);
     this.connection.send({
       type: 'set_session_saved',
-      id: this.nextId(),
+      id,
       saved,
       ...(label ? { label } : null),
     });
@@ -1113,34 +1394,53 @@ export class Attachment {
     current: string | null;
     efforts: string[];
     currentEffort: string | null;
+    effortsByModel: Record<string, string[]>;
+    routes: Array<{ model: string; provider: string; available: boolean }>;
   }> {
     return new Promise((resolve) => {
+      const snapshot = () => ({
+        models: this.modelsList,
+        current: this.modelName,
+        efforts: inferredEfforts(this.providerName, this.modelName),
+        currentEffort: this.currentEffort,
+        effortsByModel: effortLadders(this.providerName, this.modelsList),
+        routes: this.modelRoutes,
+      });
       if (!this.connection.isOpen) {
-        resolve({ models: [], current: null, efforts: [], currentEffort: null });
+        resolve(snapshot());
         return;
       }
       const id = this.nextId();
-      const done = () =>
-        resolve({
-          models: this.modelsList,
-          current: this.modelName,
-          efforts: inferredEfforts(this.providerName, this.modelName),
-          currentEffort: this.currentEffort,
-        });
-      const timer = setTimeout(done, 4000);
-      const previous = this.modelWaiter;
-      this.modelWaiter = (models, current) => {
-        clearTimeout(timer);
-        this.modelsList = models;
-        this.modelName = current;
-        this.modelWaiter = previous;
-        done();
-      };
+      if (this.modelsList.length > 0) {
+        // Paint from the known catalog, then refresh in the background. A slow
+        // daemon reply must not turn a populated picker into "No models".
+        const timer = setTimeout(() => this.catalogWaiters.delete(id), 4000);
+        timer.unref?.();
+        this.catalogWaiters.set(id, { timer, resolve: () => undefined });
+        try {
+          this.connection.send({ type: 'get_model_catalog', id, subscribe_usage_updates: false });
+        } catch {
+          this.catalogWaiters.delete(id);
+          clearTimeout(timer);
+        }
+        resolve(snapshot());
+        return;
+      }
+      // A catalog reply is a request-id-bearing history event. Keep one waiter
+      // per request so overlapping pickers cannot steal each other's reply.
+      const timer = setTimeout(() => {
+        this.catalogWaiters.delete(id);
+        resolve(snapshot());
+      }, 4000);
+      this.catalogWaiters.set(id, {
+        timer,
+        resolve: () => {
+          resolve(snapshot());
+        },
+      });
       this.connection.send({ type: 'get_model_catalog', id, subscribe_usage_updates: false });
     });
   }
-
-  private modelWaiter: ((models: string[], current: string | null) => void) | null = null;
 
   setModel(model: string): Promise<{
     model: string | null;
@@ -1175,6 +1475,7 @@ export class Attachment {
           });
         },
       });
+      this.trackControl(id);
       this.connection.send({ type: 'set_model', id, model });
     });
   }
@@ -1207,6 +1508,7 @@ export class Attachment {
           });
         },
       });
+      this.trackControl(id);
       this.connection.send({
         type: 'set_reasoning_effort',
         id,
@@ -1226,18 +1528,148 @@ export class Attachment {
       used_tokens: used,
       limit_tokens: this.contextWindow,
       basis: usage ? 'last_request' : 'unknown',
-      model: this.modelName,
+      model: usage?.model ?? this.modelName,
       observed_at_ms: usage?.at ?? Date.now(),
+      cached: usage?.fromCache === true,
     };
   }
 
+  /**
+   * Authoritative runtime snapshot path (CFG-2). The harness bridge reports
+   * the resolved model limit and last request usage even before any live
+   * `tokens` frame, which is what a reattached or freshly created session
+   * needs. Unknown values stay null.
+   */
+  applyRuntimeContext(input: {
+    model?: string | null;
+    providerName?: string | null;
+    effort?: string | null;
+    contextWindow?: number | null;
+    usedTokens?: number | null;
+    observedAtMs?: number | null;
+  }): void {
+    if (typeof input.providerName === 'string') this.providerName = input.providerName;
+    if (typeof input.model === 'string' && input.model) {
+      if (this.modelName !== input.model) this.tokenUsage = null;
+      this.modelName = input.model;
+    }
+    if (input.effort !== undefined) this.currentEffort = input.effort;
+    if (input.contextWindow !== undefined) this.contextWindow = input.contextWindow;
+    if (typeof input.usedTokens === 'number') {
+      this.tokenUsage = {
+        input: input.usedTokens,
+        output: 0,
+        cacheRead: 0,
+        cacheCreate: 0,
+        at: input.observedAtMs ?? Date.now(),
+        model: this.modelName,
+        fromCache: false,
+      };
+    }
+    this.rememberContext();
+    this.emitConfig();
+    this.emitContextSnapshot();
+  }
+
+  /**
+   * Ask the attached daemon for its authoritative runtime snapshot. This is
+   * the raw `runtime_command: info` path, not a guessed limit (CFG-2). Older
+   * daemons reply with an error; the waiter resolves so callers stay bounded.
+   */
+  refreshRuntimeContext(timeoutMs = 4000): Promise<void> {
+    if (!this.connection.isOpen) return Promise.resolve();
+    const id = this.nextId();
+    this.trackControl(id);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.runtimeWaiters.delete(id);
+        resolve();
+      }, timeoutMs);
+      this.runtimeWaiters.set(id, { resolve, timer });
+      try {
+        this.connection.send({ type: 'runtime_command', id, command: 'info', args: [] });
+      } catch {
+        this.runtimeWaiters.delete(id);
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+  }
+
+  private applyRuntimeCommandData(data: unknown): void {
+    if (!data || typeof data !== 'object') return;
+    const record = data as Record<string, unknown>;
+    const usage = record.last_usage && typeof record.last_usage === 'object'
+      ? (record.last_usage as Record<string, unknown>)
+      : null;
+    const input = numberField(usage, ['input', 'input_tokens', 'prompt_tokens']);
+    const cacheRead = numberField(usage, ['cache_read_input', 'cache_read_input_tokens']);
+    const cacheCreate = numberField(usage, [
+      'cache_creation_input',
+      'cache_creation_input_tokens',
+    ]);
+    // `last_usage()` is a non-optional default struct. A freshly reloaded
+    // agent reports all zeros, which means "no request observed", not 0%.
+    const observed =
+      (input ?? 0) + (cacheRead ?? 0) + (cacheCreate ?? 0);
+    const used = input !== null && observed > 0 ? observed : null;
+    this.applyRuntimeContext({
+      model: typeof record.model === 'string' ? record.model : undefined,
+      providerName: typeof record.provider === 'string' ? record.provider : undefined,
+      effort:
+        typeof record.reasoning_effort === 'string'
+          ? record.reasoning_effort
+          : record.reasoning_effort === null
+            ? null
+            : undefined,
+      contextWindow: typeof record.context_window === 'number' ? record.context_window : undefined,
+      usedTokens: used,
+      observedAtMs: Date.now(),
+    });
+  }
+
+  private rememberContext(): void {
+    if (!this.sessionId || !this.options.contextCache) return;
+    const usage = this.tokenUsage;
+    if (!usage || usage.fromCache) return;
+    this.options.contextCache.remember(this.sessionId, {
+      model: usage.model,
+      contextWindow: this.contextWindow,
+      input: usage.input,
+      output: usage.output,
+      cacheRead: usage.cacheRead,
+      cacheCreate: usage.cacheCreate,
+      at: usage.at,
+    });
+  }
+
+  private parseModelRoutes(value: unknown): void {
+    if (!Array.isArray(value)) return;
+    const routes: Array<{ model: string; provider: string; available: boolean }> = [];
+    for (const entry of value) {
+      if (!entry || typeof entry !== 'object') continue;
+      const record = entry as Record<string, unknown>;
+      const model = typeof record.model === 'string' ? record.model : '';
+      const provider = typeof record.provider === 'string' ? record.provider : '';
+      if (!model || !provider) continue;
+      routes.push({ model, provider, available: record.available !== false });
+    }
+    if (!routes.length) return;
+    this.modelRoutes = routes;
+    if (!this.modelsList.length) {
+      this.modelsList = [
+        ...new Set(routes.filter((route) => route.available).map((route) => route.model)),
+      ];
+    }
+  }
+
   private emitContextSnapshot(): void {
-    if (!this.ready || !this.historyReceived) return;
+    if (!this.ready) return;
     this.options.emit(this.contextSnapshot());
   }
 
   private emitConfig(): void {
-    if (!this.ready || !this.historyReceived) return;
+    if (!this.ready) return;
     this.options.emit({
       ev: 'session_config',
       session_id: this.sessionId,
@@ -1249,26 +1681,15 @@ export class Attachment {
     });
   }
 
-  /** Handle the model catalog event that the generic switch ignores. */
-  handleAuxEvent(event: Record<string, unknown>): boolean {
-    if (event.type === 'available_models_updated' && this.modelWaiter) {
-      const models = Array.isArray(event.available_models)
-        ? event.available_models.filter((value): value is string => typeof value === 'string')
-        : [];
-      const current = typeof event.provider_model === 'string' ? event.provider_model : null;
-      if (typeof event.provider_name === 'string') this.providerName = event.provider_name;
-      if (typeof event.reasoning_effort === 'string') this.currentEffort = event.reasoning_effort;
-      this.modelWaiter(models, current);
-      return true;
-    }
-    return false;
-  }
-
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
     for (const waiter of this.configWaiters.values()) clearTimeout(waiter.timer);
     this.configWaiters.clear();
+    for (const waiter of this.catalogWaiters.values()) clearTimeout(waiter.timer);
+    this.catalogWaiters.clear();
+    for (const waiter of this.runtimeWaiters.values()) clearTimeout(waiter.timer);
+    this.runtimeWaiters.clear();
     // Closing the transport is not cancellation: the daemon keeps the turn
     // because the subscribe opted into continuation.
     this.connection.close();
@@ -1280,51 +1701,24 @@ export class Attachment {
   }
 }
 
-/**
- * Same ordered ladder JCode exposes to its own remote TUI. The adapter only
- * reports a substrate; undefined stays an empty ladder, never a guess.
- */
-function inferredEfforts(
-  providerName: string | null,
-  modelName: string | null,
-): string[] {
-  const provider = (providerName ?? '').toLowerCase();
-  const model = (modelName ?? '').toLowerCase();
-  const openai = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'swarm'];
-  if (provider.includes('openrouter')) {
-    return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'swarm'];
-  }
-  if (provider.includes('deepseek') || model.includes('deepseek')) {
-    return ['none', 'low', 'medium', 'high', 'max', 'swarm'];
-  }
-  if (provider.includes('z.ai') || provider === 'zai' || model.startsWith('glm-')) {
-    return openai;
-  }
-  const openaiModel =
-    model.startsWith('gpt-') ||
-    model.startsWith('o1') ||
-    model.startsWith('o3') ||
-    model.startsWith('o4') ||
-    model.startsWith('o5');
-  const anthropic =
-    provider.includes('anthropic') || provider.includes('claude') || model.startsWith('claude-');
-  if (anthropic) {
-    return ['none', 'low', 'medium', 'high', 'xml', 'max', 'swarm'].filter(
-      (value) => value !== 'xml',
-    );
-  }
-  if (provider.includes('openai') || provider.includes('codex') || openaiModel) {
-    return openai;
-  }
-  return [];
-}
-
 function safeParse(raw: string): unknown {
   try {
     return JSON.parse(raw) as unknown;
   } catch {
     return raw;
   }
+}
+
+function numberField(
+  record: Record<string, unknown> | null,
+  keys: string[],
+): number | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
 }
 
 /**
@@ -1336,20 +1730,32 @@ export function splitReasoningMarkup(content: string): {
   content: string;
   reasoning: string;
 } {
+  const marker = /^\*\u2063([\s\S]*)\u2063\*\s*$/;
+  let found = false;
   const kept: string[] = [];
   const reasoning: string[] = [];
   for (const line of content.split('\n')) {
-    const match = /^\*\u2063([\s\S]*)\u2063\*\s*$/.exec(line.trimEnd());
+    const match = marker.exec(line);
     if (!match) {
       kept.push(line);
       continue;
     }
+    found = true;
     reasoning.push(
       match[1].replace(/\\([*_`\[\]<>&~|$])/g, (_whole, char: string) => char),
     );
   }
+  if (!found) {
+    // No reasoning wrapper: return the exact source bytes. Trimming and
+    // collapsing blank lines here corrupted legitimate Markdown (TXT-2).
+    return { content, reasoning: '' };
+  }
+  // Drop only the blank lines the reasoning block itself contributed before
+  // the answer; internal spacing after that is preserved verbatim.
+  let start = 0;
+  while (start < kept.length && kept[start].trim() === '') start += 1;
   return {
-    content: kept.join('\n').replace(/\n{3,}/g, '\n\n').trim(),
+    content: kept.slice(start).join('\n'),
     reasoning: reasoning.join('\n').trim(),
   };
 }

@@ -23,14 +23,12 @@ test.describe('confirmed title persistence', () => {
     await page.getByTestId('sessions-new').click();
     await expect(page.getByRole('heading', { name: 'New session' })).toBeVisible();
     await page.getByRole('textbox', { name: 'Folder on server' }).fill(E2E_SESSION_FOLDER);
-    await page.getByRole('button', { name: 'Start session' }).click();
-    await expect(page.getByRole('button', { name: 'Confirm and send' })).toBeVisible({
-      timeout: 45_000,
-    });
-    await page.getByRole('button', { name: 'Confirm and send' }).click();
+    await page.getByTestId('create-session').click();
     await expect(
       page.getByRole('textbox', { name: /^(Message|Add an instruction)$/ }),
-    ).toBeVisible({ timeout: 45_000 });
+    ).toBeVisible({
+      timeout: 45_000,
+    });
 
     await page.getByRole('button', { name: 'Session menu' }).click();
     await page.getByRole('button', { name: 'Rename' }).click();

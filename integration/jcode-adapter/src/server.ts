@@ -18,7 +18,9 @@ import { DeviceRegistry } from './registry.ts';
 import { Attachment } from './attachment.ts';
 import { newId, nowMs, readJson, writeJsonAtomic } from './util.ts';
 import { parseImages } from './images.ts';
-import { listDirectories } from './directory.ts';
+import { createDirectory, listDirectories } from './directory.ts';
+import { ADAPTER_NAME, ADAPTER_VERSION } from './version.ts';
+import { ContextCache } from './context-cache.ts';
 
 interface ClientState {
   id: string;
@@ -29,6 +31,10 @@ interface ClientState {
   greeted: boolean;
   requestCount: number;
   windowStarted: number;
+  /** Whatever frame budget the phone advertised; keeps every emit decodable. */
+  maxFrameBytes: number;
+  lastValidatedAt: number;
+  revoked: boolean;
 }
 
 type ClientFrame = {
@@ -43,6 +49,7 @@ const MAX_REQUESTS_PER_WINDOW = 120;
 const RATE_WINDOW_MS = 10_000;
 const MAX_CONTENT_BYTES = 32 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
+const MIN_CLIENT_FRAME_BYTES = 256 * 1024;
 /**
  * Browsers cannot set an Authorization header on WebSocket. They can offer a
  * subprotocol, so a web client sends `jcode-v1` plus `token.<bearer>`. Native
@@ -135,6 +142,7 @@ const ADAPTER_CAPABILITIES = [
   'archive_restore',
   'models',
   'directory_browse',
+  'directory_create',
   'session_config',
   'context_snapshot',
   'image_input',
@@ -150,6 +158,7 @@ export class MobileAdapter {
   private readonly ledger = new Map<string, Map<string, number>>();
   private readonly createCache = new Map<string, { sessionId: string; at: number; promise?: Promise<string> }>();
   private readonly createCachePath: string;
+  private readonly contextCache: ContextCache;
   private server: Server | null = null;
   private wss: WebSocketServer | null = null;
   private ledgerTimer: NodeJS.Timeout | null = null;
@@ -160,10 +169,15 @@ export class MobileAdapter {
     this.registry = new DeviceRegistry(config);
     this.bridge = new ControlBridge(config);
     this.createCachePath = join(config.stateDir, 'create-cache.json');
+    this.contextCache = new ContextCache(join(config.stateDir, 'context-cache.json'));
   }
 
   async start(): Promise<{ host: string; port: number }> {
-    await Promise.all([this.loadLedger(), this.loadCreateCache()]);
+    await Promise.all([
+      this.loadLedger(),
+      this.loadCreateCache(),
+      this.contextCache.load(),
+    ]);
     const handler = (request: IncomingMessage, response: ServerResponse) => {
       this.handleHttp(request, response).catch((error: Error) => {
         log(this.config, 'warn', `http handler failed: ${error.message}`);
@@ -251,6 +265,9 @@ export class MobileAdapter {
         greeted: false,
         requestCount: 0,
         windowStarted: nowMs(),
+        maxFrameBytes: this.config.maxFrameBytes,
+        lastValidatedAt: Date.now(),
+        revoked: false,
       };
       this.clients.add(client);
       void this.registry.touch(device.id);
@@ -275,8 +292,29 @@ export class MobileAdapter {
   }
 
   private send(client: ClientState, event: Record<string, unknown>, replyTo?: number): void {
+    if (client.revoked) return;
+    // Stream frames are not request-scoped. Check the credential on every
+    // outbound frame (a cached stat/JSON read) so revocation stops read-only
+    // listeners immediately (AUTH-1).
+    if (client.greeted && !this.registry.validateToken(client.token)) {
+      this.revokeClient(client);
+      return;
+    }
     if (client.socket.readyState !== client.socket.OPEN) return;
     client.socket.send(JSON.stringify({ v: 1, ...(replyTo !== undefined ? { reply_to: replyTo } : null), ...event }));
+  }
+
+  private revokeClient(client: ClientState): void {
+    if (client.revoked) return;
+    client.revoked = true;
+    for (const attachment of client.attachments.values()) attachment.dispose();
+    client.attachments.clear();
+    try {
+      client.socket.close(4401, 'unauthorized');
+    } catch {
+      // Already gone.
+    }
+    this.onClientClose(client);
   }
 
   private reply(client: ClientState, id: number | undefined, event: Record<string, unknown>): void {
@@ -323,14 +361,14 @@ export class MobileAdapter {
       this.error(client, id, 'invalid_request', 'hello must be the first frame.');
       return;
     }
-    if (req !== 'hello' && req !== 'ping') {
+    if (req !== 'hello') {
       // Revalidate the exact credential on every request. A socket opened
       // before a revoke or re-pair must lose mutation authority immediately.
       const current = await this.registry.validateTokenAsync(client.token);
+      client.lastValidatedAt = Date.now();
       if (!current) {
         this.error(client, id, 'unauthorized', 'This device token is no longer authorized.');
-        client.socket.close(4401, 'unauthorized');
-        this.onClientClose(client);
+        this.revokeClient(client);
         return;
       }
     }
@@ -344,10 +382,20 @@ export class MobileAdapter {
           return;
         }
         client.greeted = true;
+        client.maxFrameBytes = Math.min(
+          this.config.maxFrameBytes,
+          Math.max(
+            MIN_CLIENT_FRAME_BYTES,
+            typeof frame.max_frame_bytes === 'number'
+              ? Math.floor(frame.max_frame_bytes)
+              : this.config.maxFrameBytes,
+          ),
+        );
         this.reply(client, id, {
           ev: 'hello_ok',
           version: 1,
-          server: 'jcode-mobile-adapter/0.2.1',
+          server: ADAPTER_NAME,
+          adapter_version: ADAPTER_VERSION,
           capabilities: ADAPTER_CAPABILITIES,
         });
         return;
@@ -365,7 +413,8 @@ export class MobileAdapter {
         daemonVersion = this.observedDaemonVersion() ?? daemonVersion;
         this.reply(client, id, {
           ev: 'server_info',
-          server: 'jcode-mobile-adapter/0.2.1',
+          server: ADAPTER_NAME,
+          adapter_version: ADAPTER_VERSION,
           daemon_version: daemonVersion,
           continuation: true,
           capabilities: ADAPTER_CAPABILITIES,
@@ -548,6 +597,8 @@ export class MobileAdapter {
           models: models.models,
           current: models.current,
           efforts: models.efforts,
+          efforts_by_model: models.effortsByModel,
+          routes: models.routes,
           current_effort: models.currentEffort,
         });
         return;
@@ -565,12 +616,14 @@ export class MobileAdapter {
           this.error(client, id, 'internal', result.error);
           return;
         }
+        const config = attachment.currentConfig();
         this.reply(client, id, {
           ev: 'session_config',
           session_id: attachment.sessionId,
-          model: result.model,
-          effort: result.effort,
-          efforts: [],
+          model: result.model ?? config.model,
+          effort: result.effort ?? config.effort,
+          efforts: config.efforts,
+          efforts_by_model: config.effortsByModel,
           confirmed: true,
           source: 'server',
         });
@@ -585,12 +638,14 @@ export class MobileAdapter {
           this.error(client, id, 'internal', result.error);
           return;
         }
+        const config = attachment.currentConfig();
         this.reply(client, id, {
           ev: 'session_config',
           session_id: attachment.sessionId,
-          model: null,
+          model: config.model,
           effort: result.effort,
-          efforts: [],
+          efforts: config.efforts,
+          efforts_by_model: config.effortsByModel,
           confirmed: true,
           source: 'server',
         });
@@ -599,6 +654,10 @@ export class MobileAdapter {
       case 'get_context_snapshot': {
         const attachment = this.requireAttachment(client, id, frame);
         if (!attachment) return;
+        // Authoritative initial limit/usage, not a guess: ask the attached
+        // runtime before answering, bounded so a slow daemon cannot hang the
+        // sheet (CFG-2).
+        await attachment.refreshRuntimeContext(3000);
         this.reply(client, id, { ...attachment.contextSnapshot(), session_id: attachment.sessionId });
         return;
       }
@@ -636,6 +695,40 @@ export class MobileAdapter {
           cursor: listing.cursor,
           roots: listing.roots,
           error: null,
+        });
+        return;
+      }
+      case 'create_directory': {
+        const parentPath = typeof frame.path === 'string' ? frame.path : '';
+        const name = typeof frame.name === 'string' ? frame.name : '';
+        if (!parentPath || !name) {
+          this.error(client, id, 'invalid_request', 'path and name are required.');
+          return;
+        }
+        const created = await createDirectory(this.config.workspaceRoots, parentPath, name);
+        if (!created.ok) {
+          this.reply(client, id, {
+            ev: 'directory',
+            path: parentPath,
+            canonical_path: parentPath,
+            parent: null,
+            entries: [],
+            cursor: null,
+            roots: [],
+            error: created.error,
+          });
+          return;
+        }
+        this.reply(client, id, {
+          ev: 'directory',
+          path: created.path,
+          canonical_path: created.path,
+          parent: parentPath,
+          entries: [],
+          cursor: null,
+          roots: [],
+          error: null,
+          created: true,
         });
         return;
       }
@@ -754,6 +847,32 @@ export class MobileAdapter {
     return null;
   }
 
+  /**
+   * Rate-limit key for pairing. Behind the documented Caddy reverse proxy the
+   * TCP peer is always loopback, so a trusted loopback peer's
+   * `X-Forwarded-For` entry identifies the real caller. Untrusted peers never
+   * get to choose their own bucket (AUTH-2).
+   */
+  private pairCallerKey(request: IncomingMessage, deviceId: string): string {
+    const remote = request.socket.remoteAddress ?? 'unknown';
+    const loopback =
+      remote === '127.0.0.1' ||
+      remote === '::1' ||
+      remote === '::ffff:127.0.0.1';
+    let address = remote;
+    if (this.config.trustProxy && loopback) {
+      const header = request.headers['x-forwarded-for'];
+      const first = (Array.isArray(header) ? header[0] : header ?? '')
+        .split(',')[0]
+        .trim();
+      if (/^[0-9a-fA-F:.]+$/.test(first)) address = first;
+    }
+    // Bind the attempt bucket to the caller, not a caller-chosen device id:
+    // varying device ids must not multiply the allowance.
+    void deviceId;
+    return address;
+  }
+
   private liveStates(): Map<string, 'working' | 'ready'> {
     const states = new Map<string, 'working' | 'ready'>();
     for (const client of this.clients) {
@@ -778,9 +897,11 @@ export class MobileAdapter {
       config: this.config,
       replyTo: id ?? 0,
       emit: (event) => this.send(client, event),
+      maxFrameBytes: client.maxFrameBytes,
       sessionId: options.sessionId,
       workingDir: options.workingDir,
       lookupSession: (sessionId) => this.inventory.get(sessionId),
+      contextCache: this.contextCache,
       acceptedClientIds: () => this.acceptedIds(options.sessionId),
       onAccepted: (clientMessageId) => this.recordAccepted(options.sessionId, clientMessageId),
       onClosed: () => {
@@ -790,6 +911,7 @@ export class MobileAdapter {
     client.attachments.set(options.sessionId, attachment);
     try {
       await attachment.start();
+      void attachment.refreshRuntimeContext();
       this.inventory.set(attachment.sessionId, {
         ...(this.inventory.get(attachment.sessionId) ?? {}),
         session_id: attachment.sessionId,
@@ -837,9 +959,11 @@ export class MobileAdapter {
       rejectCreated = reject;
     });
     this.createCache.set(requestKey, { sessionId: '', at: nowMs(), promise });
-    const placeholder = new Attachment({
+    let placeholder!: Attachment;
+    placeholder = new Attachment({
       config: this.config,
       replyTo: id ?? 0,
+      maxFrameBytes: client.maxFrameBytes,
       emit: (event) => {
         if (event.ev === 'attached') {
           const session = event.session as Record<string, unknown> | undefined;
@@ -856,11 +980,15 @@ export class MobileAdapter {
       },
       workingDir,
       lookupSession: () => undefined,
-      acceptedClientIds: () => [],
+      contextCache: this.contextCache,
+      acceptedClientIds: (): string[] => this.acceptedIds(placeholder.sessionId),
+      onAccepted: (clientMessageId) =>
+        this.recordAccepted(placeholder.sessionId, clientMessageId),
       onClosed: () => undefined,
     });
     try {
       await placeholder.start();
+      void placeholder.refreshRuntimeContext();
       if (!placeholder.sessionId) throw new Error('The server did not return a session identity.');
       client.attachments.set(placeholder.sessionId, placeholder);
       this.inventory.set(placeholder.sessionId, {
@@ -981,7 +1109,14 @@ export class MobileAdapter {
     }
     if (request.method === 'GET' && url.pathname === '/health') {
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ ok: true, service: 'jcode-mobile-adapter', version: 1 }));
+      response.end(
+        JSON.stringify({
+          ok: true,
+          service: 'jcode-mobile-adapter',
+          adapter_version: ADAPTER_VERSION,
+          version: 1,
+        }),
+      );
       return;
     }
     if (request.method === 'GET' && url.pathname === '/whoami') {
@@ -1002,8 +1137,10 @@ export class MobileAdapter {
       response.end(
         JSON.stringify({
           service: 'jcode-mobile-adapter',
+          adapter_version: ADAPTER_VERSION,
           protocol: 1,
           capabilities: ADAPTER_CAPABILITIES,
+          daemon_version: this.observedDaemonVersion(),
           tls: Boolean(this.config.tlsCert),
         }),
       );
@@ -1026,7 +1163,7 @@ export class MobileAdapter {
         code,
         deviceId,
         deviceName,
-        remoteAddress: request.socket.remoteAddress ?? 'unknown',
+        remoteAddress: this.pairCallerKey(request, deviceId),
       });
       if (!result.ok) {
         response.writeHead(400, { 'Content-Type': 'application/json' });

@@ -18,7 +18,10 @@ xcodebuild \
   -sdk iphonesimulator \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -derivedDataPath "$DERIVED" \
-  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_ALLOWED=YES \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGN_IDENTITY=- \
+  DEVELOPMENT_TEAM= \
   build
 
 APP="$DERIVED/Build/Products/Release-iphonesimulator/JCodeMobile.app"

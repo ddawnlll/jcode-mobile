@@ -8,7 +8,9 @@ import { radius, space, target } from '../../design/tokens';
 import { CopyIcon } from '../../design/icons';
 import { highlightCode, supportedLanguage } from './markdown/highlight';
 
-const MAX_CODE_CHARS = 64 * 1024;
+// Copy always receives the full source. Full view is bounded for memory only,
+// and the bound is stated honestly instead of reusing the 64 KiB preview slice.
+const MAX_CODE_CHARS = 1024 * 1024;
 const PREVIEW_LINES = 24;
 
 export const CodeBlock = memo(function CodeBlock({
@@ -165,7 +167,7 @@ export const CodeBlock = memo(function CodeBlock({
       ) : null}
       {omittedBytes > 0 ? (
         <Text variant="caption" color="muted" style={{ marginTop: space.xs }}>
-          Preview limited to 64 KiB. Copy copies the full block.
+          Full view limited to 1 MiB. Copy copies the full block.
         </Text>
       ) : null}
     </View>

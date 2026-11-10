@@ -33,6 +33,11 @@ export function DirectoryBrowser({
   const [showHidden, setShowHidden] = useState(false);
   const [manual, setManual] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
+  const [query, setQuery] = useState('');
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const requestSeq = useRef(0);
 
   const load = useCallback(
@@ -70,6 +75,9 @@ export function DirectoryBrowser({
   }, [visible]);
 
   const crumbs = canonical.split('/').filter(Boolean);
+  const filteredEntries = query.trim()
+    ? entries.filter((entry) => entry.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : entries;
 
   return (
     <BottomSheet visible={visible} onClose={onClose} accessibilityLabel="Folder on server">
@@ -149,18 +157,89 @@ export function DirectoryBrowser({
           {parent ? <TextAction label="Parent" onPress={() => void load(parent)} /> : null}
         </View>
 
+        <View style={[styles.manual, { borderColor: colors.control, backgroundColor: colors.surface }]}>
+          <TextInput
+            accessibilityLabel="Search this folder"
+            value={query}
+            onChangeText={setQuery}
+            placeholder="Search this folder"
+            placeholderTextColor={colors.muted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={[styles.manualInput, { color: colors.ink }]}
+            testID="directory-search"
+          />
+          {query ? <TextAction label="Clear" onPress={() => setQuery('')} color="muted" /> : null}
+        </View>
+
+        <View style={styles.tools}>
+          <TextAction
+            label={showNewFolder ? 'Cancel new folder' : 'New folder'}
+            onPress={() => {
+              setShowNewFolder((value) => !value);
+              setCreateError(null);
+            }}
+            color="brand"
+          />
+        </View>
+        {showNewFolder ? (
+          <View>
+            <View style={[styles.manual, { borderColor: colors.control, backgroundColor: colors.surface }]}>
+              <TextInput
+                accessibilityLabel="New folder name"
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="new-project"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={[styles.manualInput, { color: colors.ink }]}
+                testID="directory-new-name"
+              />
+              <TextAction
+                label={creating ? 'Creating…' : 'Create'}
+                onPress={() => {
+                  const name = newName.trim();
+                  if (!name || !canonical || creating) return;
+                  setCreating(true);
+                  setCreateError(null);
+                  void controller.createDirectory(canonical, name).then((result) => {
+                    setCreating(false);
+                    if (!result.ok) {
+                      setCreateError(result.error);
+                      return;
+                    }
+                    setNewName('');
+                    setShowNewFolder(false);
+                    setQuery('');
+                    void load(result.path);
+                  });
+                }}
+                color="brand"
+              />
+            </View>
+            {createError ? (
+              <Text variant="small" color="error" style={{ marginTop: space.xxs }}>
+                {createError}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         <Divider />
         <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
           {loading ? (
             <Text variant="small" color="muted" style={{ paddingVertical: space.md }}>
               Reading {path || 'the first folder'}…
             </Text>
-          ) : entries.length === 0 ? (
+          ) : filteredEntries.length === 0 ? (
             <Text variant="small" color="muted" style={{ paddingVertical: space.md }}>
-              No subfolders here. Use this folder or enter a path.
+              {query
+                ? `No folder matches “${query}”.`
+                : 'No subfolders here. Use this folder, create one, or enter a path.'}
             </Text>
           ) : (
-            entries.map((entry) => (
+            filteredEntries.map((entry) => (
               <Pressable
                 key={entry.path}
                 accessibilityRole="button"

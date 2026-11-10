@@ -62,6 +62,12 @@ export interface MessageImage {
   history_message_index?: number;
 }
 
+export interface ModelRoute {
+  model: string;
+  provider: string;
+  available: boolean;
+}
+
 export interface HistoryMessage {
   /** Stable zero-based position in the persisted transcript. */
   index: number;
@@ -130,6 +136,8 @@ export interface ServerCapabilities {
   models: boolean;
   /** Authenticated read-only server directory browsing. */
   directory_browse?: boolean;
+  /** Create one folder inside a permitted server root. */
+  directory_create?: boolean;
   /** Session model/effort configuration with correlated confirmation. */
   session_config?: boolean;
   /** Authoritative last-request context occupancy. */
@@ -155,6 +163,7 @@ export const CAPABILITY_NAMES = [
   'archive_restore',
   'models',
   'directory_browse',
+  'directory_create',
   'session_config',
   'context_snapshot',
   'image_input',
@@ -166,7 +175,16 @@ export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
 /* ------------------------------------------------------------------ events */
 
 export type ServerEvent =
-  | { ev: 'hello_ok'; version: number; server: string; capabilities: string[]; daemon_version?: string; server_name?: string }
+  | {
+      ev: 'hello_ok';
+      version: number;
+      server: string;
+      /** Exact adapter build, e.g. jcode-mobile-adapter/0.2.2. */
+      adapter_version?: string;
+      capabilities: string[];
+      daemon_version?: string;
+      server_name?: string;
+    }
   | {
       ev: 'ok';
       session_id?: string;
@@ -202,6 +220,8 @@ export type ServerEvent =
       has_older?: boolean;
       /** Images anchored to this bounded history window. */
       images?: MessageImage[];
+      /** Non-zero when the adapter withheld oversized media from this frame. */
+      images_omitted?: number;
       /** Server-owned recovery intent, when the daemon reports one. */
       recovery?: { continuation_message: string; reconnect_notice?: string };
     }
@@ -224,6 +244,22 @@ export type ServerEvent =
       duration_secs?: number;
     }
   | { ev: 'text_done'; session_id: string; attachment_id: string; turn_id: number }
+  | {
+      ev: 'message_end';
+      session_id: string;
+      attachment_id: string;
+      turn_id: number;
+      stop_reason?: string;
+    }
+  | {
+      ev: 'retry_rollback';
+      session_id: string;
+      attachment_id: string;
+      turn_id: number;
+      attempt: number;
+      max: number;
+    }
+  | { ev: 'control_error'; session_id?: string; attachment_id?: string; message: string }
   | { ev: 'message_accepted'; session_id: string; attachment_id: string; client_message_id: string; turn_id: number }
   | {
       ev: 'send_rejected';
@@ -287,6 +323,8 @@ export type ServerEvent =
       models: string[];
       current?: string | null;
       efforts?: string[];
+      efforts_by_model?: Record<string, string[]>;
+      routes?: ModelRoute[];
       current_effort?: string | null;
     }
   | {
@@ -298,6 +336,8 @@ export type ServerEvent =
       basis: 'last_request' | 'current_prompt' | 'unknown';
       model: string | null;
       observed_at_ms: number;
+      /** True when this is the adapter's last-known observation, not live. */
+      cached?: boolean;
     }
   | {
       ev: 'session_config';
@@ -305,6 +345,7 @@ export type ServerEvent =
       model: string | null;
       effort: string | null;
       efforts: string[];
+      efforts_by_model?: Record<string, string[]>;
       confirmed: boolean;
       source: string;
     }
@@ -322,6 +363,7 @@ export type ServerEvent =
   | {
       ev: 'server_info';
       server: string;
+      adapter_version?: string;
       daemon_version?: string;
       continuation: boolean;
       capabilities: string[];
@@ -348,7 +390,14 @@ export interface DirectoryEntry {
 /* --------------------------------------------------------------- requests */
 
 export type ClientRequest =
-  | { req: 'hello'; min_version: number; max_version: number; client: string }
+  | {
+      req: 'hello';
+      min_version: number;
+      max_version: number;
+      client: string;
+      /** Largest JSON frame this client can decode; the adapter budgets to it. */
+      max_frame_bytes?: number;
+    }
   | { req: 'list_sessions'; include_archived?: boolean; limit?: number }
   | { req: 'attach_session'; session_id: string }
   | { req: 'detach_session'; session_id: string }
@@ -382,6 +431,7 @@ export type ClientRequest =
   | { req: 'get_context_snapshot'; session_id: string }
   | { req: 'list_directories'; path: string; cursor?: string; limit?: number; show_hidden?: boolean }
   | { req: 'validate_directory'; path: string }
+  | { req: 'create_directory'; path: string; name: string }
   | { req: 'read_file'; session_id: string; path: string; max_bytes?: number }
   | { req: 'get_server_info' }
   | { req: 'ping' };
@@ -415,6 +465,7 @@ const KNOWN_REQUESTS = new Set<ClientRequestName>([
   'get_context_snapshot',
   'list_directories',
   'validate_directory',
+  'create_directory',
   'read_file',
   'get_server_info',
   'ping',

@@ -61,11 +61,36 @@ export function SessionsScreen() {
   const [newSessionVisible, setNewSessionVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const restored = useRef(false);
+  const projectCreate = useRef<string | null>(null);
   const headingSize = useMemo(() => typeStyle(sessions.length === 0 ? 'screen' : 'display'), [typeStyle, sessions.length]);
 
   useEffect(() => {
     if (route.params?.scope) setScope(route.params.scope);
   }, [route.params?.scope]);
+
+  useEffect(() => {
+    if (!route.params?.newSession) return;
+    navigation.setParams({ newSession: false });
+    const scopePath = route.params.scope;
+    if (!scopePath) {
+      setNewSessionVisible(true);
+      return;
+    }
+    if (projectCreate.current === scopePath) return;
+    projectCreate.current = scopePath;
+    // A known project does not need a form: create the empty session and open
+    // its composer immediately.
+    void (async () => {
+      const result = await controller.createSession(scopePath, '');
+      projectCreate.current = null;
+      if (!result.ok) {
+        setNewSessionVisible(true);
+        return;
+      }
+      await controller.rememberFolder(scopePath);
+      navigation.navigate('Conversation', { sessionId: result.sessionId });
+    })();
+  }, [route.params?.newSession, route.params?.scope, navigation]);
 
   useFocusEffect(
     useCallback(() => {
@@ -78,7 +103,6 @@ export function SessionsScreen() {
   useEffect(() => {
     if (restored.current) return;
     if (sessions.length === 0) return;
-    restored.current = true;
     const open = async () => {
       const state = useAppStore.getState();
       // A labelled preview always starts on the list. An in-progress creation
@@ -87,14 +111,22 @@ export function SessionsScreen() {
       if (state.conversation.sessionId) {
         const exists = sessions.some((session) => session.session_id === state.conversation.sessionId);
         if (exists) {
+          restored.current = true;
           navigation.navigate('Conversation', { sessionId: state.conversation.sessionId });
         }
+        // Not in this inventory yet: retry when the next refresh arrives.
         return;
       }
       const intent = await controller.restoreIntent();
-      if (!intent) return;
+      if (!intent) {
+        restored.current = true;
+        return;
+      }
       const target = sessions.find((session) => session.session_id === intent);
+      // A just-created session can be missing from the first inventory page.
+      // Keep the intent armed instead of dropping the restore permanently.
       if (!target) return;
+      restored.current = true;
       await controller.openSession(target);
       navigation.navigate('Conversation', { sessionId: target.session_id });
     };
@@ -422,6 +454,7 @@ export function SessionsScreen() {
           setNewSessionVisible(false);
           navigation.navigate('Conversation', { sessionId });
         }}
+        initialFolder={scope ?? undefined}
       />
 
       <BottomSheet

@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { BottomSheet } from '../../design/BottomSheet';
@@ -9,6 +9,7 @@ import { radius, space } from '../../design/tokens';
 import { Text } from '../../design/typography';
 import { formatClock } from '../../core/session/selectors';
 import type { ContextSnapshot } from '../../core/state/store';
+import { useAppStore } from '../../core/state/store';
 
 export function ContextSheet({
   visible,
@@ -24,6 +25,8 @@ export function ContextSheet({
   onNewSession: () => void;
 }) {
   const { colors } = useTheme();
+  const capabilities = useAppStore((state) => state.conversation.capabilities);
+  const supported = capabilities.includes('context_snapshot');
   const used = snapshot?.usedTokens ?? null;
   const limit = snapshot?.limitTokens ?? null;
   const known = used !== null && limit !== null && limit > 0;
@@ -33,7 +36,11 @@ export function ContextSheet({
 
   return (
     <BottomSheet visible={visible} onClose={onClose} accessibilityLabel="Context window">
-      <View style={{ paddingHorizontal: space.lg }} testID="context-sheet">
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: space.xl }}
+        testID="context-sheet"
+      >
         <View style={styles.header}>
           <View>
             <Text variant="title" accessibilityRole="header">
@@ -60,6 +67,12 @@ export function ContextSheet({
             Last-known snapshot. Waiting for the server to reconcile.
           </Text>
         ) : null}
+        {!supported ? (
+          <Text variant="small" color="warning" style={{ marginTop: space.sm }}>
+            This server adapter does not advertise context snapshots. Update the adapter on the
+            server to 0.2.2 or later; no limits are estimated on the phone.
+          </Text>
+        ) : null}
         <Divider />
         <View style={styles.meta}>
           <Meta label="Model" value={snapshot?.model ?? model ?? 'Unavailable'} />
@@ -78,8 +91,7 @@ export function ContextSheet({
         ) : null}
         <TextAction label="New session in this project" onPress={onNewSession} />
         <TextAction label="Close" onPress={onClose} align="center" color="muted" />
-        <View style={{ height: space.lg }} />
-      </View>
+      </ScrollView>
     </BottomSheet>
   );
 }

@@ -71,7 +71,7 @@ describe('WelcomeScreen', () => {
     expect(screen.queryByTestId('welcome-ascii', { includeHiddenElements: true })).toBeTruthy();
     expect(screen.getByTestId('theme-tidal')).toBeTruthy();
     expect(screen.getByTestId('appearance-system')).toBeTruthy();
-    expect(screen.getByText('JCode Mobile 0.2.1 · preview UI')).toBeTruthy();
+    expect(screen.getByText('JCode Mobile 0.2.2 · preview UI')).toBeTruthy();
 
     await skipOpening();
 

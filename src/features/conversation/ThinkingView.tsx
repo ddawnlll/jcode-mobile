@@ -31,7 +31,9 @@ export function ThinkingView({
   const active = phase === 'thinking';
 
   useEffect(() => {
-    if (!active || reduceMotion || display !== 'hidden') {
+    // Compact and Expanded are real display modes too; only Reduce Motion
+    // suppresses the active mark (THINK-1).
+    if (!active || reduceMotion) {
       tilt.setValue(0);
       return;
     }
@@ -45,7 +47,13 @@ export function ThinkingView({
     );
     loop.start();
     return () => loop.stop();
-  }, [active, display, reduceMotion, tilt]);
+  }, [active, reduceMotion, tilt]);
+
+  const mark = (size: number, color: string) => (
+    <Animated.View style={{ transform: [{ rotate }, { scaleX }, { scaleY }, { translateY }] }}>
+      <JCodeMark size={size} color={color} />
+    </Animated.View>
+  );
 
   if (display === 'hidden' && !active) {
     if (phase !== 'working') return null;
@@ -67,9 +75,7 @@ export function ThinkingView({
   if (display === 'hidden') {
     return (
       <View style={styles.row} testID="thinking-indicator" accessibilityLabel="Model is thinking">
-        <Animated.View style={{ transform: [{ rotate }, { scaleX }, { scaleY }, { translateY }] }}>
-          <JCodeMark size={20} color={colors.brand} />
-        </Animated.View>
+        {mark(20, colors.brand)}
         <Text variant="small" color="muted" style={{ marginLeft: space.xs }}>
           Model is thinking…
         </Text>
@@ -81,7 +87,7 @@ export function ThinkingView({
     if (!active && phase !== 'working') return null;
     return (
       <View style={styles.row} testID="thinking-working" accessibilityLabel="Working">
-        <JCodeMark size={18} color={colors.muted} />
+        {active ? mark(20, colors.brand) : <JCodeMark size={18} color={colors.muted} />}
         <Text variant="small" color="muted" style={{ marginLeft: space.xs }}>
           {active ? 'Model is thinking…' : 'Working…'}
         </Text>
@@ -104,7 +110,7 @@ export function ThinkingView({
         onPress={() => setOpen((value) => !value)}
         style={styles.header}
       >
-        <JCodeMark size={16} color={colors.muted} />
+        {active ? mark(18, colors.brand) : <JCodeMark size={16} color={colors.muted} />}
         <Text variant="small" color="muted" style={{ marginLeft: space.xs, flex: 1 }}>
           {active ? 'Model is thinking…' : 'Thinking'}
           {durationSecs ? ` · ${Math.max(1, Math.round(durationSecs))}s` : ''}

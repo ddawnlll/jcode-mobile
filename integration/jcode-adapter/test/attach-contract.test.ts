@@ -33,6 +33,7 @@ function configFor(socketPath: string, stateDir: string, overrides: Partial<Adap
     renameTimeoutMs: 8_000,
     logLevel: 'warn',
     faultAfterSend: false,
+    trustProxy: false,
     workspaceRoots: [stateDir],
     ...overrides,
   };
@@ -185,7 +186,7 @@ test('attach never sends a destructive request before an explicit Stop', async (
   });
 });
 
-test('retry rollback clears provisional text and reports the retry phase', async () => {
+test('retry rollback is a distinct event so the client can discard the attempt', async () => {
   await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
     const emitted: Array<Record<string, unknown>> = [];
     const attachment = new Attachment({
@@ -204,9 +205,13 @@ test('retry rollback clears provisional text and reports the retry phase', async
     send({ type: 'retry_rollback', attempt: 1, max: 3 });
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    const replacement = emitted.find((frame) => frame.ev === 'text_replace');
-    assert.ok(replacement, 'text_replace emitted');
-    assert.equal(replacement!.text, '', 'provisional text is cleared');
+    const rollback = emitted.find((frame) => frame.ev === 'retry_rollback');
+    assert.ok(rollback, 'retry_rollback emitted');
+    assert.equal(rollback!.attempt, 1);
+    assert.equal(rollback!.max, 3);
+    // It must not fabricate a text replacement: the client rolls back exactly
+    // the attempt's steps, including reasoning and in-progress tools.
+    assert.ok(!emitted.some((frame) => frame.ev === 'text_replace'));
     const phase = emitted.find((frame) => frame.ev === 'connection_phase');
     assert.ok(phase, 'retry phase emitted');
     assert.match(String(phase!.phase), /retrying \(1\/3\)/);
@@ -528,3 +533,214 @@ async function waitForFrame(
   }
   return undefined;
 }
+
+test('live deltas are delivered before any history snapshot arrives', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_live_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_live_1', is_processing: true, message_count: 0 });
+    await started;
+    // No history frame has been sent: the live stream must still flow.
+    send({ type: 'text_delta', text: 'live answer' });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const delta = emitted.find((frame) => frame.ev === 'text_delta');
+    assert.ok(delta, 'delta delivered without waiting for history');
+    assert.equal(delta!.text, 'live answer');
+    attachment.dispose();
+  });
+});
+
+test('an uncorrelated done cannot finish a turn', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_done_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_done_1', is_processing: false, message_count: 0 });
+    await started;
+    send({ type: 'done', id: 9999 });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.ok(!emitted.some((frame) => frame.ev === 'turn_done'), 'no phantom turn');
+
+    attachment.sendMessage('hello', 'cm_done');
+    const message = await waitForFrame(frames, 'message');
+    assert.ok(message);
+    send({ type: 'ack', id: message!.id });
+    send({ type: 'done', id: message!.id });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const accepted = emitted.find((frame) => frame.ev === 'message_accepted');
+    const done = emitted.find((frame) => frame.ev === 'turn_done');
+    assert.ok(accepted, 'correlated acceptance still published');
+    assert.ok(done, 'correlated completion published');
+    attachment.dispose();
+  });
+});
+
+test('a control reply does not finish the generation', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_control_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_control_1', is_processing: true, message_count: 0 });
+    await started;
+    attachment.setSaved(true);
+    const saved = await waitForFrame(frames, 'set_session_saved');
+    assert.ok(saved);
+    send({ type: 'ack', id: saved!.id });
+    send({ type: 'done', id: saved!.id });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.ok(!emitted.some((frame) => frame.ev === 'turn_done'), 'control done ignored');
+    attachment.dispose();
+  });
+});
+
+test('model catalog resolves by request id and stays out of the transcript', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_catalog_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_catalog_1', is_processing: false, message_count: 0 });
+    await started;
+    const modelsPromise = attachment.models();
+    const catalog = await waitForFrame(frames, 'get_model_catalog');
+    assert.ok(catalog);
+    send({
+      type: 'history',
+      id: catalog!.id,
+      session_id: 'session_catalog_1',
+      messages: [],
+      provider_name: 'anthropic',
+      provider_model: 'claude-sonnet-4-6',
+      available_models: ['claude-sonnet-4-6', 'claude-opus-4-7'],
+      reasoning_effort: 'high',
+    });
+    const models = await modelsPromise;
+    assert.deepEqual(models.models, ['claude-sonnet-4-6', 'claude-opus-4-7']);
+    assert.equal(models.current, 'claude-sonnet-4-6');
+    assert.deepEqual(models.efforts, ['none', 'low', 'medium', 'high', 'max', 'swarm']);
+    assert.ok(
+      !emitted.some((frame) => frame.ev === 'history' && frame.messages),
+      'catalog reply is not a transcript snapshot',
+    );
+    attachment.dispose();
+  });
+});
+
+test('a newer history snapshot replaces the image set even when empty', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_img_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_img_1', is_processing: false, message_count: 1 });
+    send({
+      type: 'history',
+      id: 3,
+      session_id: 'session_img_1',
+      messages: [{ role: 'user', content: 'with image' }],
+      images: [{ media_type: 'image/png', data: 'AAAA' }],
+    });
+    await started;
+    send({
+      type: 'history',
+      id: 4,
+      session_id: 'session_img_1',
+      messages: [{ role: 'user', content: 'cleared' }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const histories = emitted.filter((frame) => frame.ev === 'history');
+    assert.equal(histories.length, 2);
+    assert.ok(!('images' in histories[1]), 'stale image set cleared');
+    attachment.dispose();
+  });
+});
+
+test('paged history at the retention floor says there is nothing older', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir, { maxHistoryMessages: 2 }),
+      replyTo: 1,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_page_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_page_1', is_processing: false, message_count: 2 });
+    send({
+      type: 'history',
+      id: 3,
+      session_id: 'session_page_1',
+      messages: [
+        { role: 'user', content: 'a' },
+        { role: 'assistant', content: 'b' },
+      ],
+    });
+    await started;
+    const page = attachment.getHistoryBefore(0, 40);
+    assert.equal(page.has_older, false);
+    assert.deepEqual(page.messages, []);
+    attachment.dispose();
+  });
+});
+
+test('outbound history stays inside the negotiated phone budget', async () => {
+  await withFakeDaemon(async ({ socketPath, stateDir, frames, send }) => {
+    const emitted: Array<Record<string, unknown>> = [];
+    const attachment = new Attachment({
+      config: configFor(socketPath, stateDir),
+      replyTo: 1,
+      maxFrameBytes: 128 * 1024,
+      emit: (frame) => emitted.push(frame),
+      sessionId: 'session_budget_1',
+    });
+    const started = attachment.start();
+    await waitForFrame(frames, 'state');
+    send({ type: 'state', id: 2, session_id: 'session_budget_1', is_processing: false, message_count: 1 });
+    send({
+      type: 'history',
+      id: 3,
+      session_id: 'session_budget_1',
+      messages: [{ role: 'assistant', content: 'x'.repeat(400 * 1024) }],
+    });
+    await started;
+    const history = emitted.find((frame) => frame.ev === 'history');
+    assert.ok(history);
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(history), 'utf8') <= 128 * 1024,
+      'frame fits the phone budget',
+    );
+    const content = (history!.messages as Array<{ content: string }>)[0].content;
+    assert.match(content, /truncated by adapter/);
+    attachment.dispose();
+  });
+});

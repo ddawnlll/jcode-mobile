@@ -2,6 +2,8 @@ import * as SQLite from 'expo-sqlite';
 
 import { budgets } from '../../design/tokens';
 import type { HistoryMessage, SessionInfo } from '../protocol/frames';
+import type { ComposerImage } from '../state/store';
+import { splitLegacyReasoning } from '../protocol/reasoning';
 
 const DB_NAME = 'jcode-mobile.db';
 const MESSAGE_ROW_LIMIT = 500;
@@ -69,6 +71,7 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
         archived INTEGER NOT NULL DEFAULT 0,
         updated_at_ms INTEGER,
         transcript_bytes INTEGER,
+        cached_total INTEGER,
         last_synced_at INTEGER NOT NULL,
         PRIMARY KEY (server_id, session_id)
       );
@@ -109,19 +112,37 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
         kind TEXT NOT NULL DEFAULT 'message',
         error TEXT,
         created_at INTEGER NOT NULL,
+        images_json TEXT,
         PRIMARY KEY (server_id, session_id, client_message_id)
       );
       CREATE TABLE IF NOT EXISTS prefs (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
       );
-      PRAGMA user_version = 1;
+      PRAGMA user_version = 2;
     `);
   }
   try {
     await db.execAsync("ALTER TABLE pending_sends ADD COLUMN kind TEXT NOT NULL DEFAULT 'message'");
   } catch {
     // Existing database already has the column.
+  }
+  try {
+    await db.execAsync('ALTER TABLE pending_sends ADD COLUMN images_json TEXT');
+  } catch {
+    // Existing database already has the column.
+  }
+  const messageColumns = await db.getAllAsync<{ name: string }>(
+    "PRAGMA table_info('messages')",
+  );
+  if (!messageColumns.some((column) => column.name === 'meta_json')) {
+    await db.execAsync('ALTER TABLE messages ADD COLUMN meta_json TEXT');
+  }
+  const sessionColumns = await db.getAllAsync<{ name: string }>(
+    "PRAGMA table_info('sessions')",
+  );
+  if (!sessionColumns.some((column) => column.name === 'cached_total')) {
+    await db.execAsync('ALTER TABLE sessions ADD COLUMN cached_total INTEGER');
   }
   database = db;
   return db;
@@ -133,11 +154,11 @@ export async function openDatabaseForTests(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync('PRAGMA foreign_keys = ON;');
   await db.execAsync(`
     CREATE TABLE servers (id TEXT PRIMARY KEY NOT NULL, label TEXT NOT NULL, host TEXT NOT NULL, port INTEGER NOT NULL, tls INTEGER NOT NULL, device_id TEXT NOT NULL, created_at INTEGER NOT NULL, last_connected_at INTEGER, daemon_version TEXT, capabilities_json TEXT);
-    CREATE TABLE sessions (server_id TEXT NOT NULL, session_id TEXT NOT NULL, title TEXT, working_dir TEXT, status TEXT, live_state TEXT, saved INTEGER NOT NULL DEFAULT 0, save_label TEXT, archived INTEGER NOT NULL DEFAULT 0, updated_at_ms INTEGER, transcript_bytes INTEGER, last_synced_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id));
-    CREATE TABLE messages (server_id TEXT NOT NULL, session_id TEXT NOT NULL, idx INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, stats_json TEXT, bytes INTEGER NOT NULL, cached_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id, idx));
+    CREATE TABLE sessions (server_id TEXT NOT NULL, session_id TEXT NOT NULL, title TEXT, working_dir TEXT, status TEXT, live_state TEXT, saved INTEGER NOT NULL DEFAULT 0, save_label TEXT, archived INTEGER NOT NULL DEFAULT 0, updated_at_ms INTEGER, transcript_bytes INTEGER, cached_total INTEGER, last_synced_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id));
+    CREATE TABLE messages (server_id TEXT NOT NULL, session_id TEXT NOT NULL, idx INTEGER NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, stats_json TEXT, meta_json TEXT, bytes INTEGER NOT NULL, cached_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id, idx));
     CREATE TABLE drafts (server_id TEXT NOT NULL, session_id TEXT NOT NULL, content TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id));
     CREATE TABLE bookmarks (server_id TEXT NOT NULL, session_id TEXT NOT NULL, message_index INTEGER NOT NULL, fingerprint TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id));
-    CREATE TABLE pending_sends (server_id TEXT NOT NULL, session_id TEXT NOT NULL, client_message_id TEXT NOT NULL, content TEXT NOT NULL, state TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'message', error TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (server_id, session_id, client_message_id));
+    CREATE TABLE pending_sends (server_id TEXT NOT NULL, session_id TEXT NOT NULL, client_message_id TEXT NOT NULL, content TEXT NOT NULL, state TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'message', error TEXT, created_at INTEGER NOT NULL, images_json TEXT, PRIMARY KEY (server_id, session_id, client_message_id));
     CREATE TABLE prefs (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
   `);
   database = db;
@@ -291,8 +312,9 @@ export async function loadCachedMessages(
     role: string;
     content: string;
     stats_json: string | null;
+    meta_json: string | null;
   }>(
-    'SELECT idx, role, content, stats_json FROM messages WHERE server_id = ? AND session_id = ? ORDER BY idx DESC LIMIT ?',
+    'SELECT idx, role, content, stats_json, meta_json FROM messages WHERE server_id = ? AND session_id = ? ORDER BY idx DESC LIMIT ?',
     serverId,
     sessionId,
     limit,
@@ -300,47 +322,82 @@ export async function loadCachedMessages(
   const messages = rows
     .slice()
     .reverse()
-    .map((row) => ({
-      index: row.idx,
-      role: row.role,
-      content: row.content,
-      ...(row.stats_json ? { response_stats: JSON.parse(row.stats_json) as HistoryMessage['response_stats'] } : null),
-    }));
-  const count = await db().getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM messages WHERE server_id = ? AND session_id = ?',
+    .map((row) => {
+      const meta = row.meta_json
+        ? (JSON.parse(row.meta_json) as Partial<HistoryMessage>)
+        : null;
+      const legacy =
+        row.role === 'assistant' && !meta?.reasoning
+          ? splitLegacyReasoning(row.content)
+          : null;
+      return {
+        index: row.idx,
+        role: row.role,
+        content: legacy ? legacy.content : row.content,
+        ...(row.stats_json
+          ? { response_stats: JSON.parse(row.stats_json) as HistoryMessage['response_stats'] }
+          : null),
+        ...(meta ?? null),
+        ...(legacy?.reasoning && !meta?.reasoning ? { reasoning: legacy.reasoning } : null),
+      };
+    });
+  const cachedTotal = await db().getFirstAsync<{ cached_total: number | null }>(
+    'SELECT cached_total FROM sessions WHERE server_id = ? AND session_id = ?',
     serverId,
     sessionId,
   );
-  return { messages, total: count?.count ?? messages.length };
+  // The row count is not the transcript length: the cache keeps only the most
+  // recent window. Prefer the authoritative total recorded with the snapshot.
+  const total =
+    typeof cachedTotal?.cached_total === 'number'
+      ? Math.max(cachedTotal.cached_total, messages.length)
+      : messages.length;
+  return { messages, total };
 }
 
 export async function upsertMessages(
   serverId: string,
   sessionId: string,
   messages: HistoryMessage[],
+  totalMessages?: number,
 ): Promise<void> {
   if (!messages.length) return;
   const now = Date.now();
+  const maxIndex = messages.reduce((max, message) => Math.max(max, message.index), -1);
   await serialized(async () => {
     await db().withTransactionAsync(async () => {
       for (const message of messages) {
-      const bytes = roughBytes(message.content);
+        const bytes = roughBytes(message.content);
+        const meta = {
+          ...(message.reasoning ? { reasoning: message.reasoning } : null),
+          ...(message.tool_calls?.length ? { tool_calls: message.tool_calls } : null),
+          ...(message.tool_data ? { tool_data: message.tool_data } : null),
+          ...(message.images?.length ? { images: message.images } : null),
+        };
         await db().runAsync(
-          `INSERT INTO messages (server_id, session_id, idx, role, content, stats_json, bytes, cached_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO messages (server_id, session_id, idx, role, content, stats_json, meta_json, bytes, cached_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(server_id, session_id, idx) DO UPDATE SET
              role = excluded.role, content = excluded.content, stats_json = excluded.stats_json,
-             bytes = excluded.bytes, cached_at = excluded.cached_at`,
+             meta_json = excluded.meta_json, bytes = excluded.bytes, cached_at = excluded.cached_at`,
           serverId,
           sessionId,
           message.index,
           message.role,
           message.content,
           message.response_stats ? JSON.stringify(message.response_stats) : null,
+          Object.keys(meta).length ? JSON.stringify(meta) : null,
           bytes,
           now,
         );
       }
+      // An authoritative snapshot also removes a deleted/rewound tail.
+      await db().runAsync(
+        'DELETE FROM messages WHERE server_id = ? AND session_id = ? AND idx > ?',
+        serverId,
+        sessionId,
+        maxIndex,
+      );
       // Per-session bound: keep only the most recent rows.
       await db().runAsync(
         `DELETE FROM messages WHERE server_id = ? AND session_id = ? AND idx NOT IN (
@@ -352,6 +409,14 @@ export async function upsertMessages(
         sessionId,
         MESSAGE_ROW_LIMIT,
       );
+      if (typeof totalMessages === 'number') {
+        await db().runAsync(
+          'UPDATE sessions SET cached_total = ? WHERE server_id = ? AND session_id = ?',
+          totalMessages,
+          serverId,
+          sessionId,
+        );
+      }
     });
     await trimGlobalCache(serverId, sessionId);
   });
@@ -483,6 +548,7 @@ export interface PendingSendRow {
   kind?: 'message' | 'guidance';
   error: string | null;
   created_at: number;
+  images?: ComposerImage[];
 }
 
 export async function savePendingSend(
@@ -491,10 +557,11 @@ export async function savePendingSend(
   row: PendingSendRow,
 ): Promise<void> {
   await db().runAsync(
-    `INSERT INTO pending_sends (server_id, session_id, client_message_id, content, state, kind, error, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO pending_sends (server_id, session_id, client_message_id, content, state, kind, error, created_at, images_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(server_id, session_id, client_message_id) DO UPDATE SET
-       state = excluded.state, kind = excluded.kind, error = excluded.error`,
+       state = excluded.state, kind = excluded.kind, error = excluded.error,
+       images_json = COALESCE(excluded.images_json, pending_sends.images_json)`,
     serverId,
     sessionId,
     row.client_message_id,
@@ -503,14 +570,26 @@ export async function savePendingSend(
     row.kind ?? 'message',
     row.error,
     row.created_at,
+    row.images?.length ? JSON.stringify(row.images) : null,
   );
 }
 
 export async function listPendingSends(serverId: string, sessionId: string): Promise<PendingSendRow[]> {
   return db().getAllAsync<PendingSendRow>(
-    'SELECT client_message_id, content, state, kind, error, created_at FROM pending_sends WHERE server_id = ? AND session_id = ? ORDER BY created_at ASC',
+    'SELECT client_message_id, content, state, kind, error, created_at, images_json FROM pending_sends WHERE server_id = ? AND session_id = ? ORDER BY created_at ASC',
     serverId,
     sessionId,
+  ).then((rows) =>
+    rows.map((row) => {
+      const withImages = row as PendingSendRow & { images_json?: string | null };
+      if (!withImages.images_json) return withImages;
+      try {
+        const images = JSON.parse(withImages.images_json) as ComposerImage[];
+        return { ...withImages, images: Array.isArray(images) ? images : undefined };
+      } catch {
+        return withImages;
+      }
+    }),
   );
 }
 

@@ -4,6 +4,8 @@ import {
   messageFingerprint,
   basename,
   formatTime,
+  attachHistoryImages,
+  deriveChanges,
 } from '../selectors';
 import type { HistoryMessage, SessionInfo } from '../../protocol/frames';
 
@@ -117,5 +119,77 @@ describe('small formatters', () => {
     const now = new Date('2026-11-08T12:00:00Z').getTime();
     expect(formatTime(now, now)).toMatch(/^\d{2}:\d{2}$/);
     expect(formatTime(now - 86_400_000, now)).toBe('Yesterday');
+  });
+});
+
+describe('0.2.2 selector regressions', () => {
+  it('anchors tool images to the absolute message before the boundary', () => {
+    const messages = [
+      message(7, 'prompt', 'user'),
+      { index: 8, role: 'tool', content: 'result', tool_data: { id: 'call_1', name: 'read' } },
+      message(9, 'answer'),
+    ];
+    const result = attachHistoryImages(messages, [
+      {
+        media_type: 'image/png',
+        data: 'AAAA',
+        history_message_index: 9,
+        anchor: { kind: 'tool_call', id: 'call_1' },
+      },
+    ]);
+    expect(result[1].images).toHaveLength(1);
+    expect(result[2].images).toBeUndefined();
+  });
+
+  it('uses zero-based prompt ordinals', () => {
+    const messages = [
+      message(2, 'first', 'user'),
+      message(3, 'answer'),
+      message(8, 'second', 'user'),
+    ];
+    const result = attachHistoryImages(messages, [
+      { media_type: 'image/png', data: 'AAAA', anchor: { kind: 'user_prompt', ordinal: 1 } },
+    ]);
+    expect(result[2].images).toHaveLength(1);
+    expect(result[0].images).toBeUndefined();
+  });
+
+  it('never clamps an out-of-window anchor onto the last answer', () => {
+    const result = attachHistoryImages([message(20, 'answer')], [
+      { media_type: 'image/png', data: 'AAAA', history_message_index: 5 },
+    ]);
+    expect(result[0].images).toBeUndefined();
+  });
+
+  it('marks history-only edits as attempts and leaves failed live calls alone', () => {
+    const tools = [
+      {
+        callId: 'call_failed',
+        name: 'edit',
+        state: 'failed' as const,
+        startedAt: 0,
+        input: { path: '/x', old_string: 'a', new_string: 'b' },
+      },
+    ];
+    const changes = deriveChanges(
+      [
+        { index: 1, role: 'assistant', content: '' },
+        {
+          index: 2,
+          role: 'tool',
+          content: 'permission denied',
+          tool_data: { id: 'call_failed', name: 'edit', input: { path: '/x' } },
+        },
+        {
+          index: 3,
+          role: 'tool',
+          content: 'ok',
+          tool_data: { id: 'call_history', name: 'edit', input: { path: '/y' } },
+        },
+      ],
+      tools,
+    );
+    expect(changes.some((change) => change.callId === 'call_failed')).toBe(false);
+    expect(changes.find((change) => change.callId === 'call_history')?.status).toBe('attempted');
   });
 });

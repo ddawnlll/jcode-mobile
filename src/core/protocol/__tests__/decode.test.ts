@@ -118,3 +118,128 @@ describe('history recovery fields', () => {
     }
   });
 });
+
+describe('0.2.2 protocol additions', () => {
+  it('decodes provider-response boundaries and retry rollbacks distinctly', () => {
+    const end = decodeFrame(
+      JSON.stringify({ v: PROTOCOL_VERSION, ev: 'message_end', ...identity, stop_reason: 'max_tokens' }),
+    );
+    expect(end.ok).toBe(true);
+    if (end.ok && end.frame.ev === 'message_end') {
+      expect(end.frame.stop_reason).toBe('max_tokens');
+    }
+    const rollback = decodeFrame(
+      JSON.stringify({ v: PROTOCOL_VERSION, ev: 'retry_rollback', ...identity, attempt: 2, max: 4 }),
+    );
+    expect(rollback.ok).toBe(true);
+    if (rollback.ok && rollback.frame.ev === 'retry_rollback') {
+      expect(rollback.frame).toMatchObject({ attempt: 2, max: 4 });
+    }
+  });
+
+  it('moves legacy sentinel reasoning out of assistant prose', () => {
+    const body = `*\u2063Weighing the options.\\*Carefully\\*.\u2063*  \n\nFinal **answer**`;
+    const result = decodeFrame(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        ev: 'history',
+        session_id: 's1',
+        attachment_id: 'att_1',
+        base_index: 0,
+        total_messages: 1,
+        messages: [{ index: 0, role: 'assistant', content: body }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok && result.frame.ev === 'history') {
+      const [message] = result.frame.messages;
+      expect(message.reasoning).toBe('Weighing the options.*Carefully*.');
+      expect(message.content).toBe('Final **answer**');
+    }
+  });
+
+  it('keeps ordinary markdown untouched and carries image omission counts', () => {
+    const source = 'Intro\n\n\n    indented\n\n\n- list';
+    const result = decodeFrame(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        ev: 'history',
+        session_id: 's1',
+        attachment_id: 'att_1',
+        base_index: 0,
+        total_messages: 1,
+        images_omitted: 2,
+        messages: [{ index: 0, role: 'assistant', content: source }],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok && result.frame.ev === 'history') {
+      expect(result.frame.messages[0].content).toBe(source);
+      expect(result.frame.messages[0].reasoning).toBeUndefined();
+      expect(result.frame.images_omitted).toBe(2);
+    }
+  });
+
+  it('carries per-model effort ladders', () => {
+    const result = decodeFrame(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        ev: 'models',
+        session_id: 's1',
+        models: ['m1', 'm2'],
+        efforts: ['low'],
+        efforts_by_model: { m1: ['low', 'high'], m2: null },
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok && result.frame.ev === 'models') {
+      expect(result.frame.efforts_by_model).toEqual({ m1: ['low', 'high'] });
+    }
+  });
+});
+
+describe('0.2.2 catalog and context metadata', () => {
+  it('decodes model routes for provider filtering', () => {
+    const result = decodeFrame(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        ev: 'models',
+        session_id: 's1',
+        models: ['claude-opus-4-7', 'gpt-6.1-sol'],
+        routes: [
+          { model: 'claude-opus-4-7', provider: 'Anthropic', available: true },
+          { model: 'gpt-6.1-sol', provider: 'local-gemini', available: false },
+        ],
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok && result.frame.ev === 'models') {
+      expect(result.frame.routes).toEqual([
+        { model: 'claude-opus-4-7', provider: 'Anthropic', available: true },
+        { model: 'gpt-6.1-sol', provider: 'local-gemini', available: false },
+      ]);
+    }
+  });
+
+  it('carries the cached observation flag', () => {
+    const result = decodeFrame(
+      JSON.stringify({
+        v: PROTOCOL_VERSION,
+        ev: 'context_snapshot',
+        session_id: 's1',
+        attachment_id: 'att_1',
+        used_tokens: 29198,
+        limit_tokens: 1000000,
+        basis: 'last_request',
+        model: 'gpt-6.1-sol',
+        observed_at_ms: 1,
+        cached: true,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok && result.frame.ev === 'context_snapshot') {
+      expect(result.frame.cached).toBe(true);
+      expect(result.frame.used_tokens).toBe(29198);
+    }
+  });
+});

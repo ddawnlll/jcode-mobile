@@ -24,6 +24,8 @@ export type TransportState = 'idle' | 'connecting' | 'open' | 'closed';
 export interface MobileClientEvents {
   onEvent: (event: ServerEvent & { reply_to?: number }) => void;
   onState: (state: TransportState, detail?: string) => void;
+  /** A server frame the app could not decode; never silently ignored. */
+  onDecodeError?: (reason: string, detail?: string) => void;
 }
 
 interface PendingRequest {
@@ -164,7 +166,13 @@ export class MobileClient {
         // Transport is open; protocol readiness waits for hello_ok.
         this.setState('open');
         this.requestInternal(
-          { req: 'hello', min_version: 1, max_version: 1, client: 'jcode-mobile/0.1.4' },
+          {
+            req: 'hello',
+            min_version: 1,
+            max_version: 1,
+            client: 'jcode-mobile/0.2.2',
+            max_frame_bytes: budgets.maxFrameBytes,
+          },
           timeoutMs,
           {},
           true,
@@ -196,7 +204,12 @@ export class MobileClient {
         if (this.socket !== socket || epoch !== this.socketEpoch) return;
         this.lastReceivedAt = Date.now();
         const result = decodeFrame(String(message.data));
-        if (!result.ok) return;
+        if (!result.ok) {
+          // A dropped reconciliation frame must be visible: reporting a
+          // healthy socket while discarding history is dishonest (HIST-1).
+          this.events.onDecodeError?.(result.reason, result.detail);
+          return;
+        }
         const frame = result.frame;
         if (typeof frame.reply_to === 'number') {
           const pending = this.pending.get(frame.reply_to);

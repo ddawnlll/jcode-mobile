@@ -1,6 +1,6 @@
 {
   "name": "jcode-mobile",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "main": "index.tsx",
   "packageManager": "bun@1.4.4",
@@ -30,7 +30,7 @@
     "check": "bun run typecheck && bun run lint && bun run test",
     "build:android:release": "bash scripts/build-android-release.sh",
     "build:ios:simulator": "bash scripts/build-ios-simulator.sh",
-    "postinstall": "bun --bun scripts/patch-expo-modules-jsi.js"
+    "postinstall": "bun --bun scripts/patch-expo-modules-jsi.js && bun --bun scripts/patch-metro-hermes-parser.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",

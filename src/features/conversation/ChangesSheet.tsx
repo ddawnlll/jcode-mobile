@@ -28,7 +28,7 @@ export function ChangesSheet({
               Changes
             </Text>
             <Text variant="small" color="muted" style={{ marginTop: space.xxs }}>
-              Confirmed tool-reported edits only
+              Live tool-reported edits; history without a success bit stays an attempt
             </Text>
           </View>
           <TextAction label="Close" onPress={onClose} color="muted" />
@@ -61,6 +61,7 @@ export function ChangesSheet({
                         {change.path}
                       </Text>
                       <Text variant="caption" color="muted">
+                        {change.status === 'attempted' ? 'Attempted ' : ''}
                         {change.operation}
                         {change.evidence === 'diff'
                           ? ` · +${change.added ?? 0} −${change.removed ?? 0}`

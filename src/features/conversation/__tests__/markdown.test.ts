@@ -87,3 +87,26 @@ describe('parseMarkdown', () => {
     expect(beyond.blocks.some((block) => block.type === 'math_block')).toBe(false);
   });
 });
+
+describe('0.2.2 Markdown regressions', () => {
+  it('reports an unfinished fence nested inside a quote', () => {
+    const document = parseMarkdown('> ```ts\n> const x = 1');
+    expect(document.provisional).toBe(true);
+    const quote = document.blocks.find((block) => block.type === 'quote');
+    expect(quote).toBeTruthy();
+    if (quote?.type !== 'quote') return;
+    expect(quote.blocks[0]).toMatchObject({ type: 'code', closed: false });
+  });
+
+  it('keeps an ordered list that starts at zero', () => {
+    const document = parseMarkdown('0. zero\n1. one');
+    expect(document.blocks[0]).toMatchObject({ type: 'list', ordered: true, start: 0 });
+  });
+
+  it('renders footnote definitions only in the footnote section', () => {
+    const document = parseMarkdown('Text with a note.[^a]\n\n[^a]: The note body.');
+    expect(document.blocks.some((block) => block.type === 'paragraph' && block.spans.some((span) => span.type === 'text' && span.text.includes('The note body')))).toBe(false);
+    expect(document.footnotes).toHaveLength(1);
+    expect(document.footnotes[0].label).toBe('a');
+  });
+});

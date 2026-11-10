@@ -10,7 +10,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'JCode Mobile',
   slug: 'jcode-mobile',
-  version: '0.2.1',
+  version: '0.2.2',
   orientation: 'portrait',
   scheme: 'jcodemobile',
   userInterfaceStyle: 'automatic',
@@ -18,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: 'com.jcodemobile.app',
-    buildNumber: '3',
+    buildNumber: '4',
     infoPlist: {
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: false,
@@ -33,7 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.jcodemobile.app',
-    versionCode: 3,
+    versionCode: 4,
     softwareKeyboardLayoutMode: 'resize',
     predictiveBackGestureEnabled: true,
     adaptiveIcon: {

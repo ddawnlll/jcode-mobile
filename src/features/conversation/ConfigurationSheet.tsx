@@ -19,10 +19,13 @@ export function ConfigurationSheet({
 }) {
   const { colors } = useTheme();
   const config = useAppStore((state) => state.conversation.config);
+  const capabilities = useAppStore((state) => state.conversation.capabilities);
   const working = useAppStore((state) => state.conversation.execution.kind === 'working');
+  const supported = capabilities.includes('session_config');
   const [models, setModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [provider, setProvider] = useState<string>('all');
   const [model, setModel] = useState<string | null>(config.model);
   const [effort, setEffort] = useState<string | null>(config.effort);
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +42,33 @@ export function ConfigurationSheet({
       .finally(() => setLoading(false));
   }, [visible, config.model, config.effort]);
 
+  const providers = useMemo(() => {
+    const names = [...new Set(config.routes.map((route) => route.provider))];
+    return names.sort((a, b) => a.localeCompare(b));
+  }, [config.routes]);
+
+  const providerFor = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const route of config.routes) {
+      map.set(route.model, [...(map.get(route.model) ?? []), route.provider]);
+    }
+    return map;
+  }, [config.routes]);
+
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return models;
-    return models.filter((entry) => entry.toLowerCase().includes(needle));
-  }, [models, query]);
+    return models.filter((entry) => {
+      if (needle && !entry.toLowerCase().includes(needle)) return false;
+      if (provider === 'all') return true;
+      const routes = config.routes.filter((route) => route.model === entry);
+      return routes.length === 0 || routes.some((route) => route.provider === provider);
+    });
+  }, [config.routes, models, provider, query]);
+
+  const effortOptions = useMemo(() => {
+    if (model && config.effortsByModel[model]?.length) return config.effortsByModel[model];
+    return config.efforts;
+  }, [config.efforts, config.effortsByModel, model]);
 
   const apply = async () => {
     setError(null);
@@ -75,6 +100,43 @@ export function ConfigurationSheet({
             This turn is running. Configuration is not changed mid-turn.
           </Text>
         ) : null}
+        {!supported ? (
+          <Text variant="small" color="warning" style={{ marginTop: space.xs }}>
+            This server adapter does not advertise session configuration. Update the adapter on
+            the server to 0.2.2 or later; the app will not pretend a change was applied.
+          </Text>
+        ) : null}
+        {providers.length > 1 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.providerRow}
+          >
+            {['all', ...providers].map((name) => {
+              const selected = provider === name;
+              return (
+                <Pressable
+                  key={name}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected, checked: selected }}
+                  aria-checked={selected}
+                  accessibilityLabel={`Provider ${name === 'all' ? 'All' : name}`}
+                  onPress={() => setProvider(name)}
+                  style={[
+                    styles.provider,
+                    {
+                      borderColor: selected ? colors.brand : colors.line,
+                      backgroundColor: selected ? colors.raised : colors.surface,
+                    },
+                  ]}
+                  testID={`provider-${name}`}
+                >
+                  <Text variant="caption">{name === 'all' ? 'All' : name}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
         <View style={[styles.search, { borderColor: colors.control, backgroundColor: colors.surface }]}>
           <SearchIcon size={18} color={colors.muted} />
           <TextInput
@@ -95,7 +157,9 @@ export function ConfigurationSheet({
             </Text>
           ) : filtered.length === 0 ? (
             <Text variant="small" color="muted" style={{ paddingVertical: space.md }}>
-              No models reported by this server.
+              {models.length === 0
+                ? 'No models reported by this server yet. Reconnect or retry.'
+                : 'No model matches this search and provider.'}
             </Text>
           ) : (
             filtered.map((entry) => {
@@ -117,6 +181,11 @@ export function ConfigurationSheet({
                   <Text variant="body" style={{ flex: 1 }} numberOfLines={2}>
                     {entry}
                   </Text>
+                  {providerFor.get(entry)?.length ? (
+                    <Text variant="caption" color="muted" numberOfLines={1}>
+                      {providerFor.get(entry)!.join(', ')}
+                    </Text>
+                  ) : null}
                   {selected ? <CheckIcon size={18} color={colors.brand} /> : null}
                 </Pressable>
               );
@@ -127,13 +196,13 @@ export function ConfigurationSheet({
         <Text variant="small" color="muted" style={{ marginTop: space.md }}>
           Effort for this model
         </Text>
-        {config.efforts.length === 0 ? (
+        {effortOptions.length === 0 ? (
           <Text variant="small" color="muted" style={{ marginTop: space.xs }}>
             Effort options unavailable for this route.
           </Text>
         ) : (
           <View style={styles.effortRow}>
-            {config.efforts.map((entry) => (
+            {effortOptions.map((entry) => (
               <Pressable
                 key={entry}
                 accessibilityRole="radio"
@@ -159,6 +228,7 @@ export function ConfigurationSheet({
           label={config.applying ? 'Applying…' : 'Apply'}
           fullWidth
           loading={config.applying}
+          disabled={!supported || working}
           onPress={() => void apply()}
           style={{ marginTop: space.md }}
           testID="configuration-apply"
@@ -200,6 +270,15 @@ const styles = StyleSheet.create({
     gap: space.sm,
   },
   effortRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginTop: space.xs },
+  providerRow: { flexDirection: 'row', gap: space.xxs, marginTop: space.sm },
+  provider: {
+    minHeight: 40,
+    paddingHorizontal: space.sm,
+    borderWidth: 1,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   effort: {
     minHeight: target,
     minWidth: 72,

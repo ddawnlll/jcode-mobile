@@ -58,7 +58,8 @@ type ConversationItem =
   | { kind: 'seam'; key: string; count: number | null }
   | { kind: 'message'; key: string; message: HistoryMessage; roleStart: boolean }
   | { kind: 'delivery'; key: string; record: DeliveryRecord }
-  | { kind: 'provisional'; key: string }
+  | { kind: 'provisional'; key: string; text: string; streaming: boolean }
+  | { kind: 'notice'; key: string; message: string }
   | { kind: 'error'; key: string; message: string };
 
 const DELIVERY_LABELS: Record<DeliveryRecord['state'], string> = {
@@ -212,18 +213,28 @@ export function ConversationScreen() {
       result.push({ kind: 'seam', key: `seam-${seamIndex}`, count: conversation.seam?.count ?? null });
     }
     for (const record of conversation.delivery) {
-      if (record.state === 'accepted') continue;
       if (record.guidance && record.state === 'added') continue;
       result.push({ kind: 'delivery', key: `d-${record.clientMessageId}`, record });
     }
+    for (const block of conversation.provisionalBlocks) {
+      result.push({ kind: 'provisional', key: block.id, text: block.text, streaming: false });
+    }
     if (conversation.provisionalText) {
-      result.push({ kind: 'provisional', key: 'provisional' });
+      result.push({
+        kind: 'provisional',
+        key: 'provisional',
+        text: conversation.provisionalText,
+        streaming: true,
+      });
+    }
+    if (conversation.imageNotice) {
+      result.push({ kind: 'notice', key: 'image-notice', message: conversation.imageNotice });
     }
     if (conversation.lastError) {
       result.push({ kind: 'error', key: 'error', message: conversation.lastError });
     }
     return result;
-  }, [messages, conversation.seam, conversation.delivery, conversation.provisionalText, conversation.totalMessages, conversation.hasOlder, conversation.lastError]);
+  }, [messages, conversation.seam, conversation.delivery, conversation.provisionalText, conversation.provisionalBlocks, conversation.imageNotice, conversation.totalMessages, conversation.hasOlder, conversation.lastError]);
 
   const scrollToEnd = useCallback((animated = true) => {
     requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated }));
@@ -268,8 +279,22 @@ export function ConversationScreen() {
   }, [messages.length, conversation.seam, conversation.totalMessages, items, scrollToEnd]);
 
   useEffect(() => {
-    if (nearBottomRef.current) scrollToEnd(true);
-  }, [conversation.totalMessages, conversation.provisionalText, conversation.delivery.length, scrollToEnd]);
+    if (!nearBottomRef.current) return;
+    // Streaming updates do not animate: a 10 Hz animated scroll fights the
+    // coalesced flush budget (TXT-4).
+    const streaming =
+      !!conversation.provisionalText ||
+      conversation.provisionalBlocks.length > 0 ||
+      conversation.execution.kind === 'working';
+    scrollToEnd(!streaming);
+  }, [
+    conversation.totalMessages,
+    conversation.provisionalText,
+    conversation.provisionalBlocks.length,
+    conversation.delivery.length,
+    conversation.execution.kind,
+    scrollToEnd,
+  ]);
 
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -389,8 +414,15 @@ export function ConversationScreen() {
           <Text variant="caption" color="muted" style={{ marginBottom: space.xxs }}>
             jcode
           </Text>
-          <RichMarkdown content={conversation.provisionalText} streaming />
+          <RichMarkdown content={item.text} streaming={item.streaming} />
         </View>
+      );
+    }
+    if (item.kind === 'notice') {
+      return (
+        <Text variant="caption" color="muted" style={{ marginTop: space.sm }}>
+          {item.message}
+        </Text>
       );
     }
     return (
@@ -612,7 +644,7 @@ export function ConversationScreen() {
             accessibilityRole="button"
             accessibilityLabel="New activity. Go to the latest unread boundary"
             onPress={() => {
-              const index = Math.max(0, items.findIndex((item) => item.kind === 'seam'));
+              const index = items.findIndex((item) => item.kind === 'seam');
               if (index >= 0) listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
               else scrollToEnd(true);
               controller.setNearBottom(true);
@@ -678,6 +710,8 @@ export function ConversationScreen() {
                 effort={conversation.config.effort}
                 confirmed={conversation.config.modelConfirmed}
                 context={conversation.context}
+                modelSupported={conversation.capabilities.includes('session_config')}
+                contextSupported={conversation.capabilities.includes('context_snapshot')}
                 onModel={() => setConfigVisible(true)}
                 onContext={() => {
                   setContextVisible(true);
@@ -696,7 +730,12 @@ export function ConversationScreen() {
         model={conversation.config.model}
         onNewSession={() => {
           setContextVisible(false);
-          navigation.navigate('Sessions');
+          // `navigate` to a route already beneath this screen can leave the
+          // conversation focused; `popTo` explicitly returns with the intent.
+          navigation.popTo('Sessions', {
+            scope: conversation.workingDir ?? undefined,
+            newSession: true,
+          });
         }}
       />
 
@@ -946,6 +985,8 @@ function ConfigStrip({
   effort,
   confirmed,
   context,
+  modelSupported,
+  contextSupported,
   onModel,
   onContext,
 }: {
@@ -953,6 +994,8 @@ function ConfigStrip({
   effort: string | null;
   confirmed: boolean;
   context: import('../../core/state/store').ContextSnapshot | null;
+  modelSupported: boolean;
+  contextSupported: boolean;
   onModel: () => void;
   onContext: () => void;
 }) {
@@ -971,7 +1014,13 @@ function ConfigStrip({
         testID="model-button"
       >
         <Text variant="caption" color="muted" numberOfLines={1}>
-          {confirmed && model ? model : model ? `${model} · pending` : 'Model unavailable'}
+          {!modelSupported
+            ? 'Model · update adapter'
+            : confirmed && model
+              ? model
+              : model
+                ? `${model} · pending`
+                : 'Model unavailable'}
         </Text>
         {effort ? (
           <Text variant="caption" color="muted">
@@ -994,7 +1043,7 @@ function ConfigStrip({
           Context
         </Text>
         <Text variant="caption" color={percent !== null && percent >= 90 ? 'error' : 'brand'}>
-          {percent !== null ? `${percent}%` : 'Unknown'}
+          {!contextSupported ? 'Unsupported' : percent !== null ? `${percent}%` : 'Unknown'}
         </Text>
       </Pressable>
     </View>
@@ -1076,7 +1125,7 @@ function DeliveryRow({
         ]}
       >
         <Text variant="caption" color="muted" style={{ marginBottom: space.xxs }}>
-          {record.guidance ? 'Instruction' : 'You'}
+          {record.guidance ? 'Instruction' : record.peer ? 'Another device' : 'You'}
         </Text>
         <Text variant="body">{record.content}</Text>
         <View style={styles.deliveryFooter}>

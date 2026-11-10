@@ -50,18 +50,13 @@ export async function createSession(
 ): Promise<void> {
   await openNewSessionSheet(page);
 
-  // The form refuses a relative folder before it touches the server.
-  await page.getByRole('button', { name: 'Start session' }).click();
-  await expect(
-    page.getByText('Enter an absolute folder path on the server, starting with /.'),
-  ).toBeVisible();
-
+  // Creating a session only needs the folder. The conversation opens empty
+  // and the first message is typed in its composer.
   await page.getByRole('textbox', { name: 'Folder on server' }).fill(folder);
-  await page.getByRole('textbox', { name: 'First instruction' }).fill(instruction);
-  await page.getByRole('button', { name: 'Start session' }).click();
-  await expect(page.getByRole('button', { name: 'Confirm and send' })).toBeVisible({
-    timeout: 45_000,
-  });
-  await page.getByRole('button', { name: 'Confirm and send' }).click();
+  await page.getByTestId('create-session').click();
   await expectConversation(page);
+  if (instruction.trim()) {
+    await page.getByTestId('composer-input').fill(instruction);
+    await page.getByTestId('composer-send').click();
+  }
 }

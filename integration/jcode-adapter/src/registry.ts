@@ -5,9 +5,8 @@
  * the issued 64-hex token, exactly like the gateway.
  */
 import { randomBytes } from 'node:crypto';
+import { readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
-
 import type { AdapterConfig } from './config.ts';
 import { log, redact } from './config.ts';
 import { readJson, sha256Hex, writeJsonAtomic } from './util.ts';
@@ -41,6 +40,12 @@ export class DeviceRegistry {
   private readonly config: AdapterConfig;
   private writeChain: Promise<void> = Promise.resolve();
   private attempts = new Map<string, { count: number; resetAt: number }>();
+  /** Sync cache for the outbound revocation gate (AUTH-1). */
+  private syncCache: {
+    mtimeMs: number;
+    size: number;
+    byHash: Map<string, PairedDevice>;
+  } | null = null;
 
   constructor(config: AdapterConfig) {
     this.config = config;
@@ -82,7 +87,25 @@ export class DeviceRegistry {
 
   validateToken(token: string): PairedDevice | null {
     if (!/^[0-9a-f]{64}$/.test(token)) return null;
-    return null; // replaced by validateTokenAsync
+    try {
+      const info = statSync(this.config.devicesPath);
+      if (
+        this.syncCache &&
+        this.syncCache.mtimeMs === info.mtimeMs &&
+        this.syncCache.size === info.size
+      ) {
+        return this.syncCache.byHash.get(`sha256:${sha256Hex(token)}`) ?? null;
+      }
+      const parsed = JSON.parse(readFileSync(this.config.devicesPath, 'utf8')) as Partial<RegistryFile>;
+      const byHash = new Map<string, PairedDevice>();
+      for (const device of Array.isArray(parsed.devices) ? parsed.devices : []) {
+        if (device && typeof device.token_hash === 'string') byHash.set(device.token_hash, device);
+      }
+      this.syncCache = { mtimeMs: info.mtimeMs, size: info.size, byHash };
+      return byHash.get(`sha256:${sha256Hex(token)}`) ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async validateTokenAsync(token: string): Promise<PairedDevice | null> {

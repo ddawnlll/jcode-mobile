@@ -285,6 +285,8 @@ function resetStore(): void {
       serverLabel: '',
       host: '',
       daemonVersion: null,
+      adapterVersion: null,
+      capabilityGap: [],
       serverName: null,
       capabilities: [],
       error: null,
@@ -1181,5 +1183,185 @@ describe('new-session setup ownership', () => {
     expect(client.requests.some((request) => request.req === 'set_model')).toBe(false);
     expect(client.requests.some((request) => request.req === 'set_effort')).toBe(false);
     expect(store.get().conversation.config.model).toBe('server-model');
+  });
+});
+
+describe('0.2.2 streaming and reconciliation regressions', () => {
+  function primeConversation(controller: AppController) {
+    (controller as unknown as { profile: typeof A }).profile = A;
+    store.setState({
+      profileId: A.id,
+      conversation: {
+        ...resetConversation({
+          serverId: A.id,
+          sessionId: 'S',
+          attachmentId: 'att_1',
+          capabilities: [
+            'mobile_continuation',
+            'session_config',
+            'context_snapshot',
+            'identity_fencing',
+          ],
+        }),
+        messages: [{ index: 0, role: 'user', content: 'prompt' }],
+        totalMessages: 1,
+        execution: { kind: 'working', label: 'Working', observedAt: Date.now(), turnId: 1 },
+      },
+    });
+    return controller;
+  }
+
+  function frame(controller: AppController, event: Record<string, unknown>) {
+    (controller as unknown as { onFrame: (event: Record<string, unknown>) => void }).onFrame(event);
+  }
+
+  it('keeps separate assistant steps across a tool call and history refresh', async () => {
+    const controller = primeConversation(makeController());
+    const base = { session_id: 'S', attachment_id: 'att_1', turn_id: 1 };
+
+    frame(controller, { ev: 'text_delta', ...base, text: '# Heading' });
+    frame(controller, { ev: 'text_done', ...base });
+    jest.advanceTimersByTime(150);
+    expect(store.get().conversation.provisionalBlocks).toHaveLength(1);
+    expect(store.get().conversation.provisionalBlocks[0].text).toBe('# Heading');
+
+    // Committed history arrives mid-turn: it must not erase the live step.
+    frame(controller, {
+      ev: 'history',
+      session_id: 'S',
+      attachment_id: 'att_1',
+      messages: [{ index: 0, role: 'user', content: 'prompt' }],
+      base_index: 0,
+      total_messages: 1,
+      tail_fingerprint: '',
+      accepted_client_ids: [],
+    });
+    await flush();
+    expect(store.get().conversation.provisionalBlocks).toHaveLength(1);
+
+    frame(controller, { ev: 'tool_start', ...base, call_id: 'call_1', name: 'bash' });
+    frame(controller, { ev: 'tool_done', ...base, call_id: 'call_1', name: 'bash', output: 'ok' });
+    frame(controller, { ev: 'text_delta', ...base, text: 'Second answer' });
+    frame(controller, { ev: 'message_end', ...base, stop_reason: 'end_turn' });
+    jest.advanceTimersByTime(150);
+
+    expect(store.get().conversation.provisionalBlocks.map((block) => block.text)).toEqual([
+      '# Heading',
+      'Second answer',
+    ]);
+
+    frame(controller, { ev: 'turn_done', ...base });
+    jest.advanceTimersByTime(150);
+    const assistant = store.get().conversation.messages.filter((message) => message.role === 'assistant');
+    expect(assistant.map((message) => message.content)).toEqual(['# Heading', 'Second answer']);
+    expect(store.get().conversation.provisionalBlocks).toHaveLength(0);
+  });
+
+  it('ignores stream frames from another session even with the same attachment id', () => {
+    const controller = primeConversation(makeController());
+    frame(controller, {
+      ev: 'text_delta',
+      session_id: 'OTHER',
+      attachment_id: 'att_1',
+      turn_id: 9,
+      text: 'wrong session',
+    });
+    jest.advanceTimersByTime(150);
+    expect(store.get().conversation.provisionalText).toBe('');
+    expect(store.get().conversation.provisionalBlocks).toHaveLength(0);
+  });
+
+  it('keeps an accepted prompt until committed history contains it', async () => {
+    const controller = primeConversation(makeController());
+    store.setState((state) => ({
+      conversation: {
+        ...state.conversation,
+        delivery: [
+          {
+            clientMessageId: 'cm_1',
+            content: 'my prompt',
+            state: 'accepted',
+            createdAt: Date.now(),
+            messageIndex: 1,
+          },
+        ],
+      },
+    }));
+    expect(store.get().conversation.delivery).toHaveLength(1);
+    frame(controller, {
+      ev: 'history',
+      session_id: 'S',
+      attachment_id: 'att_1',
+      messages: [
+        { index: 0, role: 'user', content: 'prompt' },
+        { index: 1, role: 'user', content: 'my prompt' },
+      ],
+      base_index: 0,
+      total_messages: 2,
+      tail_fingerprint: '',
+      accepted_client_ids: ['cm_1'],
+    });
+    await flush();
+    expect(store.get().conversation.delivery).toHaveLength(0);
+  });
+
+  it('ignores a plan reply for a different session and keeps durations per reasoning step', () => {
+    const controller = primeConversation(makeController());
+    const base = { session_id: 'S', attachment_id: 'att_1', turn_id: 1 };
+    frame(controller, {
+      ev: 'todo_state',
+      session_id: 'OTHER',
+      state: { todos: [{ id: '1', content: 'wrong', status: 'pending' }] },
+      observed_at_ms: Date.now(),
+    });
+    expect(store.get().conversation.plan).toBeNull();
+
+    frame(controller, { ev: 'reasoning_delta', ...base, text: 'first thought' });
+    jest.advanceTimersByTime(150);
+    frame(controller, { ev: 'reasoning_done', ...base, duration_secs: 3 });
+    frame(controller, { ev: 'text_delta', ...base, text: 'answer' });
+    jest.advanceTimersByTime(150);
+    expect(store.get().conversation.reasoning).toBe('first thought');
+    expect(store.get().conversation.reasoningDurationSecs).toBe(3);
+
+    frame(controller, { ev: 'reasoning_delta', ...base, text: 'second thought' });
+    jest.advanceTimersByTime(150);
+    expect(store.get().conversation.reasoning).toBe('second thought');
+    expect(store.get().conversation.reasoningDurationSecs).toBeNull();
+  });
+});
+
+describe('0.2.2 session creation', () => {
+  it('accepts the created session attach over a stale attach fence', () => {
+    const controller = makeController();
+    store.setState({
+      conversation: resetConversation({
+        serverId: A.id,
+        sessionId: 'OLD',
+        attachmentId: 'att_old',
+      }),
+    });
+    const internals = controller as unknown as {
+      expectedAttachSessionId: string | null;
+      creatingSession: boolean;
+      onFrame: (event: Record<string, unknown>) => void;
+    };
+    // A previous session attach left its fence armed; the create intent owns
+    // the next attached frame.
+    internals.expectedAttachSessionId = 'OLD';
+    internals.creatingSession = true;
+    internals.onFrame({
+      ev: 'attached',
+      session: {
+        session_id: 'NEW',
+        title: 'New session',
+        working_dir: '/project',
+        live_state: 'ready',
+      },
+      attachment_id: 'att_new',
+      capabilities: ['mobile_continuation'],
+      continuation: true,
+    });
+    expect(store.get().conversation.sessionId).toBe('NEW');
   });
 });

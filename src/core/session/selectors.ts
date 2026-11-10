@@ -186,17 +186,20 @@ function changeFromInput(
 export function deriveChanges(messages: HistoryMessage[], tools: ToolRow[]): ChangeRecord[] {
   const changes: ChangeRecord[] = [];
   const seen = new Set<string>();
+  const liveCallIds = new Set(tools.map((tool) => tool.callId));
   for (const tool of tools) {
     if (tool.state === 'failed' || tool.state === 'running') continue;
     const change = changeFromInput(`t-${tool.callId}`, tool.callId, tool.name, tool.input);
     if (change && !seen.has(change.callId)) {
       seen.add(change.callId);
-      changes.push(change);
+      changes.push({ ...change, status: 'confirmed' });
     }
   }
   for (const message of messages) {
     if (!message.tool_data) continue;
-    if (seen.has(message.tool_data.id)) continue;
+    // A live row (including a failed one) owns this call. History must never
+    // re-add a failed edit as if it succeeded (WORK-1).
+    if (liveCallIds.has(message.tool_data.id) || seen.has(message.tool_data.id)) continue;
     const change = changeFromInput(
       `h-${message.index}`,
       message.tool_data.id,
@@ -205,7 +208,8 @@ export function deriveChanges(messages: HistoryMessage[], tools: ToolRow[]): Cha
     );
     if (change) {
       seen.add(change.callId);
-      changes.push(change);
+      // Persisted history has no success bit: label it as an attempt.
+      changes.push({ ...change, status: 'attempted' });
     }
   }
   return changes.slice(-80);
@@ -226,14 +230,26 @@ export function attachHistoryImages(
   for (const image of images) {
     let target: HistoryMessage | undefined;
     if (typeof image.history_message_index === 'number') {
-      const boundary = Math.max(0, Math.min(copy.length - 1, image.history_message_index - 1));
-      target = copy[boundary];
+      // JCode boundaries are absolute transcript positions, not local window
+      // indexes, and the image belongs to the row immediately before the
+      // boundary. Outside this window it stays unplaced rather than being
+      // clamped onto an unrelated answer (HIST-2).
+      const wanted = image.history_message_index - 1;
+      target = copy.find((message) => message.index === wanted);
     } else if (image.anchor?.kind === 'user_prompt' && typeof image.anchor.ordinal === 'number') {
-      target = userMessages[image.anchor.ordinal - 1];
+      // JCode prompt ordinals are zero-based.
+      target = userMessages[image.anchor.ordinal];
     } else if (image.anchor?.kind === 'tool_call' && typeof image.anchor.id === 'string') {
       target = copy.find((message) => message.tool_data?.id === image.anchor?.id);
     }
-    if (!target) target = copy[copy.length - 1];
+    if (!target) {
+      const hasExplicitAnchor =
+        typeof image.history_message_index === 'number' || image.anchor != null;
+      // The server's documented fallback is the transcript tail only when the
+      // image carried no anchor at all.
+      if (hasExplicitAnchor) continue;
+      target = copy[copy.length - 1];
+    }
     if (!target) continue;
     target.images = [...(target.images ?? []), image];
   }

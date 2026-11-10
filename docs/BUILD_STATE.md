@@ -1,6 +1,6 @@
 # Build state
 
-Updated: 2026-11-09
+Updated: 2026-11-10
 
 ## Current state
 
@@ -8,7 +8,7 @@ Updated: 2026-11-09
 | --- | --- |
 | Branch | `main` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.2.1 |
+| App version | 0.2.2 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
@@ -36,12 +36,26 @@ Updated: 2026-11-09
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
+| `artifacts/jcode-mobile-0.2.2-ios-simulator.app.zip` | 29 MiB | `33269e4e09d34d3da5d35653451172c4f49225edee0e22966d8343c84e8e3859` |
 | `artifacts/jcode-mobile-0.2.1-android-release.apk` | 62.7 MiB (65,709,266 B) | `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
 | `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
 | `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
 | `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
 
 The 0.2.1 APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. It is attached to release `v0.2.1`. The 0.2.0 APK remains the previous release. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
+
+## v0.2.2 repair release
+
+`docs/V0_2_2_VERIFICATION.md` records the audit repair matrix, the follow-up
+fixes from the published builds, and native simulator evidence.
+
+| Check | Result |
+| --- | --- |
+| `bun run check` | PASS, 11 suites / 99 tests |
+| `bun run adapter:test` | PASS, 27 tests |
+| `bun run e2e` | PASS, 32/32 on clean isolated staging |
+| iOS Release Simulator | PASS, ad-hoc signed, paired, context/model/projects/direct create verified |
+| Android release APK | NOT_RUN, no Android SDK/JDK on this host |
 
 ## v0.2.1 welcome release
 

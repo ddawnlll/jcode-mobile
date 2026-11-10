@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type {
   HistoryMessage,
+  ModelRoute,
   SessionInfo,
   TodoSnapshot,
 } from '../protocol/frames';
@@ -39,7 +40,15 @@ export interface DeliveryRecord {
   error?: string;
   createdAt: number;
   guidance?: boolean;
+  /** Another client's prompt, held until committed history reconciles it. */
+  peer?: boolean;
   images?: ComposerImage[];
+}
+
+/** One completed assistant message within the live turn. */
+export interface ProvisionalBlock {
+  id: string;
+  text: string;
 }
 
 export interface ToolRow {
@@ -80,6 +89,8 @@ export interface SessionConfigState {
   model: string | null;
   effort: string | null;
   efforts: string[];
+  effortsByModel: Record<string, string[]>;
+  routes: ModelRoute[];
   modelConfirmed: boolean;
   effortConfirmed: boolean;
   source: 'server' | 'default' | 'pending' | 'unknown';
@@ -109,6 +120,8 @@ export interface ChangeRecord {
   removed?: number;
   diff?: string;
   evidence: 'diff' | 'path';
+  /** Live tool_done is confirmed; reconstructed history is only an attempt. */
+  status?: 'confirmed' | 'attempted';
 }
 
 export interface ComposerImage {
@@ -134,6 +147,8 @@ export interface ConversationState {
   loadingOlder: boolean;
   hasOlder: boolean;
   provisionalText: string;
+  /** Assistant steps already closed by text_done within this turn. */
+  provisionalBlocks: ProvisionalBlock[];
   reasoning: string;
   /** Evidenced thinking phase; separate from ordinary tool work. */
   reasoningPhase: 'none' | 'thinking' | 'working';
@@ -155,6 +170,10 @@ export interface ConversationState {
   interrupted: boolean;
   recovery: { continuation_message: string; reconnect_notice?: string } | null;
   lastError: string | null;
+  /** Capabilities the attached adapter actually advertised. */
+  capabilities: string[];
+  /** Honest notice when oversized media was withheld from reconciliation. */
+  imageNotice: string | null;
 }
 
 export interface InventoryState {
@@ -185,6 +204,10 @@ export interface AppState {
     serverLabel: string;
     host: string;
     daemonVersion: string | null;
+    /** Exact adapter build reported by hello_ok/server_info. */
+    adapterVersion: string | null;
+    /** Features this build implements that the connected adapter omits. */
+    capabilityGap: string[];
     serverName: string | null;
     capabilities: string[];
     error: string | null;
@@ -228,6 +251,7 @@ const emptyConversation: ConversationState = {
   loadingOlder: false,
   hasOlder: false,
   provisionalText: '',
+  provisionalBlocks: [],
   reasoning: '',
   reasoningPhase: 'none',
   reasoningStartedAt: null,
@@ -238,6 +262,8 @@ const emptyConversation: ConversationState = {
     model: null,
     effort: null,
     efforts: [],
+    effortsByModel: {},
+    routes: [],
     modelConfirmed: false,
     effortConfirmed: false,
     source: 'unknown',
@@ -259,6 +285,8 @@ const emptyConversation: ConversationState = {
   interrupted: false,
   recovery: null,
   lastError: null,
+  capabilities: [],
+  imageNotice: null,
 };
 
 export const useAppStore = create<AppState>()((set) => ({
@@ -273,6 +301,8 @@ export const useAppStore = create<AppState>()((set) => ({
     serverLabel: '',
     host: '',
     daemonVersion: null,
+    adapterVersion: null,
+    capabilityGap: [],
     serverName: null,
     capabilities: [],
     error: null,

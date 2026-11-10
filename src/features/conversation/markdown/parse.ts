@@ -338,6 +338,7 @@ function parseBlocks(
   tokens: Token[],
   from: number,
   to: number,
+  sourceLines: string[] = [],
 ): Block[] {
   const blocks: Block[] = [];
   let index = from;
@@ -374,7 +375,7 @@ function parseBlocks(
         while (cursor < close) {
           if (tokens[cursor].type === 'list_item_open') {
             const itemClose = findClose(tokens, cursor, 'list_item_open', 'list_item_close');
-            const blocksInItem = parseBlocks(tokens, cursor + 1, itemClose);
+            const blocksInItem = parseBlocks(tokens, cursor + 1, itemClose, sourceLines);
             let task: ListItem['task'] = null;
             const first = blocksInItem[0];
             if (first?.type === 'paragraph') {
@@ -400,7 +401,8 @@ function parseBlocks(
         blocks.push({
           type: 'list',
           ordered: token.type === 'ordered_list_open',
-          start: Number(token.attrGet('start') ?? '1') || 1,
+          // `start="0"` is valid and must not collapse to 1 (TXT-3).
+          start: listStart(token),
           tight: token.hidden,
           items,
         });
@@ -409,7 +411,10 @@ function parseBlocks(
       }
       case 'blockquote_open': {
         const close = findClose(tokens, index, 'blockquote_open', 'blockquote_close');
-        blocks.push({ type: 'quote', blocks: parseBlocks(tokens, index + 1, close) });
+        blocks.push({
+          type: 'quote',
+          blocks: parseBlocks(tokens, index + 1, close, sourceLines),
+        });
         index = close + 1;
         break;
       }
@@ -419,7 +424,9 @@ function parseBlocks(
           type: 'code',
           language: (token.info ?? '').trim().split(/\s+/)[0] ?? '',
           code: token.content,
-          closed: token.type === 'fence' ? true : true,
+          // A fence nested in a quote or list can still be unfinished; report
+          // the real state instead of claiming it closed (TXT-3).
+          closed: token.type === 'fence' ? fenceIsClosed(sourceLines, token) : true,
         });
         index += 1;
         break;
@@ -477,9 +484,19 @@ function parseBlocks(
         blocks.push({ type: 'unsupported', source: token.content });
         index += 1;
         break;
-      case 'footnote_block_open':
+      case 'footnote_block_open': {
+        // Definitions belong to the footnote section only. Skipping just the
+        // markers made every definition paragraph render twice (TXT-3).
+        const close = findClose(tokens, index, 'footnote_block_open', 'footnote_block_close');
+        index = close + 1;
+        break;
+      }
+      case 'footnote_open': {
+        const close = findClose(tokens, index, 'footnote_open', 'footnote_close');
+        index = close + 1;
+        break;
+      }
       case 'footnote_block_close':
-      case 'footnote_open':
       case 'footnote_close':
       case 'footnote_anchor':
       case 'footnote_label':
@@ -493,13 +510,15 @@ function parseBlocks(
   return blocks;
 }
 
-function parseFootnotes(tokens: Token[]): FootnoteDefinition[] {
+function parseFootnotes(tokens: Token[], sourceLines: string[] = []): FootnoteDefinition[] {
   const definitions: FootnoteDefinition[] = [];
   for (let index = 0; index < tokens.length; index += 1) {
     if (tokens[index].type !== 'footnote_open') continue;
     const close = findClose(tokens, index, 'footnote_open', 'footnote_close');
-    let label = '';
-    let id = definitions.length + 1;
+    const openMeta = tokens[index].meta as { label?: string; id?: number } | null;
+    let label = typeof openMeta?.label === 'string' ? openMeta.label : '';
+    let id =
+      typeof openMeta?.id === 'number' ? openMeta.id + 1 : definitions.length + 1;
     for (let cursor = index + 1; cursor < close; cursor += 1) {
       if (tokens[cursor].type === 'footnote_label') {
         label = tokens[cursor].content;
@@ -513,7 +532,7 @@ function parseFootnotes(tokens: Token[]): FootnoteDefinition[] {
     definitions.push({
       label,
       id,
-      blocks: parseBlocks(tokens, index + 1, close),
+      blocks: parseBlocks(tokens, index + 1, close, sourceLines),
     });
   }
   return definitions;
@@ -521,25 +540,45 @@ function parseFootnotes(tokens: Token[]): FootnoteDefinition[] {
 
 export function parseMarkdown(source: string): MarkdownDocument {
   const tokens = markdown.parse(source, {});
-  const blocks = parseBlocks(tokens, 0, tokens.length);
-  const footnotes = parseFootnotes(tokens);
-  const fenceClosed = closedFence(source);
-  if (!fenceClosed) {
-    const lastCode = [...blocks].reverse().find((block) => block.type === 'code');
-    if (lastCode && lastCode.type === 'code') lastCode.closed = false;
-  }
+  const sourceLines = source.split('\n');
+  const blocks = parseBlocks(tokens, 0, tokens.length, sourceLines);
+  const footnotes = parseFootnotes(tokens, sourceLines);
+  const fenceClosed = !hasUnclosedFence(blocks);
   const provisional =
     !fenceClosed || (source.match(/\$\$/g)?.length ?? 0) % 2 !== 0;
   return { blocks, footnotes, provisional };
 }
 
-function closedFence(source: string): boolean {
-  let open = false;
-  for (const line of source.split('\n')) {
-    const trimmed = line.trimStart();
-    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) open = !open;
+function hasUnclosedFence(blocks: Block[]): boolean {
+  for (const block of blocks) {
+    if (block.type === 'code' && !block.closed) return true;
+    if (block.type === 'quote' && hasUnclosedFence(block.blocks)) return true;
+    if (block.type === 'list') {
+      for (const item of block.items) {
+        if (hasUnclosedFence(item.blocks)) return true;
+      }
+    }
   }
-  return !open;
+  return false;
+}
+
+function listStart(token: Token): number {
+  const raw = token.attrGet('start');
+  if (raw === null || raw === undefined || raw === '') return 1;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : 1;
+}
+
+/** Check the real closing line, including blockquote/list prefixes. */
+function fenceIsClosed(lines: string[], token: Token): boolean {
+  if (!token.map) return false;
+  const closing = lines[token.map[1] - 1] ?? '';
+  const marker = (token.markup ?? '```').trim();
+  if (!marker) return false;
+  const stripped = closing
+    .replace(/^\s*(?:>\s*)*/, '')
+    .replace(/^\s*/, '');
+  return stripped.startsWith(marker);
 }
 
 /** Readable projection used by Copy text; exact source stays separate. */

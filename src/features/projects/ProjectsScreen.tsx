@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button, Divider, IconButton, TextAction } from '../../design/controls';
@@ -10,7 +10,7 @@ import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
 import { basename } from '../../core/session/selectors';
 import { useAppStore, type ProjectRecord } from '../../core/state/store';
-import { NewSessionSheet } from '../newSession/NewSessionSheet';
+import { DirectoryBrowser } from '../newSession/DirectoryBrowser';
 import type { RootStackParamList } from '../../shell/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation as useTypedNavigation } from '@react-navigation/native';
@@ -22,7 +22,10 @@ export function ProjectsScreen() {
   const sessions = useAppStore((state) => state.inventory.sessions);
   const stored = useAppStore((state) => state.inventory.projects);
   const serverId = useAppStore((state) => state.profileId);
-  const [newFolder, setNewFolder] = useState<string | null>(null);
+  const [browserVisible, setBrowserVisible] = useState(false);
+  const [query, setQuery] = useState('');
+  const [startingPath, setStartingPath] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const projects = useMemo(() => {
     const map = new Map<string, ProjectRecord>();
@@ -44,6 +47,49 @@ export function ProjectsScreen() {
       return b.lastUsedAt - a.lastUsedAt;
     });
   }, [serverId, sessions, stored]);
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return projects;
+    return projects.filter(
+      (project) =>
+        project.name.toLowerCase().includes(needle) ||
+        project.path.toLowerCase().includes(needle),
+    );
+  }, [projects, query]);
+
+  const addProject = async (path: string) => {
+    const name = basename(path);
+    const now = Date.now();
+    const next = [
+      ...stored.filter((entry) => entry.path !== path),
+      {
+        id: `project-${path}`,
+        serverId: serverId ?? 'local',
+        path,
+        name,
+        pinned: false,
+        addedAt: now,
+        lastUsedAt: now,
+      },
+    ];
+    await controller.saveProjects(next);
+    setBrowserVisible(false);
+    setError(null);
+  };
+
+  const startHere = async (path: string) => {
+    setError(null);
+    setStartingPath(path);
+    const result = await controller.createSession(path, '');
+    setStartingPath(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await controller.rememberFolder(path);
+    typedNavigation.navigate('Conversation', { sessionId: result.sessionId });
+  };
 
   useEffect(() => {
     if (stored.length === 0 && projects.length > 0) {
@@ -72,27 +118,51 @@ export function ProjectsScreen() {
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + space.xxl }}>
         <View style={styles.header}>
-          <Text variant="title" accessibilityRole="header">
-            Projects
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text variant="title" accessibilityRole="header">
+              Projects
+            </Text>
+            <TextAction label="Add project" onPress={() => setBrowserVisible(true)} color="brand" />
+          </View>
           <Text variant="small" color="muted" style={{ marginTop: space.xxs }}>
             Canonical folders on this server. Pinning is local to this phone.
           </Text>
+          {projects.length > 0 ? (
+            <TextInput
+              accessibilityLabel="Search projects"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search projects"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[styles.search, { borderColor: colors.control, color: colors.ink }]}
+            />
+          ) : null}
+          {error ? (
+            <Text variant="small" color="error" style={{ marginTop: space.sm }}>
+              {error}
+            </Text>
+          ) : null}
         </View>
         <Divider />
         {projects.length === 0 ? (
           <View style={styles.empty}>
             <Text variant="body" color="muted">
-              No projects yet. Start a session with a server folder.
+              No projects yet. Add a folder on your server to start sessions there.
             </Text>
             <Button
-              label="New session"
-              onPress={() => setNewFolder('')}
+              label="Add project"
+              onPress={() => setBrowserVisible(true)}
               style={{ marginTop: space.md }}
             />
           </View>
+        ) : filtered.length === 0 ? (
+          <Text variant="small" color="muted" style={{ padding: space.lg }}>
+            No project matches “{query}”.
+          </Text>
         ) : (
-          projects.map((project) => {
+          filtered.map((project) => {
             const count = sessions.filter((session) => session.working_dir === project.path).length;
             return (
               <View key={project.path} style={styles.project}>
@@ -124,8 +194,9 @@ export function ProjectsScreen() {
                     color={project.pinned ? 'muted' : 'brand'}
                   />
                   <TextAction
-                    label="New session here"
-                    onPress={() => setNewFolder(project.path)}
+                    label={startingPath === project.path ? 'Starting…' : 'New session here'}
+                    onPress={() => void startHere(project.path)}
+                    color="brand"
                   />
                 </View>
               </View>
@@ -133,14 +204,11 @@ export function ProjectsScreen() {
           })
         )}
       </ScrollView>
-      <NewSessionSheet
-        visible={newFolder !== null}
-        initialFolder={newFolder ?? undefined}
-        onClose={() => setNewFolder(null)}
-        onStarted={(sessionId) => {
-          setNewFolder(null);
-          typedNavigation.navigate('Conversation', { sessionId });
-        }}
+      <DirectoryBrowser
+        visible={browserVisible}
+        initialPath={stored[0]?.path}
+        onClose={() => setBrowserVisible(false)}
+        onSelect={(path) => void addProject(path)}
       />
     </View>
   );
@@ -156,6 +224,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.xs,
   },
   header: { paddingHorizontal: space.lg, paddingVertical: space.md },
+  search: {
+    minHeight: target,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: space.sm,
+    marginTop: space.sm,
+    fontSize: 16,
+    fontFamily: 'HankenGrotesk-Regular',
+  },
   empty: { padding: space.xl, alignItems: 'center' },
   project: {
     paddingHorizontal: space.lg,

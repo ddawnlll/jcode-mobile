@@ -65,12 +65,19 @@ export function Composer({
         mediaTypes: ['images'],
         allowsMultipleSelection: true,
         selectionLimit: Math.max(1, 4 - images.length),
-        quality: 0.6,
+        quality: 0.5,
         base64: true,
       });
       if (result.canceled) return;
+      let skippedLarge = false;
       const next = result.assets.slice(0, 4 - images.length).flatMap((asset) => {
         if (!asset.uri) return [];
+        // Base64 inflates the payload; a single huge original can exhaust the
+        // phone or the adapter frame budget. Keep the picker responsive.
+        if (typeof asset.fileSize === 'number' && asset.fileSize > 6 * 1024 * 1024) {
+          skippedLarge = true;
+          return [];
+        }
         return [
           {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -83,6 +90,9 @@ export function Composer({
         ];
       });
       if (next.length) onImagesChange([...images, ...next].slice(0, 4));
+      if (skippedLarge) {
+        setError('One image was too large to attach. Choose a smaller image or screenshot.');
+      }
     } catch {
       setError('Could not open the image picker.');
     } finally {

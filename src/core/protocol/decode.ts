@@ -11,10 +11,12 @@ import {
   type HistoryMessage,
   type MessageImage,
   type DirectoryEntry,
+  type ModelRoute,
   type ServerEvent,
   type SessionInfo,
   type TodoSnapshot,
 } from './frames';
+import { splitLegacyReasoning } from './reasoning';
 
 export type DecodeResult =
   | { ok: true; frame: ServerEvent & { reply_to?: number } }
@@ -51,6 +53,30 @@ function bool(value: unknown): boolean | undefined {
 }
 function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function decodeStringListMap(value: unknown): Record<string, string[]> | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const out: Record<string, string[]> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (Array.isArray(entry)) out[key] = stringArray(entry);
+  }
+  return out;
+}
+
+function decodeModelRoutes(value: unknown): ModelRoute[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const routes: ModelRoute[] = [];
+  for (const entry of value) {
+    const record = asRecord(entry);
+    if (!record) continue;
+    const model = str(record.model);
+    const provider = str(record.provider);
+    if (!model || !provider) continue;
+    routes.push({ model, provider, available: record.available !== false });
+  }
+  return routes.length ? routes : undefined;
 }
 
 function decodeSession(value: unknown): SessionInfo | null {
@@ -99,11 +125,18 @@ function decodeHistoryMessage(value: unknown, fallbackIndex: number): HistoryMes
   const toolData = asRecord(record.tool_data);
   const toolId = toolData ? str(toolData.id) : undefined;
   const toolName = toolData ? str(toolData.name) : undefined;
+  const legacy = role === 'assistant' && str(record.reasoning) === undefined
+    ? splitLegacyReasoning(content)
+    : null;
   return {
     index: index !== undefined ? index : fallbackIndex,
     role,
-    content,
-    ...(str(record.reasoning) ? { reasoning: str(record.reasoning) } : null),
+    content: legacy ? legacy.content : content,
+    ...(str(record.reasoning)
+      ? { reasoning: str(record.reasoning) }
+      : legacy?.reasoning
+        ? { reasoning: legacy.reasoning }
+        : null),
     ...(Array.isArray(record.tool_calls)
       ? { tool_calls: stringArray(record.tool_calls) }
       : null),
@@ -229,6 +262,7 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           ev,
           version,
           server,
+          adapter_version: str(record.adapter_version),
           capabilities: stringArray(record.capabilities).filter((name) =>
             (CAPABILITY_NAMES as readonly string[]).includes(name),
           ),
@@ -301,6 +335,9 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           accepted_client_ids: stringArray(record.accepted_client_ids),
           interrupted_at_attach: bool(record.interrupted_at_attach) ?? false,
           images: decodeImages(record.images),
+          ...(num(record.images_omitted) !== undefined
+            ? { images_omitted: num(record.images_omitted) }
+            : null),
           ...(typeof record.has_older === 'boolean' ? { has_older: record.has_older } : null),
           ...(decodeRecovery(record.recovery) ? { recovery: decodeRecovery(record.recovery) } : null),
           ...base,
@@ -344,6 +381,42 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
       const identity = session();
       if (!identity) break;
       return { ok: true, frame: { ev, ...identity, ...base } };
+    }
+    case 'message_end': {
+      const identity = session();
+      if (!identity) break;
+      return {
+        ok: true,
+        frame: { ev, ...identity, stop_reason: str(record.stop_reason), ...base },
+      };
+    }
+    case 'retry_rollback': {
+      const identity = session();
+      if (!identity) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          ...identity,
+          attempt: num(record.attempt) ?? 0,
+          max: num(record.max) ?? 0,
+          ...base,
+        },
+      };
+    }
+    case 'control_error': {
+      const message = str(record.message);
+      if (!message) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          message,
+          session_id: str(record.session_id),
+          attachment_id: str(record.attachment_id),
+          ...base,
+        },
+      };
     }
     case 'message_accepted': {
       const identity = session();
@@ -483,7 +556,11 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           models: stringArray(record.models),
           current: optionalStr(record.current) ?? null,
           efforts: stringArray(record.efforts),
-          current_effort: optionalStr(record.current_effort) ?? null,
+          efforts_by_model: decodeStringListMap(record.efforts_by_model),
+          routes: decodeModelRoutes(record.routes),
+          ...(optionalStr(record.current_effort) !== undefined
+            ? { current_effort: optionalStr(record.current_effort) }
+            : null),
           ...base,
         },
       };
@@ -505,6 +582,7 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
             basis === 'last_request' || basis === 'current_prompt' ? basis : 'unknown',
           model: optionalStr(record.model) ?? null,
           observed_at_ms: num(record.observed_at_ms) ?? Date.now(),
+          cached: bool(record.cached) ?? false,
           ...base,
         },
       };
@@ -520,6 +598,7 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
           model: optionalStr(record.model) ?? null,
           effort: optionalStr(record.effort) ?? null,
           efforts: stringArray(record.efforts),
+          efforts_by_model: decodeStringListMap(record.efforts_by_model),
           confirmed: bool(record.confirmed) ?? false,
           source: str(record.source) ?? 'unknown',
           ...base,
@@ -590,6 +669,7 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
         frame: {
           ev,
           server,
+          adapter_version: str(record.adapter_version),
           daemon_version: str(record.daemon_version),
           continuation: bool(record.continuation) ?? false,
           capabilities: stringArray(record.capabilities),

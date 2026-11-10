@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from 'node:fs/promises';
+import { mkdir, readdir, realpath, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, sep } from 'node:path';
 
 export interface DirectoryEntry {
@@ -101,4 +101,69 @@ export async function listDirectories(
       roots,
     },
   };
+}
+
+/**
+ * Create one directory inside an existing permitted folder. No recursion, no
+ * shell, no traversal, and the created path is canonicalized and rechecked.
+ */
+export async function createDirectory(
+  workspaceRoots: string[],
+  parentPath: string,
+  name: string,
+): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  const roots: string[] = [];
+  for (const root of workspaceRoots) {
+    try {
+      roots.push(await realpath(root));
+    } catch {
+      // Omitted, never invented.
+    }
+  }
+  if (roots.length === 0) {
+    return { ok: false, error: 'No permitted workspace roots are configured on this server.' };
+  }
+  const inside = (candidate: string) =>
+    roots.some((root) => candidate === root || candidate.startsWith(`${root}${sep}`));
+  const trimmedName = name.trim();
+  if (
+    !trimmedName ||
+    trimmedName === '.' ||
+    trimmedName === '..' ||
+    trimmedName.length > 255 ||
+    /[/\\\u0000]/.test(trimmedName)
+  ) {
+    return { ok: false, error: 'Enter a single folder name, not a path.' };
+  }
+  const requestedParent = parentPath.trim();
+  if (!isAbsolute(requestedParent) || requestedParent.includes('\u0000')) {
+    return { ok: false, error: 'Choose an absolute parent folder first.' };
+  }
+  let parent: string;
+  try {
+    parent = await realpath(requestedParent);
+  } catch {
+    return { ok: false, error: `The folder ${requestedParent} does not exist on the server.` };
+  }
+  if (!inside(parent)) {
+    return { ok: false, error: 'That path is outside the permitted workspace roots.' };
+  }
+  const info = await stat(parent).catch(() => null);
+  if (!info?.isDirectory()) return { ok: false, error: `${parent} is not a folder.` };
+  const target = join(parent, trimmedName);
+  try {
+    await mkdir(target);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'EEXIST') return { ok: false, error: `${trimmedName} already exists.` };
+    if (code === 'EACCES' || code === 'EPERM') {
+      return { ok: false, error: `Permission denied creating ${trimmedName}.` };
+    }
+    return { ok: false, error: `Could not create ${trimmedName}.` };
+  }
+  const canonical = await realpath(target).catch(() => null);
+  if (!canonical || !inside(canonical)) {
+    return { ok: false, error: 'The created folder resolved outside the permitted roots.' };
+  }
+  return { ok: true, path: canonical };
 }

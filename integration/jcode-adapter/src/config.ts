@@ -26,6 +26,11 @@ export interface AdapterConfig {
   /** Test-only fault injection; disabled unless explicitly set. */
   faultAfterSend: boolean;
   /**
+   * Trust `X-Forwarded-For` from a loopback proxy (the documented Caddy
+   * deployment) so pairing rate limits key on the real caller, not the proxy.
+   */
+  trustProxy: boolean;
+  /**
    * Canonical directories the authenticated folder picker may browse. Never
    * an unbounded filesystem walk; a path outside every root is rejected.
    */
@@ -89,6 +94,7 @@ export function loadConfig(): AdapterConfig {
     renameTimeoutMs: numberFrom(process.env.JCODE_ADAPTER_RENAME_TIMEOUT, 8_000),
     logLevel: (process.env.JCODE_ADAPTER_LOG as AdapterConfig['logLevel']) ?? 'info',
     faultAfterSend: process.env.JCODE_ADAPTER_FAULT === 'drop_after_send',
+    trustProxy: process.env.JCODE_ADAPTER_TRUST_PROXY === '1',
     workspaceRoots: listFrom(process.env.JCODE_ADAPTER_ROOTS).length
       ? listFrom(process.env.JCODE_ADAPTER_ROOTS)
       : [process.env.HOME ?? homedir()],

@@ -487,7 +487,7 @@ export function WelcomeScreen() {
               Theme family and System/Light/Night are phone-wide preferences.
             </Text>
             <Text variant="caption" color="muted">
-              JCode Mobile 0.2.1 · preview UI
+              JCode Mobile 0.2.2 · preview UI
             </Text>
           </View>
         </ScrollView>
