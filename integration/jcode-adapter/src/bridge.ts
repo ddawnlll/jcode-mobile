@@ -44,6 +44,15 @@ export class ControlBridge {
     return this.capabilities;
   }
 
+  /**
+   * Readiness probe (R18): the bridge is usable when a live harness socket
+   * is connected. A missing executable or stopped daemon leaves the socket
+   * null, so readiness degrades instead of claiming success.
+   */
+  isReady(): boolean {
+    return this.socket !== null && !this.socket.destroyed;
+  }
+
   async ensure(): Promise<void> {
     if (this.socket && !this.socket.destroyed) return;
     if (this.connecting) return this.connecting;
@@ -106,6 +115,16 @@ export class ControlBridge {
       if (line) log(this.config, 'debug', `api-bridge: ${line.slice(0, 300)}`);
     });
     this.child = child;
+    // Spawn failures (ENOENT for a missing executable, EACCES) arrive as an
+    // `error` event, not `exit`. Without this handler the error is uncaught
+    // and kills the whole adapter process (R18). Treat it as a recoverable
+    // bridge outage: fail pending requests, keep the process alive, allow a
+    // later `ensure()` to retry the spawn.
+    child.on('error', (error) => {
+      if (this.child === child) this.child = null;
+      log(this.config, 'warn', `api-bridge spawn failed: ${error.message}`);
+      this.failAll(new Error(`The JCode harness bridge could not start: ${error.message}`));
+    });
     child.on('exit', (code) => {
       if (this.child === child) this.child = null;
       if (code !== 0) log(this.config, 'warn', `api-bridge exited with code ${code}`);

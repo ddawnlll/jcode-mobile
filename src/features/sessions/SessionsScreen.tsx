@@ -54,19 +54,43 @@ export function SessionsScreen() {
   const demo = useAppStore((state) => state.demo);
   const connection = useAppStore((state) => state.connection);
   const serverLabel = useAppStore((state) => state.connection.serverLabel);
+  const inventoryCursor = useAppStore((state) => state.inventory.inventoryCursor);
+  const inventoryEnd = useAppStore((state) => state.inventory.inventoryEnd);
+  const inventoryGeneration = useAppStore((state) => state.inventory.inventoryGeneration);
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<string | null>(null);
   const [appMenuVisible, setAppMenuVisible] = useState(false);
   const [actionSession, setActionSession] = useState<SessionInfo | null>(null);
   const [newSessionVisible, setNewSessionVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const restored = useRef(false);
   const projectCreate = useRef<string | null>(null);
+  // R24: generation-fenced search. Each keystroke/scope change bumps the local
+  // generation; the debounce timer captures its token and only the latest
+  // token may update the visible filtered list. Stale async results are dropped.
+  const searchGenerationRef = useRef(0);
+  const [fencedSearch, setFencedSearch] = useState<{ term: string; scope: string | null; generation: number }>({
+    term: '',
+    scope: null,
+    generation: 0,
+  });
   const headingSize = useMemo(() => typeStyle(sessions.length === 0 ? 'screen' : 'display'), [typeStyle, sessions.length]);
 
   useEffect(() => {
     if (route.params?.scope) setScope(route.params.scope);
   }, [route.params?.scope]);
+
+  useEffect(() => {
+    // Debounced search fencing: capture this generation; when the timer fires,
+    // ignore it if a newer generation has since been created.
+    const generation = ++searchGenerationRef.current;
+    const timer = setTimeout(() => {
+      if (generation !== searchGenerationRef.current) return;
+      setFencedSearch({ term: search, scope, generation });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [search, scope]);
 
   useEffect(() => {
     if (!route.params?.newSession) return;
@@ -122,20 +146,42 @@ export function SessionsScreen() {
         restored.current = true;
         return;
       }
-      const target = sessions.find((session) => session.session_id === intent);
-      // A just-created session can be missing from the first inventory page.
-      // Keep the intent armed instead of dropping the restore permanently.
-      if (!target) return;
+      const inList = sessions.find((session) => session.session_id === intent);
+      // Exact restore: do not depend on the target being in the current
+      // inventory page. If it is not in the list, construct the minimal exact
+      // session estimate and call openSession — the controller shows scoped
+      // recovery when the target is missing/archived. Never create a replacement.
+      const target =
+        inList ??
+        ({
+          session_id: intent,
+          working_dir: null,
+          title: null,
+          save_label: null,
+          archived: false,
+        } as SessionInfo);
       restored.current = true;
+      const profileIdAtStart = useAppStore.getState().profileId;
       await controller.openSession(target);
+      if ((useAppStore.getState().profileId ?? null) !== (profileIdAtStart ?? null)) return;
+      const conversation = useAppStore.getState().conversation;
+      if (!inList) {
+        // Target was past the inventory page: verify the open matched the
+        // exact id; otherwise surface scoped recovery (no silent replacement).
+        if (conversation.sessionId !== intent || conversation.lastError) {
+          setRestoreError(conversation.lastError ?? 'That session is not in this server’s list.');
+          return;
+        }
+      }
       navigation.navigate('Conversation', { sessionId: target.session_id });
     };
     void open();
   }, [newSessionVisible, sessions, navigation]);
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    const scoped = scope ? sessions.filter((session) => session.working_dir === scope) : sessions;
+    const query = fencedSearch.term.trim().toLowerCase();
+    const effectiveScope = fencedSearch.scope;
+    const scoped = effectiveScope ? sessions.filter((session) => session.working_dir === effectiveScope) : sessions;
     if (!query) return scoped;
     return scoped.filter((session) => {
       const haystack = [
@@ -148,7 +194,7 @@ export function SessionsScreen() {
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [scope, sessions, search]);
+  }, [fencedSearch, sessions]);
 
   const groups = useMemo(
     () => {
@@ -399,12 +445,26 @@ export function SessionsScreen() {
           )}
           ListFooterComponent={
             <View style={styles.loadMore}>
-              {partial || sessions.length >= 50 ? (
+              {restoreError ? (
+                <Text variant="small" color="error" accessibilityLiveRegion="polite">
+                  {restoreError} Saved history is kept for this server.
+                </Text>
+              ) : null}
+              {partial || inventoryCursor ? (
                 <TextAction
                   label="Load more sessions"
                   onPress={() => controller.loadMoreSessions()}
                   align="center"
                 />
+              ) : null}
+              {!inventoryEnd && inventoryCursor ? (
+                <Text variant="caption" color="muted">
+                  More sessions are available from the server.
+                </Text>
+              ) : inventoryEnd ? (
+                <Text variant="caption" color="muted">
+                  All sessions loaded.
+                </Text>
               ) : null}
               <TextAction
                 label={includeArchived ? 'Hide archived sessions' : 'Show archived sessions'}
@@ -520,13 +580,22 @@ export function SessionsScreen() {
       <SessionActionsSheet
         session={actionSession}
         onClose={() => setActionSession(null)}
-        onArchived={(session) => {
+        onArchived={async (session) => {
+          const result = await controller.archiveSession(session);
+          if (!result.ok) {
+            // Backend conflict (e.g. active turn) is shown distinctly; keep
+            // the sheet open so the user can act on it.
+            setActionSession(session);
+            return result;
+          }
           setActionSession(null);
-          void controller.archiveSession(session);
+          return result;
         }}
-        onRestored={(session) => {
-          setActionSession(null);
-          void controller.restoreSession(session);
+        onRestored={async (session) => {
+          const result = await controller.restoreSession(session);
+          if (result.ok) setActionSession(null);
+          else setActionSession(session);
+          return result;
         }}
         onOpen={(session) => {
           setActionSession(null);
@@ -651,12 +720,14 @@ function SessionActionsSheet({
 }: {
   session: SessionInfo | null;
   onClose: () => void;
-  onArchived: (session: SessionInfo) => void;
-  onRestored: (session: SessionInfo) => void;
+  onArchived: (session: SessionInfo) => Promise<{ ok: boolean; error?: string }>;
+  onRestored: (session: SessionInfo) => Promise<{ ok: boolean; error?: string }>;
   onOpen: (session: SessionInfo) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<'archive' | 'restore' | null>(null);
   const pinned = useAppStore((state) => state.inventory.pinnedSessionIds);
   const headingRef = useRef<React.ComponentRef<typeof View> | null>(null);
 
@@ -664,6 +735,8 @@ function SessionActionsSheet({
     if (session) {
       setCopied(false);
       setError(null);
+      setConflict(null);
+      setPendingAction(null);
     }
   }, [session]);
 
@@ -684,8 +757,24 @@ function SessionActionsSheet({
             {error}
           </Text>
         ) : null}
+        {conflict ? (
+          <Text
+            variant="small"
+            color="warning"
+            style={{ marginTop: space.sm }}
+            accessibilityLiveRegion="polite"
+            testID="archive-conflict"
+          >
+            Couldn’t archive: {conflict} The session is still listed. Stop the turn or wait, then try again.
+          </Text>
+        ) : null}
+        {pendingAction ? (
+          <Text variant="small" color="muted" style={{ marginTop: space.sm }} testID="archive-pending">
+            {pendingAction === 'archive' ? 'Archiving… waiting for server confirmation.' : 'Restoring… waiting for server confirmation.'}
+          </Text>
+        ) : null}
         <View style={{ marginTop: space.md }}>
-          <ActionRow label="Open session" onPress={() => onOpen(session)} />
+          <ActionRow label="Open session" onPress={() => onOpen(session)} disabled={pendingAction !== null} />
           <ActionRow
             label={pinned.includes(session.session_id) ? 'Unpin session' : 'Pin session'}
             detail="Keeps it at the top of this list"
@@ -716,17 +805,27 @@ function SessionActionsSheet({
                   : undefined
             }
             onPress={() => {
+              if (pendingAction) return;
               if (session.archived) {
-                onRestored(session);
+                setPendingAction('restore');
+                void onRestored(session).then((result) => {
+                  setPendingAction(null);
+                  if (!result.ok) setConflict(result.error ?? 'Restore failed.');
+                });
                 return;
               }
               if (session.live_state === 'working') {
                 setError('Stop or wait for this turn before archiving.');
                 return;
               }
-              onArchived(session);
+              setPendingAction('archive');
+              void onArchived(session).then((result) => {
+                setPendingAction(null);
+                if (!result.ok) setConflict(result.error ?? 'Archive failed.');
+              });
             }}
             destructive={false}
+            disabled={pendingAction !== null}
           />
         </View>
         <View style={styles.sheetFooter}>
@@ -742,21 +841,25 @@ function ActionRow({
   detail,
   onPress,
   destructive,
+  disabled,
 }: {
   label: string;
   detail?: string;
   onPress: () => void;
   destructive?: boolean;
+  disabled?: boolean;
 }) {
   const { colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.actionRow,
-        { backgroundColor: pressed ? colors.raised : 'transparent' },
+        { backgroundColor: pressed ? colors.raised : 'transparent', opacity: disabled ? 0.5 : 1 },
       ]}
     >
       <Text variant="body" color={destructive ? 'error' : 'ink'}>

@@ -8,6 +8,7 @@ import { useTheme } from '../../design/theme';
 import { radius, space, target } from '../../design/tokens';
 import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
+import { useAppStore } from '../../core/state/store';
 import type { DirectoryEntry } from '../../core/protocol/frames';
 
 export function DirectoryBrowser({
@@ -22,6 +23,8 @@ export function DirectoryBrowser({
   onSelect: (path: string) => void;
 }) {
   const { colors } = useTheme();
+  const connectionCapabilities = useAppStore((state) => state.connection.capabilities);
+  const supportsHidden = connectionCapabilities.includes('directory_browse');
   const [path, setPath] = useState(initialPath ?? '');
   const [canonical, setCanonical] = useState('');
   const [parent, setParent] = useState<string | null>(null);
@@ -31,6 +34,7 @@ export function DirectoryBrowser({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
+  const showHiddenRef = useRef(false);
   const [manual, setManual] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
   const [query, setQuery] = useState('');
@@ -40,14 +44,17 @@ export function DirectoryBrowser({
   const [createError, setCreateError] = useState<string | null>(null);
   const requestSeq = useRef(0);
 
+  // R25: the showHidden value is passed explicitly into each load call
+  // (captured at press time) so a rapid toggle never sends the previous flag
+  // through a setState-then-setTimeout read.
   const load = useCallback(
-    async (target: string, append = false) => {
+    async (target: string, append = false, hidden = showHiddenRef.current) => {
       const sequence = ++requestSeq.current;
       setLoading(true);
       setError(null);
       const result = await controller.listDirectories(target, {
         cursor: append ? cursor ?? undefined : undefined,
-        showHidden,
+        showHidden: hidden,
       });
       if (sequence !== requestSeq.current) return;
       setLoading(false);
@@ -55,6 +62,9 @@ export function DirectoryBrowser({
         setError(result.error);
         return;
       }
+      // Path change (or non-append navigation) restarts pagination; append
+      // keeps the cursor. Toggling hidden also restarts — handled by the
+      // caller resetting the cursor via a non-append load.
       setPath(result.canonicalPath);
       setCanonical(result.canonicalPath);
       setParent(result.parent);
@@ -62,17 +72,32 @@ export function DirectoryBrowser({
       setEntries((current) => (append ? [...current, ...result.entries] : result.entries));
       setCursor(result.cursor);
     },
-    [cursor, showHidden],
+    [cursor],
   );
 
   useEffect(() => {
     if (!visible) return;
+    setCursor(null);
+    setEntries([]);
+    setQuery('');
     void controller.recentFolders().then(setRecent);
-    void load(initialPath || '');
+    void load(initialPath || '', false, showHiddenRef.current);
     // `load` intentionally not a dependency: a new visible session owns one
     // initial request; later navigation calls it explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
+
+  const toggleHidden = () => {
+    // Capture next value at press time and pass it explicitly. Reset cursor
+    // and entries so the new result is never mixed with the old page.
+    const next = !showHiddenRef.current;
+    showHiddenRef.current = next;
+    setShowHidden(next);
+    setCursor(null);
+    setEntries([]);
+    setQuery('');
+    void load(canonical || path || '', false, next);
+  };
 
   const crumbs = canonical.split('/').filter(Boolean);
   const filteredEntries = query.trim()
@@ -148,14 +173,16 @@ export function DirectoryBrowser({
         <View style={styles.tools}>
           <TextAction
             label={showHidden ? 'Hide hidden' : 'Show hidden'}
-            onPress={() => {
-              setShowHidden((value) => !value);
-              setTimeout(() => void load(canonical || path || ''), 0);
-            }}
+            onPress={toggleHidden}
             color={showHidden ? 'brand' : 'muted'}
           />
           {parent ? <TextAction label="Parent" onPress={() => void load(parent)} /> : null}
         </View>
+        {supportsHidden ? null : (
+          <Text variant="caption" color="muted" style={{ marginTop: space.xxs }}>
+            Folder browsing is not advertised by this server; listings may be unavailable.
+          </Text>
+        )}
 
         <View style={[styles.manual, { borderColor: colors.control, backgroundColor: colors.surface }]}>
           <TextInput
@@ -171,6 +198,11 @@ export function DirectoryBrowser({
           />
           {query ? <TextAction label="Clear" onPress={() => setQuery('')} color="muted" /> : null}
         </View>
+        {query ? (
+          <Text variant="caption" color="muted" style={{ marginTop: space.xxs }}>
+            Searches loaded results — load more to search further.
+          </Text>
+        ) : null}
 
         <View style={styles.tools}>
           <TextAction
@@ -233,11 +265,25 @@ export function DirectoryBrowser({
               Reading {path || 'the first folder'}…
             </Text>
           ) : filteredEntries.length === 0 ? (
-            <Text variant="small" color="muted" style={{ paddingVertical: space.md }}>
-              {query
-                ? `No folder matches “${query}”.`
-                : 'No subfolders here. Use this folder, create one, or enter a path.'}
-            </Text>
+            <View style={{ paddingVertical: space.md }}>
+              <Text variant="small" color="muted">
+                {query
+                  ? `No folder matches “${query}” in the loaded results.`
+                  : 'No subfolders here. Use this folder, create one, or enter a path.'}
+              </Text>
+              {query && cursor ? (
+                <TextAction
+                  label="Load more to search further"
+                  onPress={() => void load(canonical, true)}
+                  align="center"
+                />
+              ) : null}
+              {query && cursor ? (
+                <Text variant="caption" color="muted">
+                  More folders are available on the server; the current page has no match.
+                </Text>
+              ) : null}
+            </View>
           ) : (
             filteredEntries.map((entry) => (
               <Pressable

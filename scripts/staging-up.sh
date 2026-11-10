@@ -44,8 +44,16 @@ else
   echo $! >"$STAGE/serve.pid"
   for _ in $(seq 1 60); do
     if [ -S "$JCODE_SOCKET" ]; then break; fi
+    if ! kill -0 "$(cat "$STAGE/serve.pid")" 2>/dev/null; then
+      echo "staging daemon exited before creating a socket; see $STAGE/serve.log" >&2
+      exit 1
+    fi
     sleep 0.5
   done
+  if [ ! -S "$JCODE_SOCKET" ]; then
+    echo "staging daemon did not produce a socket; see $STAGE/serve.log" >&2
+    exit 1
+  fi
 fi
 
 echo "$STAGE"

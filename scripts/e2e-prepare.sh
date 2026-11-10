@@ -64,11 +64,34 @@ fi
 
 for _ in $(seq 1 60); do
   if curl -sf "http://127.0.0.1:$ADAPTER_PORT/health" >/dev/null; then break; fi
+  if [ -f "$STAGE/adapter.pid" ] && ! kill -0 "$(cat "$STAGE/adapter.pid")" 2>/dev/null; then
+    echo "e2e adapter exited before becoming healthy; see $STAGE/adapter.log" >&2
+    tail -20 "$STAGE/adapter.log" >&2 || true
+    exit 1
+  fi
   sleep 0.5
 done
 if ! curl -sf "http://127.0.0.1:$ADAPTER_PORT/health" >/dev/null; then
   echo "e2e adapter did not become healthy; see $STAGE/adapter.log" >&2
   tail -20 "$STAGE/adapter.log" >&2 || true
+  exit 1
+fi
+
+# Readiness gate (R18): liveness alone does not prove the daemon control
+# plane answered. Fail fast before Playwright starts.
+for _ in $(seq 1 60); do
+  if curl -sf "http://127.0.0.1:$ADAPTER_PORT/ready" >/dev/null; then break; fi
+  if [ -f "$STAGE/adapter.pid" ] && ! kill -0 "$(cat "$STAGE/adapter.pid")" 2>/dev/null; then
+    echo "e2e adapter exited while waiting for readiness; see $STAGE/adapter.log" >&2
+    tail -20 "$STAGE/adapter.log" >&2 || true
+    exit 1
+  fi
+  sleep 0.5
+done
+if ! curl -sf "http://127.0.0.1:$ADAPTER_PORT/ready" >/dev/null; then
+  echo "e2e adapter did not become ready (daemon control plane unreachable); see $STAGE/adapter.log" >&2
+  curl -s "http://127.0.0.1:$ADAPTER_PORT/ready" >&2 || true
+  echo >&2
   exit 1
 fi
 

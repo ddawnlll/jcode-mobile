@@ -10,6 +10,7 @@ import { Text } from '../../design/typography';
 import { controller } from '../../core/app-controller';
 import { basename } from '../../core/session/selectors';
 import { useAppStore, type ProjectRecord } from '../../core/state/store';
+import type { SessionInfo } from '../../core/protocol/frames';
 import { DirectoryBrowser } from '../newSession/DirectoryBrowser';
 import type { RootStackParamList } from '../../shell/navigation';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -26,15 +27,22 @@ export function ProjectsScreen() {
   const [query, setQuery] = useState('');
   const [startingPath, setStartingPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const projects = useMemo(() => {
     const map = new Map<string, ProjectRecord>();
-    for (const project of stored) map.set(project.path, project);
+    if (!serverId) return [];
+    for (const project of stored) {
+      if (project.serverId !== serverId) continue;
+      map.set(`${project.serverId}:${project.path}`, project);
+    }
     for (const session of sessions) {
-      if (!session.working_dir || map.has(session.working_dir)) continue;
-      map.set(session.working_dir, {
+      if (!session.working_dir) continue;
+      const key = `${serverId}:${session.working_dir}`;
+      if (map.has(key)) continue;
+      map.set(key, {
         id: `derived-${session.working_dir}`,
-        serverId: serverId ?? 'local',
+        serverId,
         path: session.working_dir,
         name: basename(session.working_dir),
         pinned: false,
@@ -59,13 +67,17 @@ export function ProjectsScreen() {
   }, [projects, query]);
 
   const addProject = async (path: string) => {
+    if (!serverId) {
+      setError('No server is selected.');
+      return;
+    }
     const name = basename(path);
     const now = Date.now();
     const next = [
-      ...stored.filter((entry) => entry.path !== path),
+      ...stored.filter((entry) => !(entry.serverId === serverId && entry.path === path)),
       {
         id: `project-${path}`,
-        serverId: serverId ?? 'local',
+        serverId,
         path,
         name,
         pinned: false,
@@ -79,16 +91,44 @@ export function ProjectsScreen() {
   };
 
   const startHere = async (path: string) => {
+    if (!serverId) {
+      setError('No server is selected.');
+      return;
+    }
     setError(null);
     setStartingPath(path);
+    const profileIdAtStart = serverId;
     const result = await controller.createSession(path, '');
     setStartingPath(null);
+    // Profile changed before create returned: do not navigate into the new
+    // profile with an intent that belonged to the old one.
+    if ((useAppStore.getState().profileId ?? null) !== profileIdAtStart) return;
     if (!result.ok) {
       setError(result.error);
       return;
     }
     await controller.rememberFolder(path);
+    if ((useAppStore.getState().profileId ?? null) !== profileIdAtStart) return;
     typedNavigation.navigate('Conversation', { sessionId: result.sessionId });
+  };
+
+  const restoreExact = async (session: SessionInfo) => {
+    if (!serverId) {
+      setRestoreError('No server is selected.');
+      return;
+    }
+    setRestoreError(null);
+    const profileIdAtStart = serverId;
+    // Exact restore: open regardless of whether the target is present in the
+    // current inventory page. Controller handles scoped recovery when missing.
+    await controller.openSession(session);
+    if ((useAppStore.getState().profileId ?? null) !== profileIdAtStart) return;
+    const conversation = useAppStore.getState().conversation;
+    if (conversation.lastError) {
+      setRestoreError(conversation.lastError);
+      return;
+    }
+    typedNavigation.navigate('Conversation', { sessionId: session.session_id });
   };
 
   useEffect(() => {
@@ -100,7 +140,9 @@ export function ProjectsScreen() {
   const togglePin = (project: ProjectRecord) => {
     void controller.saveProjects(
       projects.map((entry) =>
-        entry.path === project.path ? { ...entry, pinned: !entry.pinned } : entry,
+        entry.serverId === project.serverId && entry.path === project.path
+          ? { ...entry, pinned: !entry.pinned }
+          : entry,
       ),
     );
   };
@@ -144,6 +186,11 @@ export function ProjectsScreen() {
               {error}
             </Text>
           ) : null}
+          {restoreError ? (
+            <Text variant="small" color="error" style={{ marginTop: space.sm }} accessibilityLiveRegion="polite">
+              {restoreError} Saved history is kept for this server; the session could not be opened.
+            </Text>
+          ) : null}
         </View>
         <Divider />
         {projects.length === 0 ? (
@@ -163,13 +210,21 @@ export function ProjectsScreen() {
           </Text>
         ) : (
           filtered.map((project) => {
-            const count = sessions.filter((session) => session.working_dir === project.path).length;
+            const projectSessions = sessions.filter((session) => session.working_dir === project.path);
+            const count = projectSessions.length;
+            const latest = projectSessions[0];
             return (
-              <View key={project.path} style={styles.project}>
+              <View key={`${project.serverId}:${project.path}`} style={styles.project}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`${project.name}, ${count} sessions`}
-                  onPress={() => typedNavigation.navigate('Sessions', { scope: project.path })}
+                  onPress={() => {
+                    if (latest) {
+                      void restoreExact(latest);
+                    } else {
+                      typedNavigation.navigate('Sessions', { scope: project.path });
+                    }
+                  }}
                   style={styles.projectRow}
                   testID={`project-${project.name}`}
                 >
@@ -206,7 +261,7 @@ export function ProjectsScreen() {
       </ScrollView>
       <DirectoryBrowser
         visible={browserVisible}
-        initialPath={stored[0]?.path}
+        initialPath={projects[0]?.path}
         onClose={() => setBrowserVisible(false)}
         onSelect={(path) => void addProject(path)}
       />

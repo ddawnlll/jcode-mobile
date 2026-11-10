@@ -16,6 +16,7 @@ import { isAllowedOrigin, log } from './config.ts';
 import { ControlBridge } from './bridge.ts';
 import { DeviceRegistry } from './registry.ts';
 import { Attachment } from './attachment.ts';
+import { ADAPTER_CAPABILITIES } from './caps.ts';
 import { newId, nowMs, readJson, writeJsonAtomic } from './util.ts';
 import { parseImages } from './images.ts';
 import { createDirectory, listDirectories } from './directory.ts';
@@ -35,6 +36,10 @@ interface ClientState {
   maxFrameBytes: number;
   lastValidatedAt: number;
   revoked: boolean;
+  /** Per-client heartbeat (R20): evict half-open clients past their pong deadline. */
+  heartbeatTimer: NodeJS.Timeout | null;
+  pongTimer: NodeJS.Timeout | null;
+  alive: boolean;
 }
 
 type ClientFrame = {
@@ -130,24 +135,11 @@ async function serveWebFile(
 }
 const CREATE_CACHE_TTL_MS = 10 * 60_000;
 const LEDGER_RETENTION_MS = 7 * 24 * 60 * 60_000;
+const HEARTBEAT_MS = 30_000;
+const PONG_DEADLINE_MS = 20_000;
+const MAX_OUTBOUND_BUFFERED_BYTES = 1024 * 1024;
 
-const ADAPTER_CAPABILITIES = [
-  'mobile_continuation',
-  'bounded_history',
-  'identity_fencing',
-  'delivery_receipts',
-  'soft_interrupt_ids',
-  'todo_state',
-  'file_read',
-  'archive_restore',
-  'models',
-  'directory_browse',
-  'directory_create',
-  'session_config',
-  'context_snapshot',
-  'image_input',
-  'changes',
-];
+export { ADAPTER_CAPABILITIES };
 
 export class MobileAdapter {
   private readonly config: AdapterConfig;
@@ -241,8 +233,18 @@ export class MobileAdapter {
       socket.destroy();
       return;
     }
-    const device = await this.registry.validateTokenAsync(token);
-    if (!device) {
+    const validation = await this.registry.validateTokenAsync(token);
+    if (!validation.ok) {
+      if (validation.reason === 'unavailable') {
+        // An unreadable registry cannot prove revocation: fail retryable so
+        // the phone keeps its saved profile (R21).
+        log(this.config, 'warn', 'registry unavailable during upgrade');
+        socket.write(
+          'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{"error":"daemon_unavailable"}',
+        );
+        socket.destroy();
+        return;
+      }
       log(this.config, 'warn', 'rejected unknown or revoked device token');
       socket.write(
         'HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{"error":"revoked"}',
@@ -250,6 +252,7 @@ export class MobileAdapter {
       socket.destroy();
       return;
     }
+    const device = validation.device;
     if (this.clients.size >= MAX_CLIENTS) {
       socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
       socket.destroy();
@@ -268,20 +271,74 @@ export class MobileAdapter {
         maxFrameBytes: this.config.maxFrameBytes,
         lastValidatedAt: Date.now(),
         revoked: false,
+        heartbeatTimer: null,
+        pongTimer: null,
+        alive: true,
       };
       this.clients.add(client);
+      this.startHeartbeat(client);
       void this.registry.touch(device.id);
       log(this.config, 'info', 'client connected', { client: client.id, device: device.id });
       ws.on('message', (data) => {
         void this.onMessage(client, data.toString());
+      });
+      ws.on('pong', () => {
+        client.alive = true;
+        if (client.pongTimer) {
+          clearTimeout(client.pongTimer);
+          client.pongTimer = null;
+        }
       });
       ws.on('close', () => this.onClientClose(client));
       ws.on('error', () => this.onClientClose(client));
     });
   }
 
+  /**
+   * Per-client heartbeat (R20). A half-open phone retains its slot only until
+   * its pong deadline expires; teardown is idempotent, so the close/error/
+   * heartbeat paths release the slot exactly once.
+   */
+  private startHeartbeat(client: ClientState): void {
+    if (client.heartbeatTimer) return;
+    client.heartbeatTimer = setInterval(() => {
+      if (client.socket.readyState !== client.socket.OPEN) return;
+      client.alive = false;
+      try {
+        client.socket.ping();
+      } catch {
+        return;
+      }
+      if (client.pongTimer) clearTimeout(client.pongTimer);
+      client.pongTimer = setTimeout(() => {
+        client.pongTimer = null;
+        log(this.config, 'warn', 'evicting silent client', { client: client.id, reason: 'pong_timeout' });
+        try {
+          client.socket.terminate();
+        } catch {
+          // Already gone.
+        }
+        this.onClientClose(client);
+      }, PONG_DEADLINE_MS);
+      client.pongTimer.unref?.();
+    }, HEARTBEAT_MS);
+    client.heartbeatTimer.unref?.();
+  }
+
+  private stopHeartbeat(client: ClientState): void {
+    if (client.heartbeatTimer) {
+      clearInterval(client.heartbeatTimer);
+      client.heartbeatTimer = null;
+    }
+    if (client.pongTimer) {
+      clearTimeout(client.pongTimer);
+      client.pongTimer = null;
+    }
+  }
+
   private onClientClose(client: ClientState): void {
     if (!this.clients.delete(client)) return;
+    this.stopHeartbeat(client);
     for (const attachment of client.attachments.values()) {
       // NOT cancellation: the daemon keeps the turn because the subscribe
       // opted into continuation.
@@ -301,6 +358,27 @@ export class MobileAdapter {
       return;
     }
     if (client.socket.readyState !== client.socket.OPEN) return;
+    // Bounded outbound backlog (R20): a slow reader must not retain large
+    // history/stream frames unboundedly. Drop streaming frames under
+    // backpressure; terminate request responses so the phone disconnects and
+    // reconciles instead of silently losing execution-critical frames.
+    const buffered = client.socket.bufferedAmount ?? 0;
+    if (buffered > MAX_OUTBOUND_BUFFERED_BYTES) {
+      const isStream = replyTo === undefined;
+      log(this.config, 'warn', 'client outbound backpressure', {
+        client: client.id,
+        reason: isStream ? 'drop_stream_frame' : 'terminate_slow_client',
+        buffered,
+      });
+      if (isStream) return;
+      try {
+        client.socket.terminate();
+      } catch {
+        // Already gone.
+      }
+      this.onClientClose(client);
+      return;
+    }
     client.socket.send(JSON.stringify({ v: 1, ...(replyTo !== undefined ? { reply_to: replyTo } : null), ...event }));
   }
 
@@ -364,9 +442,15 @@ export class MobileAdapter {
     if (req !== 'hello') {
       // Revalidate the exact credential on every request. A socket opened
       // before a revoke or re-pair must lose mutation authority immediately.
-      const current = await this.registry.validateTokenAsync(client.token);
+      // An unreadable registry is a retryable service error, not a revocation:
+      // the phone keeps its saved profile (R21).
+      const validation = await this.registry.validateTokenAsync(client.token);
       client.lastValidatedAt = Date.now();
-      if (!current) {
+      if (!validation.ok) {
+        if (validation.reason === 'unavailable') {
+          this.error(client, id, 'daemon_unavailable', 'The device registry is temporarily unavailable; retry.');
+          return;
+        }
         this.error(client, id, 'unauthorized', 'This device token is no longer authorized.');
         this.revokeClient(client);
         return;
@@ -443,7 +527,9 @@ export class MobileAdapter {
         const sessionId = typeof frame.session_id === 'string' ? frame.session_id : '';
         const attachment = client.attachments.get(sessionId);
         attachment?.dispose();
-        client.attachments.delete(sessionId);
+        if (client.attachments.get(sessionId) === attachment) {
+          client.attachments.delete(sessionId);
+        }
         this.reply(client, id, { ev: 'ok', session_id: sessionId });
         return;
       }
@@ -535,6 +621,16 @@ export class MobileAdapter {
           this.error(client, id, 'invalid_request', 'session_id is required.');
           return;
         }
+        // Adapter-side active-turn guard (R27): a stale phone-side inventory
+        // row must not archive a session that has started a turn since.
+        if (req === 'archive_session') {
+          const attachment = client.attachments.get(sessionId);
+          const observed = attachment && !attachment.isClosed ? attachment.observedStatus : undefined;
+          if (observed === 'working') {
+            this.error(client, id, 'invalid_request', 'This session has an active turn; stop it before archiving.');
+            return;
+          }
+        }
         try {
           await this.bridge.call({ req, session_id: sessionId }, 8000);
           this.reply(client, id, { ev: 'ok', session_id: sessionId });
@@ -564,8 +660,47 @@ export class MobileAdapter {
       case 'set_session_saved': {
         const attachment = this.requireAttachment(client, id, frame);
         if (!attachment) return;
-        attachment.setSaved(frame.saved === true, typeof frame.label === 'string' ? frame.label : null);
-        this.reply(client, id, { ev: 'ok' });
+        try {
+          const result = await attachment.setSaved(
+            frame.saved === true,
+            typeof frame.label === 'string' ? frame.label : null,
+          );
+          this.reply(client, id, {
+            ev: 'ok',
+            session_id: attachment.sessionId,
+            saved: result.saved,
+            save_label: result.label,
+          });
+        } catch (error) {
+          this.error(client, id, 'internal', (error as Error).message);
+        }
+        return;
+      }
+      case 'get_full_message': {
+        const attachment = this.requireAttachment(client, id, frame);
+        if (!attachment) return;
+        const messageIndex = typeof frame.message_index === 'number' ? frame.message_index : NaN;
+        if (!Number.isFinite(messageIndex)) {
+          this.error(client, id, 'invalid_request', 'message_index is required.');
+          return;
+        }
+        const offset = typeof frame.offset === 'number' ? frame.offset : 0;
+        const limit = typeof frame.limit === 'number' ? frame.limit : 64 * 1024;
+        const chunk = attachment.getFullMessage(Math.floor(messageIndex), offset, limit);
+        if (!chunk.ok) {
+          this.error(client, id, 'invalid_request', chunk.error ?? 'That message is no longer available.');
+          return;
+        }
+        this.reply(client, id, {
+          ev: 'message_chunk',
+          session_id: attachment.sessionId,
+          message_index: chunk.message_index,
+          offset: chunk.offset,
+          text: chunk.content ?? '',
+          total_bytes: chunk.total_bytes,
+          done: !chunk.truncated,
+          revision: chunk.history_revision,
+        });
         return;
       }
       case 'get_todo_state': {
@@ -805,6 +940,9 @@ export class MobileAdapter {
         partial: sessions.length >= limit,
       });
     } catch (error) {
+      // An inventory failure is stale inventory, not a session loss: reply
+      // with a typed error and keep client attachments and the task stream
+      // fully intact (R18).
       this.error(client, id, 'daemon_unavailable', (error as Error).message);
     }
   }
@@ -891,9 +1029,12 @@ export class MobileAdapter {
     // One selected attachment per session per client; replace, never cancel.
     const previous = client.attachments.get(options.sessionId);
     previous?.dispose();
-    client.attachments.delete(options.sessionId);
+    if (client.attachments.get(options.sessionId) === previous) {
+      client.attachments.delete(options.sessionId);
+    }
 
-    const attachment = new Attachment({
+    let attachment!: Attachment;
+    attachment = new Attachment({
       config: this.config,
       replyTo: id ?? 0,
       emit: (event) => this.send(client, event),
@@ -905,7 +1046,11 @@ export class MobileAdapter {
       acceptedClientIds: () => this.acceptedIds(options.sessionId),
       onAccepted: (clientMessageId) => this.recordAccepted(options.sessionId, clientMessageId),
       onClosed: () => {
-        client.attachments.delete(options.sessionId);
+        // Instance-bound cleanup (R12): a superseded attachment closing after
+        // its replacement was installed must not remove the replacement.
+        if (client.attachments.get(options.sessionId) === attachment) {
+          client.attachments.delete(options.sessionId);
+        }
       },
     });
     client.attachments.set(options.sessionId, attachment);
@@ -917,7 +1062,9 @@ export class MobileAdapter {
         session_id: attachment.sessionId,
       });
     } catch (error) {
-      client.attachments.delete(options.sessionId);
+      if (client.attachments.get(options.sessionId) === attachment) {
+        client.attachments.delete(options.sessionId);
+      }
       attachment.dispose();
       this.error(client, id, 'daemon_unavailable', (error as Error).message);
     }
@@ -1108,6 +1255,7 @@ export class MobileAdapter {
       return;
     }
     if (request.method === 'GET' && url.pathname === '/health') {
+      // Liveness: the adapter process is up. Unchanged for existing consumers.
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(
         JSON.stringify({
@@ -1119,15 +1267,47 @@ export class MobileAdapter {
       );
       return;
     }
+    if (request.method === 'GET' && url.pathname === '/ready') {
+      // Readiness (R18): the daemon control plane must be reachable, or the
+      // adapter is not ready to serve session work. A bounded handshake
+      // attempt gives a typed, retryable non-ready result.
+      let reason: string | null = null;
+      if (!this.bridge.isReady()) {
+        try {
+          await this.bridge.ensure();
+        } catch (error) {
+          reason = (error as Error).message;
+        }
+      }
+      if (reason === null && !this.bridge.isReady()) {
+        reason = 'The JCode harness bridge is not connected.';
+      }
+      if (reason !== null) {
+        response.writeHead(503, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ ready: false, reason }));
+        return;
+      }
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ ready: true }));
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/whoami') {
       const header = request.headers.authorization;
       const match = typeof header === 'string' ? /^Bearer\s+([0-9a-f]{64})$/i.exec(header.trim()) : null;
-      const device = match ? await this.registry.validateTokenAsync(match[1]) : null;
-      if (!device) {
+      const validation = match
+        ? await this.registry.validateTokenAsync(match[1])
+        : { ok: false as const, reason: 'revoked' as const };
+      if (!validation.ok) {
+        if (validation.reason === 'unavailable') {
+          response.writeHead(503, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ ok: false, error: 'daemon_unavailable' }));
+          return;
+        }
         response.writeHead(401, { 'Content-Type': 'application/json' });
         response.end(JSON.stringify({ ok: false, error: 'revoked' }));
         return;
       }
+      const device = validation.device;
       response.writeHead(200, { 'Content-Type': 'application/json' });
       response.end(JSON.stringify({ ok: true, device: { id: device.id, name: device.name } }));
       return;

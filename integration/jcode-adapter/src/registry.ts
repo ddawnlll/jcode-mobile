@@ -7,6 +7,7 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { AdapterConfig } from './config.ts';
 import { log, redact } from './config.ts';
 import { readJson, sha256Hex, writeJsonAtomic } from './util.ts';
@@ -32,6 +33,16 @@ export interface RegistryFile {
 }
 
 const EMPTY: RegistryFile = { devices: [], pending_codes: [] };
+
+/**
+ * Discriminated token validation (R21). A verified miss means the registry
+ * loaded cleanly and the token is genuinely revoked or unknown; unavailable
+ * means the registry could not be read or parsed and nothing can be verified.
+ * Only verified misses may be surfaced as revocation.
+ */
+export type TokenValidation =
+  | { ok: true; device: PairedDevice }
+  | { ok: false; reason: 'revoked' | 'unavailable' };
 
 const DEVICE_ID = /^[A-Za-z0-9._-]{8,128}$/;
 const DEVICE_NAME = /^[\p{L}\p{N} ._'()\-]{1,64}$/u;
@@ -108,27 +119,40 @@ export class DeviceRegistry {
     }
   }
 
-  async validateTokenAsync(token: string): Promise<PairedDevice | null> {
-    if (!/^[0-9a-f]{64}$/.test(token)) return null;
+  async validateTokenAsync(token: string): Promise<TokenValidation> {
+    if (!/^[0-9a-f]{64}$/.test(token)) return { ok: false, reason: 'revoked' };
     try {
       const registry = await this.load();
       const hash = `sha256:${sha256Hex(token)}`;
-      return registry.devices.find((device) => device.token_hash === hash) ?? null;
+      const device = registry.devices.find((entry) => entry.token_hash === hash);
+      return device ? { ok: true, device } : { ok: false, reason: 'revoked' };
     } catch (error) {
       log(this.config, 'warn', 'device registry unreadable during validation', {
         error: error instanceof Error ? error.message : 'unknown',
       });
-      return null;
+      return { ok: false, reason: 'unavailable' };
     }
   }
 
+  /**
+   * Record last-seen telemetry (R21). The daemon owns `$JCODE_HOME/devices.json`
+   * and rewrites it independently, so the adapter must never rewrite the
+   * shared registry for telemetry — a stale snapshot could clobber a newly
+   * minted pairing code. Telemetry goes to a separate adapter-owned file in
+   * `stateDir`; a read failure is never treated as revocation.
+   */
   async touch(deviceId: string): Promise<void> {
-    await this.mutate(async (registry) => {
-      const device = registry.devices.find((entry) => entry.id === deviceId);
-      if (!device) return;
-      device.last_seen = new Date().toISOString();
-      await this.save(registry);
-    }).catch(() => undefined);
+    if (!deviceId) return;
+    const path = join(this.config.stateDir, 'last-seen.json');
+    try {
+      const current = await readJson<Record<string, string>>(path, {});
+      current[deviceId] = new Date().toISOString();
+      await writeJsonAtomic(path, current, 0o600);
+    } catch (error) {
+      log(this.config, 'debug', 'last-seen telemetry write failed', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+    }
   }
 
   private allowAttempt(remoteAddress: string): boolean {
