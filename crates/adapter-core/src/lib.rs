@@ -11,7 +11,7 @@ pub mod store;
 pub use auth::AuthService;
 pub use backend::{
     Backend, BackendErrorKind, BackendEvent, BackendInfo, BackendRoute, BackendRuntime,
-    BackendSession, CoreError, CoreResult, SessionTurnRegistry, now_ms,
+    BackendSession, CoreError, CoreResult, SessionTurnRegistry, is_command_code_provider, now_ms,
 };
 pub use config::AdapterConfig;
 pub use live::{JcodeLive, classify_backend_error};

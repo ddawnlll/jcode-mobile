@@ -382,7 +382,7 @@ async fn build_snapshot(
         state.set_command_code_available(
             view.routes
                 .iter()
-                .any(|route| route.provider.eq_ignore_ascii_case("command-code")),
+                .any(|route| adapter_core::is_command_code_provider(&route.provider)),
         );
         let _ = view;
     }
@@ -417,6 +417,15 @@ async fn build_snapshot(
         runtime: runtime.map(|runtime| runtime.view(now_ms())),
         plan,
         context,
+        active_turn: state
+            .turns
+            .active(session_id)
+            .map(|turn| adapter_protocol::ActiveTurnView {
+                turn_id: turn.turn_id,
+                operation_id: turn.operation_id,
+                status: turn.status,
+                started_at_ms: turn.started_at_ms,
+            }),
         epoch: state.hub.epoch().to_string(),
         last_seq: seq_after,
         revision: seq_after,
@@ -788,6 +797,18 @@ fn schedule_acceptance_timeout(
         if operation.state != OperationState::Dispatching {
             return;
         }
+        // A turn that is still running has already reached the agent. The
+        // bridge may not send `message_accepted` on every transport (the
+        // global event fan-in can miss it), so a timeout must not overwrite a
+        // live turn with a false unconfirmed state.
+        if state
+            .turns
+            .active(&session_id)
+            .map(|turn| turn.operation_id == operation_id && turn.observed)
+            .unwrap_or(false)
+        {
+            return;
+        }
         if let Ok(updated) = state.store.transition_operation(
             &operation_id,
             OperationState::Dispatching,
@@ -883,7 +904,7 @@ async fn handle_models(state: std::sync::Arc<AppState>, request: Envelope) -> En
         runtime
             .providers
             .iter()
-            .any(|provider| provider.eq_ignore_ascii_case("command-code")),
+            .any(|provider| adapter_core::is_command_code_provider(provider)),
     );
     ok(
         &state,
@@ -907,7 +928,7 @@ fn models_payload(
             api_method: route.api_method.clone(),
             available: route.available,
             detail: route.detail.clone(),
-            is_command_code: route.provider.eq_ignore_ascii_case("command-code"),
+            is_command_code: adapter_core::is_command_code_provider(&route.provider),
         })
         .collect();
     if let Some((ids, _current)) = models {
@@ -922,7 +943,7 @@ fn models_payload(
                     is_command_code: runtime
                         .provider
                         .as_deref()
-                        .map(|provider| provider.eq_ignore_ascii_case("command-code"))
+                        .map(|provider| adapter_core::is_command_code_provider(provider))
                         .unwrap_or(false),
                 });
             }
@@ -1006,7 +1027,7 @@ async fn handle_set_model(state: std::sync::Arc<AppState>, request: Envelope) ->
         after
             .providers
             .iter()
-            .any(|provider| provider.eq_ignore_ascii_case("command-code")),
+            .any(|provider| adapter_core::is_command_code_provider(provider)),
     );
     ok(
         &state,
@@ -1376,6 +1397,42 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
     let active = state.turns.active(&session_id);
     let turn_id = active.as_ref().map(|turn| turn.turn_id.clone());
     let operation_id = active.as_ref().map(|turn| turn.operation_id.clone());
+    let proves_turn = matches!(
+        &event,
+        SessionEvent::TextDelta { .. }
+            | SessionEvent::TextDone { .. }
+            | SessionEvent::ReasoningDelta { .. }
+            | SessionEvent::ReasoningDone { .. }
+            | SessionEvent::ToolStart { .. }
+            | SessionEvent::ToolInputDelta { .. }
+            | SessionEvent::ToolExec { .. }
+            | SessionEvent::ToolDone { .. }
+            | SessionEvent::TurnDone { .. }
+            | SessionEvent::TurnStopped { .. }
+    );
+    if proves_turn {
+        if let Some(operation_id) = operation_id.as_deref() {
+            state.turns.mark_observed(&session_id, operation_id);
+            if let Ok(Some(operation)) = state.store.operation(operation_id) {
+                if matches!(
+                    operation.state,
+                    OperationState::Dispatching | OperationState::Unknown
+                ) {
+                    let from = operation.state;
+                    if let Ok(updated) = state.store.transition_operation(
+                        operation_id,
+                        from,
+                        OperationState::Accepted,
+                        None,
+                        None,
+                    ) {
+                        state.turns.mark_accepted(&session_id, operation_id);
+                        state.hub.publish_operation(updated);
+                    }
+                }
+            }
+        }
+    }
     if let SessionEvent::TitleChanged { title, .. } = &event {
         match title {
             Some(title) => {
@@ -1400,14 +1457,15 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
         let operation = state.store.pending_operation_for_session(&session_id);
         if let Ok(Some(operation)) = operation {
             if operation.state == OperationState::Dispatching {
+                // A daemon-observed turn ending is stronger evidence than a
+                // transport acknowledgment. Mark the operation accepted and
+                // let the history snapshot promote it once the user message
+                // appears in the session transcript.
                 if let Ok(updated) = state.store.transition_operation(
                     &operation.operation_id,
                     OperationState::Dispatching,
-                    OperationState::Unknown,
-                    Some((
-                        "delivery_unconfirmed",
-                        "turn ended without a message acknowledgment",
-                    )),
+                    OperationState::Accepted,
+                    None,
                     None,
                 ) {
                     state.hub.publish_operation(updated);

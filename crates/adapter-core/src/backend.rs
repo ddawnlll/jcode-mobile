@@ -77,6 +77,18 @@ pub struct BackendRoute {
     pub detail: String,
 }
 
+/// Provider labels vary between surfaces: the daemon reports `Command Code`
+/// on runtime routes while config and the CLI use `command-code`. Compare the
+/// normalized token instead of requiring one spelling.
+pub fn is_command_code_provider(provider: &str) -> bool {
+    provider
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect::<String>()
+        == "commandcode"
+}
+
 impl BackendRuntime {
     pub fn view(&self, observed_at_ms: i64) -> RuntimeView {
         RuntimeView {
@@ -95,7 +107,7 @@ impl BackendRuntime {
                     api_method: route.api_method.clone(),
                     available: route.available,
                     detail: route.detail.clone(),
-                    is_command_code: route.provider.eq_ignore_ascii_case("command-code"),
+                    is_command_code: is_command_code_provider(&route.provider),
                 })
                 .collect(),
             observed_at_ms,
@@ -167,6 +179,9 @@ pub struct ActiveTurn {
     pub operation_id: String,
     pub started_at_ms: i64,
     pub status: String,
+    /// A daemon event for this session proves the message reached a turn even
+    /// when the transport-level acknowledgment is missing.
+    pub observed: bool,
 }
 
 #[derive(Default)]
@@ -185,6 +200,7 @@ impl SessionTurnRegistry {
             operation_id: operation_id.to_string(),
             started_at_ms: now_ms(),
             status: "dispatching".into(),
+            observed: false,
         });
         turn_id
     }
@@ -195,6 +211,18 @@ impl SessionTurnRegistry {
         let active = entry.active.as_mut()?;
         if active.operation_id == operation_id {
             active.status = "accepted".into();
+            Some(active.turn_id.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn mark_observed(&self, session_id: &str, operation_id: &str) -> Option<String> {
+        let mut inner = self.inner.lock().expect("turn registry");
+        let entry = inner.get_mut(session_id)?;
+        let active = entry.active.as_mut()?;
+        if active.operation_id == operation_id {
+            active.observed = true;
             Some(active.turn_id.clone())
         } else {
             None
@@ -243,4 +271,29 @@ pub enum BackendErrorKind {
     Forbidden,
     NotSupported,
     Backend,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_command_code_provider;
+
+    #[test]
+    fn command_code_provider_spellings_are_equivalent() {
+        for label in [
+            "command-code",
+            "Command Code",
+            "COMMAND_CODE",
+            " command code ",
+            "CommandCode",
+        ] {
+            assert!(is_command_code_provider(label), "{label} should match");
+        }
+    }
+
+    #[test]
+    fn other_providers_do_not_match_command_code() {
+        for label in ["Anthropic", "OpenAI", "benchrelay", "code", ""] {
+            assert!(!is_command_code_provider(label), "{label} should not match");
+        }
+    }
 }

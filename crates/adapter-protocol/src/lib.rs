@@ -364,12 +364,24 @@ pub struct ContextView {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ActiveTurnView {
+    pub turn_id: String,
+    pub operation_id: String,
+    pub status: String,
+    pub started_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionSnapshotPayload {
     pub session: SessionSummary,
     pub messages: Vec<HistoryMessageView>,
     pub runtime: Option<RuntimeView>,
     pub plan: Option<serde_json::Value>,
     pub context: Option<ContextView>,
+    /// Present when this adapter still has an active turn for the session. A
+    /// returning client can show Stop without inventing completion or text.
+    #[serde(default)]
+    pub active_turn: Option<ActiveTurnView>,
     pub epoch: String,
     pub last_seq: u64,
     pub revision: u64,

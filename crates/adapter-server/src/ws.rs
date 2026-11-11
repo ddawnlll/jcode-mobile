@@ -199,6 +199,15 @@ pub fn origin_allowed(configured: &[String], origin: &str) -> bool {
     if configured.iter().any(|allowed| allowed == origin) {
         return true;
     }
+    // Tauri's embedded webviews use a private app origin. These are not
+    // reachable as ordinary web pages, but the adapter must accept them or a
+    // native desktop/mobile shell can never open its authenticated socket.
+    if matches!(
+        origin,
+        "tauri://localhost" | "http://tauri.localhost" | "https://tauri.localhost"
+    ) {
+        return true;
+    }
     let Ok(uri) = origin.parse::<Uri>() else {
         return false;
     };
@@ -443,6 +452,8 @@ mod tests {
     fn loopback_origins_are_allowed_and_remote_origins_are_not() {
         assert!(origin_allowed(&[], "http://127.0.0.1:5173"));
         assert!(origin_allowed(&[], "http://localhost:8091"));
+        assert!(origin_allowed(&[], "tauri://localhost"));
+        assert!(origin_allowed(&[], "http://tauri.localhost"));
         assert!(!origin_allowed(&[], "https://example.com"));
         assert!(origin_allowed(
             &["https://stillness.example".into()],
