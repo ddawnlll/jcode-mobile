@@ -140,7 +140,12 @@ fn credential_kind() -> &'static str {
     "OS credential store"
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "android")]
+    android_keyring::set_android_keyring_credential_builder()
+        .expect("Android credential store unavailable");
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             credential_load_all,
