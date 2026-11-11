@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { controller, type AppState } from '../lib/controller';
-import { IconChevron, IconMenu, IconPlus, IconSearch, IconSettings } from '../components/Icons';
+import { IconChevron, IconPlus, IconSearch } from '../components/Icons';
 import { Torus } from '../components/Torus';
 import { ConnectionBanner, EmptyState, ScreenHeader, SessionRow, SavedTag, useDocumentTitle } from '../components/ui';
 import { sessionTitle, isRunning } from '../lib/format';

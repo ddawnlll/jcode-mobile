@@ -7,6 +7,9 @@ module.exports = defineConfig([
   {
     ignores: [
       'dist/**',
+      'apps/stillness/dist/**',
+      'apps/stillness/src-tauri/target/**',
+      'apps/stillness/src-tauri/gen/**',
       '.staging/**',
       'ios/**',
       'android/**',

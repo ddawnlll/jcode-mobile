@@ -56,7 +56,6 @@ export function SessionsScreen() {
   const serverLabel = useAppStore((state) => state.connection.serverLabel);
   const inventoryCursor = useAppStore((state) => state.inventory.inventoryCursor);
   const inventoryEnd = useAppStore((state) => state.inventory.inventoryEnd);
-  const inventoryGeneration = useAppStore((state) => state.inventory.inventoryGeneration);
   const [search, setSearch] = useState('');
   const [scope, setScope] = useState<string | null>(null);
   const [appMenuVisible, setAppMenuVisible] = useState(false);

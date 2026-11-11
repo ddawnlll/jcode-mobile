@@ -6,6 +6,7 @@
  * because Jest runs under Bun). This gives genuine transaction/atomicity
  * semantics rather than a statement-matching fake.
  */
+/* eslint-disable import/first -- the mock setup is kept above the imports for readability */
 jest.mock('expo-sqlite', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Database } = require('bun:sqlite');

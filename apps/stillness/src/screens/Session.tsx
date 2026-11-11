@@ -10,8 +10,6 @@ import {
   IconArrowUp,
   IconCheck,
   IconChevron,
-  IconClose,
-  IconCopy,
   IconEdit,
   IconMore,
   IconRefresh,
@@ -22,21 +20,16 @@ import {
   ConnectionBanner,
   EmptyState,
   Markdown,
-  SavedTag,
   ScreenHeader,
   Sheet,
 } from '../components/ui';
 import {
-  agentStateLabel,
-  formatBytes,
   longDate,
   operationLabel,
   parsePlan,
-  providerLabel,
   relativeTime,
   sessionTitle,
   statusLabel,
-  timeOfDay,
   type ParsedPlan,
 } from '../lib/format';
 import type { ActivityItem, ContextView, HistoryMessageView } from '../lib/protocol';

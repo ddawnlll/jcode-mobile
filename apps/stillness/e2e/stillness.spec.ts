@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const suffix = `${Date.now().toString(36)}`;
-test.beforeEach(async ({}, testInfo) => {
+test.beforeEach(async (_fixtures, testInfo) => {
   // Both viewport projects run this file; keep created titles distinct.
   testInfo.setTimeout(120_000);
 });
@@ -9,10 +9,6 @@ test.beforeEach(async ({}, testInfo) => {
 async function openDrawer(page: Page) {
   await page.getByRole('button', { name: 'Open sidebar' }).click();
   await expect(page.locator('.drawer')).toHaveClass(/open/);
-}
-
-async function dismissDrawer(page: Page) {
-  await page.getByRole('button', { name: 'Close sidebar' }).click();
 }
 
 test('real session, draft, plan, activity, files, and preferences', async ({ page }) => {

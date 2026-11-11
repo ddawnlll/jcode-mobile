@@ -19,7 +19,6 @@ import {
   saveSessionListCache,
   saveSnapshotCache,
   setLastSession,
-  type StoredPendingOperation,
 } from './cache';
 import {
   activeBaseUrl,
@@ -40,7 +39,6 @@ import type {
   DirEntry,
   DirListing,
   FilePreview,
-  HistoryMessageView,
   ModelsListPayload,
   OperationStatePayload,
   OperationView,
