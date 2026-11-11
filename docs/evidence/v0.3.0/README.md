@@ -11,7 +11,8 @@ Stillness 12. It does not repeat the design intent in
 - No system GTK/WebKit development packages and no passwordless `sudo`.
   Native Linux was built against a user-space prefix under
   `$HOME/tauri-sysroot`.
-- No Java, Android SDK, Xcode, or iOS simulator.
+- OpenJDK 21.0.13, Android SDK 37, NDK 27.1, and Gradle 9.6.1.
+- No Xcode or iOS simulator.
 
 Pinned JCode fork: `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8`,
 `jcode v0.99.999-dev (0abff12c7)`, release binary built locally.
@@ -39,7 +40,7 @@ Statuses are `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`, or `NOT_APPLICABLE`.
 | Native Linux Tauri launch | PASS | Xvfb capture `native-tauri-launch.png` |
 | Native Secret Service keyring round trip | PASS | `keyring_smoke` wrote, read, and deleted an item in an unlocked `gnome-keyring` session |
 | Native OS-keyring pairing and relaunch | PASS | UI pairing created a real device token in the Secret Service; relaunch restored the credential and reconnected (`native-keyring-pairing.png`, `native-keyring-relaunch.png`) |
-| Android build | PASS (0.2.2 Expo APK) | Java 21 + Android SDK build-tools 37; `jcode-mobile-0.2.2-android-release.apk` (65,802,162 bytes, SHA-256 `8c9c4801...`); install/runtime NOT_RUN, no device attached |
+| Android build and runtime | PASS (JCode Mobile 0.3.0) | `jcode-mobile-0.3.0-android-release.apk` static verification PASS, 11,020,965 bytes, SHA-256 `4a79ba0a...`; a same-source x86_64 debug build installed on the API 36 emulator, paired with a real adapter, and restored credentials after force-stop |
 | iOS build | NOT_APPLICABLE | requires macOS and Xcode; outside this Linux host |
 
 ## Commands and observed results
@@ -75,9 +76,9 @@ bash scripts/stillness-e2e.sh
 
 bash scripts/build-android-release.sh
 # Java 21.0.13, Android SDK /home/quant/android-sdk, build-tools 37.0.0
-# BUILD SUCCESSFUL in 13m 22s
-# artifacts/jcode-mobile-0.2.2-android-release.apk
-# SHA-256 8c9c4801e42c8b4f60fc90602e19397b41e520e2ae49c1e776a523a9f63da087
+# Tauri Android build + sign completed
+# artifacts/jcode-mobile-0.3.0-android-release.apk
+# SHA-256 4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2
 ```
 
 The pinned e2e run creates an isolated home at `.staging/stillness/daemon`,
@@ -137,16 +138,17 @@ why the final evidence launches without a user namespace.
 
 ### Android release APK
 
-JDK 21 and the Android SDK were detected through the release script on this
-Debian host. The script now prefers `/usr/lib/jvm/java-21-openjdk-amd64` and
-`$HOME/android-sdk`, validates `java`, `javac`, and `adb`, and writes
-`android/local.properties` when needed. Full toolchain, build, and signature
-output is in [`android-build.md`](android-build.md).
+`scripts/build-android-release.sh` now builds the Stillness 12 Tauri client
+(`dev.jcode.stillness`, versionCode 3000, versionName 0.3.0). JDK 21 and the
+Android SDK/NDK are auto-detected, the Rust targets are installed if needed,
+and the APK is signed and verified. The older Expo client remains available
+through `scripts/build-expo-android-release.sh`.
 
-The APK is the existing Expo/React Native JCode Mobile 0.2.2 client with
-`arm64-v8a` and `armeabi-v7a` native libraries, not a Stillness 12 Android
-shell. It is debug-signed for sideloading. No emulator or physical device was
-attached, so install and runtime checks are `NOT_RUN`.
+A Pixel API 36 x86_64 emulator installed a debug build of the same source,
+rendered the Stillness welcome screen, paired through a real adapter on
+`127.0.0.1:7646`, and reopened `Your work.` with `Harness online` after a
+force-stop. Full toolchain, signature, and runtime output is in
+[`android-build.md`](android-build.md).
 
 ## Command Code and delivery evidence
 
@@ -198,6 +200,9 @@ These are single-run measurements on the host above, not percentile SLAs.
 | `native-tauri-launch.png` | Native Tauri release app rendering the welcome screen under Xvfb |
 | `native-keyring-pairing.png` | Native pairing accepted after a real Secret Service write |
 | `native-keyring-relaunch.png` | Relaunch restoring the keyring credential and reconnecting |
+| `android-stillness-welcome.png` | JCode Mobile 0.3.0 (Stillness client) running on the API 36 emulator |
+| `android-stillness-pairing.png` | Real adapter pairing accepted on Android |
+| `android-stillness-relaunch.png` | Android Keystore credential restored after force-stop |
 
 ## Claim boundaries
 
@@ -214,5 +219,6 @@ These are single-run measurements on the host above, not percentile SLAs.
   says so explicitly.
 - Repository-wide ESLint now passes with 0 errors and 0 warnings. Generated
   Tauri output and build directories are ignored explicitly.
-- The Android APK is the 0.2.2 Expo client. Stillness 12 was not packaged for
-  Android, and iOS builds are not claimed.
+- Android runtime evidence is from a KVM emulator, not a physical phone. The
+  release APK is ARM-only and debug-signed for sideloading.
+- iOS builds are not claimed.

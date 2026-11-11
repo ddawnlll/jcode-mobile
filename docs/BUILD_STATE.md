@@ -16,7 +16,7 @@ Updated: 2026-11-11
 | Native Linux release | PASS, 5,071,384-byte Tauri binary |
 | Native Linux launch | PASS under Xvfb |
 | Native Secret Service keyring | PASS, round trip plus UI pairing and credential reload |
-| Android | PASS, 0.2.2 Expo APK, 65,802,162 bytes, v2 debug-signed; runtime NOT_RUN |
+| Android | PASS, JCode Mobile 0.3.0 APK (Stillness client), 11,020,965 bytes, v2/v3 debug-signed; emulator launch, pairing, and credential restore PASS |
 | iOS | NOT_APPLICABLE on Linux |
 | Evidence | `docs/evidence/v0.3.0/README.md` |
 
@@ -54,6 +54,7 @@ Updated: 2026-11-11
 
 | Artifact | Bytes (approx) | SHA-256 |
 | --- | --- | --- |
+| `artifacts/jcode-mobile-0.3.0-android-release.apk` | 10.5 MiB (11,020,965 B) | `4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2` |
 | `artifacts/jcode-mobile-0.2.2-android-release.apk` | 62.7 MiB (65,731,410 B) | `f2ee7c4f0eae836c8361f956cd3ffe0403ddae389bac4c3a2fd59a17c001ddf9` |
 | `artifacts/jcode-mobile-0.2.2-ios-simulator.app.zip` | 29 MiB | `33269e4e09d34d3da5d35653451172c4f49225edee0e22966d8343c84e8e3859` |
 | `artifacts/jcode-mobile-0.2.1-android-release.apk` | 62.7 MiB (65,709,266 B) | `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
@@ -61,7 +62,7 @@ Updated: 2026-11-11
 | `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
 | `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
 
-The 0.2.1 APK is a release build with an embedded Hermes bundle for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. It is attached to release `v0.2.1`. The 0.2.0 APK remains the previous release. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
+The 0.3.0 APK is the Stillness 12 Tauri client for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. The 0.2.2 APK is the previous Expo client. The 0.2.1 APK was the last embedded-Hermes Expo release. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
 
 ## v0.2.2 repair release
 
@@ -74,7 +75,7 @@ fixes from the published builds, and native simulator evidence.
 | `bun run adapter:test` | PASS, 27 tests |
 | `bun run e2e` | PASS, 32/32 on clean isolated staging |
 | iOS Release Simulator | PASS, ad-hoc signed, paired, context/model/projects/direct create verified |
-| Android release APK | PASS, 65,802,162 bytes, v2 debug-signed; SHA-256 `8c9c4801e42c8b4f60fc90602e19397b41e520e2ae49c1e776a523a9f63da087`; runtime NOT_RUN, no device |
+| Android release APK | PASS, JCode Mobile 0.3.0 (Stillness client), 11,020,965 bytes, v2/v3 debug-signed; SHA-256 `4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2`; emulator runtime PASS |
 
 ## v0.2.1 welcome release
 
