@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JCode Mobile Adapter v2 — Stillness 12 wire envelope",
+  "description": "Proposed mobile gateway contract, not the upstream JCode harness API.",
+  "type": "object",
+  "required": [
+    "v",
+    "kind",
+    "id",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "v": {
+      "const": 2
+    },
+    "kind": {
+      "enum": [
+        "request",
+        "response",
+        "event"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reply_to": {
+      "type": "string"
+    },
+    "server_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "operation_id": {
+      "type": "string"
+    },
+    "epoch": {
+      "type": "string"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "type": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "sessions.snapshot",
+              "session.event",
+              "plan.snapshot",
+              "activity.page",
+              "changes.snapshot",
+              "context.snapshot",
+              "runtime.info",
+              "operations.reserve",
+              "operations.dispatch",
+              "operations.lookup",
+              "operations.state",
+              "sessions.create",
+              "sessions.subscribe",
+              "sessions.peek"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "server_id",
+          "session_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "operations.reserve",
+              "operations.dispatch",
+              "operations.lookup",
+              "operations.state"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "operation_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "session.event"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "epoch",
+          "seq"
+        ],
+        "properties": {
+          "payload": {
+            "required": [
+              "event_type",
+              "data"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "sessions.snapshot"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "epoch",
+          "seq"
+        ],
+        "properties": {
+          "payload": {
+            "required": [
+              "revision",
+              "authoritative_at",
+              "view",
+              "stale"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "server.hello"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": [
+              "protocol_version",
+              "jcode_harness_api",
+              "capabilities"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "files.list_dir"
+          },
+          "kind": {
+            "const": "response"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "server_id"
+        ],
+        "properties": {
+          "payload": {
+            "required": [
+              "root_id",
+              "path",
+              "entries",
+              "next_cursor"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
