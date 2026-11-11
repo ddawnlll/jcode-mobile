@@ -41,7 +41,8 @@ fn write_metadata(app: &AppHandle, metadata: &Metadata) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "credential metadata has no parent directory".to_string())?;
-    fs::create_dir_all(parent).map_err(|error| format!("could not create config directory: {error}"))?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("could not create config directory: {error}"))?;
     let tmp = path.with_extension("json.tmp");
     {
         let mut options = fs::OpenOptions::new();
@@ -74,7 +75,8 @@ fn entry(base_url: &str) -> Result<keyring::Entry, String> {
     if base_url.trim().is_empty() {
         return Err("server URL is required for credential storage".into());
     }
-    keyring::Entry::new(SERVICE, base_url).map_err(|error| format!("credential store unavailable: {error}"))
+    keyring::Entry::new(SERVICE, base_url)
+        .map_err(|error| format!("credential store unavailable: {error}"))
 }
 
 #[tauri::command]
