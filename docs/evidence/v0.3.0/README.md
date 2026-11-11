@@ -39,7 +39,7 @@ Statuses are `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`, or `NOT_APPLICABLE`.
 | Native Linux Tauri launch | PASS | Xvfb capture `native-tauri-launch.png` |
 | Native Secret Service keyring round trip | PASS | `keyring_smoke` wrote, read, and deleted an item in an unlocked `gnome-keyring` session |
 | Native OS-keyring pairing and relaunch | PASS | UI pairing created a real device token in the Secret Service; relaunch restored the credential and reconnected (`native-keyring-pairing.png`, `native-keyring-relaunch.png`) |
-| Android build | BLOCKED | no Java or Android SDK installed on this host |
+| Android build | PASS (0.2.2 Expo APK) | Java 21 + Android SDK build-tools 37; `jcode-mobile-0.2.2-android-release.apk` (65,802,162 bytes, SHA-256 `8c9c4801...`); install/runtime NOT_RUN, no device attached |
 | iOS build | NOT_APPLICABLE | requires macOS and Xcode; outside this Linux host |
 
 ## Commands and observed results
@@ -72,6 +72,12 @@ cargo run --release --example keyring_smoke
 
 bash scripts/stillness-e2e.sh
 # exit 0; 4 passed, 3 skipped (project-specific guards), ~30 s
+
+bash scripts/build-android-release.sh
+# Java 21.0.13, Android SDK /home/quant/android-sdk, build-tools 37.0.0
+# BUILD SUCCESSFUL in 13m 22s
+# artifacts/jcode-mobile-0.2.2-android-release.apk
+# SHA-256 8c9c4801e42c8b4f60fc90602e19397b41e520e2ae49c1e776a523a9f63da087
 ```
 
 The pinned e2e run creates an isolated home at `.staging/stillness/daemon`,
@@ -128,6 +134,19 @@ That overlay made the app's D-Bus calls fail with `NoReply`; the same
 `keyring_smoke` binary succeeded outside the user namespace and failed inside
 it. That was a test-harness limitation, not an app credential failure, and is
 why the final evidence launches without a user namespace.
+
+### Android release APK
+
+JDK 21 and the Android SDK were detected through the release script on this
+Debian host. The script now prefers `/usr/lib/jvm/java-21-openjdk-amd64` and
+`$HOME/android-sdk`, validates `java`, `javac`, and `adb`, and writes
+`android/local.properties` when needed. Full toolchain, build, and signature
+output is in [`android-build.md`](android-build.md).
+
+The APK is the existing Expo/React Native JCode Mobile 0.2.2 client with
+`arm64-v8a` and `armeabi-v7a` native libraries, not a Stillness 12 Android
+shell. It is debug-signed for sideloading. No emulator or physical device was
+attached, so install and runtime checks are `NOT_RUN`.
 
 ## Command Code and delivery evidence
 
@@ -195,4 +214,5 @@ These are single-run measurements on the host above, not percentile SLAs.
   says so explicitly.
 - Repository-wide ESLint now passes with 0 errors and 0 warnings. Generated
   Tauri output and build directories are ignored explicitly.
-- Android release and iOS builds are not claimed.
+- The Android APK is the 0.2.2 Expo client. Stillness 12 was not packaged for
+  Android, and iOS builds are not claimed.

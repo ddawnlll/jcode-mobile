@@ -128,7 +128,7 @@ Status is DONE only with evidence in `docs/evidence/v0.3.0/README.md`.
 | 9.5 | Stop-only cancellation and navigation persistence | DONE | Playwright stops one active turn after leaving and reopening the session |
 | 9.6 | Tauri desktop shell with OS credential storage | DONE | Release build and Xvfb launch PASS; Secret Service round trip and UI pairing PASS; relaunch restored the keyring credential |
 | 9.7 | Native Linux release artifact | DONE | 5,071,384-byte release binary built with user-space GTK/WebKit |
-| 9.8 | Android build | BLOCKED | no Java or Android SDK on this host |
+| 9.8 | Android build | DONE | JDK 21 and SDK 37 detected; 0.2.2 Expo APK built, v2 debug-signed, 65,802,162 bytes, SHA-256 `8c9c4801...`; Stillness Android not configured and device runtime NOT_RUN |
 | 9.9 | iOS build | NOT_APPLICABLE | requires macOS and Xcode |
 | 9.10 | Repository-wide lint | DONE | Repository and Stillness lint pass with 0 errors and 0 warnings; generated/vendored paths ignored explicitly |
 | 9.11 | Performance measurements | PARTIAL | Adapter RSS/CPU and native RSS measured; cold-start and frame timing NOT_RUN |

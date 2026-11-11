@@ -19,7 +19,7 @@ Adapter v2 and Stillness 12 evidence is in
 | Native Linux Tauri build | PASS, 5,071,384-byte release binary |
 | Native Linux launch | PASS under Xvfb |
 | Native Secret Service keyring | PASS, round trip plus UI pairing and credential reload |
-| Android | BLOCKED, no Java/Android SDK |
+| Android | PASS, 0.2.2 release APK built with JDK 21 and SDK 37; install/runtime NOT_RUN, no device |
 | iOS | NOT_APPLICABLE, Linux host |
 
 > v0.1.1 is a corrective release for the independent review of `a632a6a`. The finding-by-finding response is in [`REVIEW_FIXES.md`](REVIEW_FIXES.md). Native evidence below was collected on v0.1.0/0.1.1 staging and remains representative; new regression tests run in CI.

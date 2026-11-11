@@ -16,7 +16,7 @@ Updated: 2026-11-11
 | Native Linux release | PASS, 5,071,384-byte Tauri binary |
 | Native Linux launch | PASS under Xvfb |
 | Native Secret Service keyring | PASS, round trip plus UI pairing and credential reload |
-| Android | BLOCKED, no Java/Android SDK |
+| Android | PASS, 0.2.2 Expo APK, 65,802,162 bytes, v2 debug-signed; runtime NOT_RUN |
 | iOS | NOT_APPLICABLE on Linux |
 | Evidence | `docs/evidence/v0.3.0/README.md` |
 
@@ -74,7 +74,7 @@ fixes from the published builds, and native simulator evidence.
 | `bun run adapter:test` | PASS, 27 tests |
 | `bun run e2e` | PASS, 32/32 on clean isolated staging |
 | iOS Release Simulator | PASS, ad-hoc signed, paired, context/model/projects/direct create verified |
-| Android release APK | NOT_RUN, no Android SDK/JDK on this host |
+| Android release APK | PASS, 65,802,162 bytes, v2 debug-signed; SHA-256 `8c9c4801e42c8b4f60fc90602e19397b41e520e2ae49c1e776a523a9f63da087`; runtime NOT_RUN, no device |
 
 ## v0.2.1 welcome release
 
