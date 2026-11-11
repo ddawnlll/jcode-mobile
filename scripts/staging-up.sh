@@ -9,6 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE="${JCODE_STAGING_DIR:-${JCODE_SCRATCH_DIR:-/tmp}/jcode-mobile-staging}"
+JCODE_BIN="${JCODE_BIN:-jcode}"
 HOME_DIR="$STAGE/home"
 RUN_DIR="$STAGE/run"
 WORK_DIR="$STAGE/work"
@@ -36,11 +37,11 @@ export JCODE_RUNTIME_DIR="$RUN_DIR"
 export JCODE_SOCKET="$RUN_DIR/jcode.sock"
 export JCODE_API_SOCKET="$RUN_DIR/jcode-api.sock"
 
-if [ -S "$JCODE_SOCKET" ] && jcode debug --socket "$JCODE_SOCKET" state >/dev/null 2>&1; then
+if [ -S "$JCODE_SOCKET" ] && "$JCODE_BIN" debug --socket "$JCODE_SOCKET" state >/dev/null 2>&1; then
   echo "staging daemon already running at $JCODE_SOCKET"
 else
-  echo "starting staging daemon (JCODE_HOME=$JCODE_HOME)"
-  nohup jcode serve >"$STAGE/serve.log" 2>&1 &
+  echo "starting staging daemon (JCODE_HOME=$JCODE_HOME, binary=$JCODE_BIN)"
+  nohup "$JCODE_BIN" serve >"$STAGE/serve.log" 2>&1 &
   echo $! >"$STAGE/serve.pid"
   for _ in $(seq 1 60); do
     if [ -S "$JCODE_SOCKET" ]; then break; fi
