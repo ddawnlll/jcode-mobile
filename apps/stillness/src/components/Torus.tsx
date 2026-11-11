@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo } from 'react';
 
 interface TorusProps {
   size?: number;
@@ -55,8 +55,7 @@ function dots(): Dot[] {
 
 const generated = dots();
 
-export function Torus({ size = 88, animated = true, className = '', label }: TorusProps) {
-  const content = useMemo(() => generated, []);
+export const Torus = memo(function Torus({ size = 88, animated = true, className = '', label }: TorusProps) {
   return (
     <svg
       className={`torus ${animated ? 'torus-live' : ''} ${className}`.trim()}
@@ -68,7 +67,7 @@ export function Torus({ size = 88, animated = true, className = '', label }: Tor
       aria-hidden={label ? undefined : true}
     >
       <g fill="currentColor" stroke="none">
-        {content.map((dot, index) => (
+        {generated.map((dot, index) => (
           <circle
             key={index}
             cx={dot.x}
@@ -81,4 +80,4 @@ export function Torus({ size = 88, animated = true, className = '', label }: Tor
       </g>
     </svg>
   );
-}
+});

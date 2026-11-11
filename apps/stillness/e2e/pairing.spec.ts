@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const authFile = path.join(__dirname, '..', '.e2e-auth.json');
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+
+const authFile = path.join(configDir, '..', '.e2e-auth.json');
 const adapter = process.env.STILLNESS_E2E_BASE_URL ?? 'http://127.0.0.1:7650';
 const code = process.env.STILLNESS_E2E_PAIR_CODE ?? '000000';
 
@@ -22,7 +25,7 @@ test('pairs through the real adapter and persists the exact server', async ({ pa
   await page.getByTestId('enter-app').click();
   await expect(page.getByTestId('home-screen')).toBeVisible();
   await expect(page.getByTestId('home-screen')).toContainText('Your work.');
-  await expect(page.getByTestId('home-screen')).toContainText('JCode Mobile');
+  await expect(page.getByTestId('home-screen')).toContainText('Harness online');
 
   await page.context().storageState({ path: authFile });
 

@@ -34,7 +34,7 @@ export function BrowserScreen({ state }: { state: AppState }) {
         <div className="view-content browser-view">
           {!browser ? (
             <EmptyState title="Choose a project folder.">
-              The browser is root-scoped and never exposes files outside the adapter's allowed roots.
+              The browser is root-scoped and never exposes files outside the adapter’s allowed roots.
             </EmptyState>
           ) : (
             <>

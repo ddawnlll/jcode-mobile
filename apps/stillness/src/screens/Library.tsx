@@ -254,7 +254,7 @@ export function ProjectsScreen({ state }: { state: AppState }) {
             <p className="empty-note">No projects are configured. The adapter only exposes allowed server roots.</p>
           ) : null}
           <p className="project-footnote">
-            Projects map to canonical folders inside the adapter's configured roots. Folder creation
+            Projects map to canonical folders inside the adapter’s configured roots. Folder creation
             is supported; rename stays disabled until a validated upstream capability exists.
           </p>
         </div>
@@ -365,7 +365,7 @@ export function ProjectCreateScreen({ state }: { state: AppState }) {
         <div className="view-content create-entry">
           <p className="quiet-eyebrow">PROJECT SETUP</p>
           <h1 className="page-heading">A place to build.</h1>
-          <p className="page-sub">Choose an existing folder inside the adapter's allowed roots.</p>
+          <p className="page-sub">Choose an existing folder inside the adapter’s allowed roots.</p>
           <form onSubmit={submit} className="create-form">
             <label className="project-name-field">
               <span>Project name</span>
@@ -422,7 +422,7 @@ export function NewSessionScreen({ state }: { state: AppState }) {
         <div className="view-content create-entry">
           <p className="quiet-eyebrow">A NEW THREAD</p>
           <h1 className="page-heading">Where to work?</h1>
-          <p className="page-sub">Choose a project, or use the adapter's default server folder.</p>
+          <p className="page-sub">Choose a project, or use the adapter’s default server folder.</p>
           <div className="choice-rows" role="group" aria-label="Session location">
             {state.projects.map((project) => (
               <button
@@ -577,7 +577,7 @@ export function SettingsScreen({ state }: { state: AppState }) {
             </div>
             <div className="pref-row">
               <div>
-                JCode harness<small>{state.server?.jcode_version ?? 'unknown'} · API {state.server?.jcode_protocol_version ?? '—'}</small>
+                JCode harness<small>Harness API {state.server?.jcode_version ?? 'unknown'} · API {state.server?.jcode_protocol_version ?? '—'}</small>
               </div>
               <span className={`inline-status ${state.jcodeConnected ? 'ok' : 'warn'}`}>
                 <span className="status-mark" /> {state.jcodeConnected ? 'connected' : 'unavailable'}
@@ -675,7 +675,7 @@ export function ChangesScreen({ state }: { state: AppState }) {
           <div className="honest-unavailable">
             <strong>File-level change reports are not available from this adapter build.</strong>
             <p>
-              JCode's curated API exposes aggregate edit statistics on session summaries, not a
+              JCode’s curated API exposes aggregate edit statistics on session summaries, not a
               verified per-file diff. This screen deliberately shows no invented paths or line
               counts. Activity below reflects only observed tool and status events.
             </p>

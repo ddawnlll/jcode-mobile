@@ -132,12 +132,20 @@ export interface ContextView {
   source: string;
 }
 
+export interface ActiveTurnView {
+  turn_id: string;
+  operation_id: string;
+  status: string;
+  started_at_ms: number;
+}
+
 export interface SessionSnapshot {
   session: SessionSummary;
   messages: HistoryMessageView[];
   runtime: RuntimeView | null;
   plan: unknown | null;
   context: ContextView | null;
+  active_turn?: ActiveTurnView | null;
   epoch: string;
   last_seq: number;
   revision: number;

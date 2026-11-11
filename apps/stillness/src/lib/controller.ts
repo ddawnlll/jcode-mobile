@@ -695,9 +695,29 @@ export class Controller {
     const includesLive = Boolean(
       liveText && lastAssistant && lastAssistant.content.includes(liveText.slice(-120)),
     );
+    const restoredTurn = snapshot.active_turn ?? null;
     const clearLive =
-      !snapshot.stale &&
+      !snapshot.stale && !restoredTurn &&
       (includesLive || (!this.state.live.turnId && !this.state.live.assistants.length));
+    const nextLive = restoredTurn
+      ? {
+          ...(this.state.live.turnId === restoredTurn.turn_id ? this.state.live : emptyLive()),
+          turnId: restoredTurn.turn_id,
+          operationId: restoredTurn.operation_id,
+          finishedTurnId: null,
+          startedAtMs: restoredTurn.started_at_ms,
+          status: restoredTurn.status,
+          phase: '',
+          needsReconcile: false,
+          permission: null,
+        }
+      : clearLive
+        ? emptyLive()
+        : {
+            ...this.state.live,
+            needsReconcile: false,
+            status: snapshot.stale ? 'reconciling' : this.state.live.status,
+          };
     const sessions = this.state.sessions.map((session) =>
       session.session_id === snapshot.session.session_id ? snapshot.session : session,
     );
@@ -717,9 +737,7 @@ export class Controller {
       sessionsError: null,
       reconciling: snapshot.stale,
       activeMissing: false,
-      live: clearLive
-        ? emptyLive()
-        : { ...this.state.live, needsReconcile: false, status: snapshot.stale ? 'reconciling' : this.state.live.status },
+      live: nextLive,
       pending: pendingInHistory ? null : this.state.pending,
       composerText: pendingInHistory ? '' : this.state.composerText,
     });

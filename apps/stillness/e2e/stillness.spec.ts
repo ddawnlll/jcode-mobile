@@ -16,6 +16,7 @@ async function dismissDrawer(page: Page) {
 }
 
 test('real session, draft, plan, activity, files, and preferences', async ({ page }) => {
+  test.skip(test.info().project.name !== 'mobile', 'drawer navigation is the mobile surface');
   const title = `Stillness e2e ${suffix} ${test.info().project.name}`;
   await page.goto('/');
   await expect(page.getByTestId('home-screen')).toBeVisible({ timeout: 45_000 });
@@ -74,6 +75,12 @@ test('real session, draft, plan, activity, files, and preferences', async ({ pag
   await expect(page.getByTestId('browser-screen')).toBeVisible();
   await expect(page.getByTestId('browser-entries')).toBeVisible();
 
+  // Return through the project list so the mobile drawer is available again.
+  await page.getByRole('button', { name: 'Back to project' }).click();
+  await expect(page.getByTestId('project-detail')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to projects' }).click();
+  await expect(page.getByTestId('projects-screen')).toBeVisible();
+
   // Preferences are local, immediate, and do not touch execution.
   await openDrawer(page);
   await page.locator('.drawer').getByRole('button', { name: 'Settings' }).click();
@@ -86,6 +93,7 @@ test('real session, draft, plan, activity, files, and preferences', async ({ pag
 });
 
 test('desktop shell exposes the three-pane layout', async ({ page }) => {
+  test.skip(test.info().project.name !== 'desktop', 'three-pane layout is a desktop assertion');
   await page.goto('/');
   await expect(page.getByTestId('home-screen')).toBeVisible({ timeout: 45_000 });
   await expect(page.locator('.rail')).toBeVisible();
@@ -99,34 +107,59 @@ test('desktop shell exposes the three-pane layout', async ({ page }) => {
 
 test('send reports acceptance honestly and stop is the only cancellation', async ({ page }) => {
   test.skip(test.info().project.name !== 'mobile', 'delivery is exercised once on the mobile project');
+  test.setTimeout(180_000);
   await page.goto('/');
   await expect(page.getByTestId('home-screen')).toBeVisible({ timeout: 45_000 });
   await page.getByTestId('session-row').first().click();
   await expect(page.getByTestId('session-screen')).toBeVisible();
+
+  // Model routes come from the daemon, and Command Code is identified by the
+  // normalized provider label rather than one exact spelling.
+  await page.getByTestId('model-button').click();
+  await expect(page.getByTestId('model-sheet')).toBeVisible();
+  await expect(page.getByTestId('command-code-section')).toContainText('deepseek/deepseek-v4-flash');
+  await page.getByTestId('model-sheet').getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('model-sheet')).toBeHidden();
+
   const composer = page.getByTestId('composer-input');
-  await composer.fill('Reply with exactly: still here');
+  // A unique token prevents an older assistant message from satisfying the
+  // generation assertion after repeated local runs.
+  const token = `stillness-${suffix}-ok`;
+  await composer.fill(`Reply with exactly: ${token}`);
   await page.getByTestId('send-button').click();
 
-  const assistant = page.getByTestId('live-assistant-message');
   const failure = page.locator('.inline-error');
   const stop = page.getByTestId('stop-button');
-  await expect(assistant.or(failure).or(stop)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('delivery-state')).toContainText(/Sending to server|Sent to server|Accepted by agent/, {
+    timeout: 20_000,
+  });
 
-  if (await stop.isVisible().catch(() => false)) {
-    // Navigation never cancels the remote turn.
-    await page.getByRole('button', { name: 'Back to sessions' }).click();
-    await expect(page.getByTestId('sessions-screen')).toBeVisible();
-    await page.getByTestId('session-row').first().click();
-    await expect(page.getByTestId('session-screen')).toBeVisible();
-    await page.getByTestId('stop-button').click();
-    await expect(page.getByTestId('stop-button')).toBeHidden({ timeout: 30_000 });
-    await expect(page.getByText(/Stopped|stop/i).first()).toBeVisible({ timeout: 30_000 });
-  } else {
-    // No provider route was available. The client may legitimately show a
-    // typed failure, but it must never invent an assistant response.
-    const assistantCount = await assistant.count();
-    const errorText = (await failure.first().textContent()) ?? '';
-    expect(assistantCount === 0 || errorText.length >= 0).toBeTruthy();
-    await expect(page.getByTestId('delivery-state')).toBeVisible();
-  }
+  // The isolated daemon has a real Command Code key. A generated answer is
+  // required evidence; a failure is reported as a failure, never as content.
+  const assistant = page.locator('[data-testid="assistant-message"], [data-testid="live-assistant-message"]').last();
+  await expect(assistant).toContainText(token, { timeout: 120_000 });
+  await expect(failure).toBeHidden();
+  await expect(page.getByTestId('delivery-state')).not.toContainText(
+    /Unconfirmed|Unknown|Sending to server/,
+    { timeout: 30_000 },
+  );
+  await expect(page.getByTestId('pending-message')).toHaveCount(0, { timeout: 30_000 });
+  await page.screenshot({ path: 'docs/evidence/v0.3.0/stillness-mobile-accepted.png' });
+  // The pending card clears only after an authoritative snapshot shows the
+  // message in history. That is when a second delivery becomes safe.
+  await composer.fill('Write a 300 word description of a quiet library. Do not use any tools.');
+  await expect(page.getByTestId('send-button')).toBeEnabled({ timeout: 30_000 });
+
+  // Navigation never cancels. Run one longer turn and stop it explicitly.
+  await page.getByTestId('send-button').click();
+  await expect(stop).toBeVisible({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Back to sessions' }).click();
+  await expect(page.getByTestId('sessions-screen')).toBeVisible();
+  await page.getByTestId('session-row').first().click();
+  await expect(page.getByTestId('session-screen')).toBeVisible();
+  // Reopening restored the active turn instead of inventing completion.
+  await expect(stop).toBeVisible({ timeout: 20_000 });
+  await stop.click();
+  await expect(stop).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator('.toast')).toContainText(/Stop sent|no active turn/i, { timeout: 20_000 });
 });

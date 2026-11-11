@@ -57,14 +57,15 @@ function startedLabel(live: LiveState): string {
 }
 
 function Elapsed({ since }: { since: number | null }) {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
   useEffect(() => {
     if (!since) return;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [since]);
   if (!since) return null;
-  const seconds = Math.max(0, Math.floor((now - since) / 1000));
+  const seconds = now ? Math.max(0, Math.floor((now - since) / 1000)) : 0;
   return <span className="thinking-time">observed {seconds}s</span>;
 }
 
@@ -555,7 +556,9 @@ export function SessionScreen({ state }: { state: AppState }) {
 
   const dateLabel = state.snapshot?.authoritative_at_ms
     ? longDate(state.snapshot.authoritative_at_ms)
-    : longDate(Date.now());
+    : state.models?.observed_at_ms
+      ? longDate(state.models.observed_at_ms)
+      : '';
 
   return (
     <div className="screen session-screen" data-testid="session-screen">
@@ -794,7 +797,7 @@ export function PlanScreen({ state }: { state: AppState }) {
                 </div>
               ))}
               <div className="plan-footnote">
-                Plan state comes only from the daemon's todo snapshot. Elapsed time and tool events do
+                Plan state comes only from the daemon’s todo snapshot. Elapsed time and tool events do
                 not invent completion or step order.
               </div>
             </>
@@ -832,7 +835,7 @@ export function ActivityScreen({ state }: { state: AppState }) {
             ))
           )}
           <p className="activity-note">
-            This is the adapter's observed event record, not a fabricated command history. For
+            This is the adapter’s observed event record, not a fabricated command history. For
             file-level changes, the adapter has no authoritative report.
           </p>
           <button className="text-link-new" onClick={() => controller.go('changes')}>

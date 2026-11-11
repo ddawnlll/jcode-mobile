@@ -230,7 +230,7 @@ export function ReadyScreen({ state }: { state: AppState }) {
             </div>
             <div className="ready-meta">
               <span>Adapter {state.server?.adapter_version ?? 'unknown'}</span>
-              <span>JCode {state.server?.jcode_version ?? 'unknown'}</span>
+              <span>Harness {state.server?.jcode_version ?? 'unknown'}</span>
               <span>API {state.server?.jcode_protocol_version ?? 'unknown'}</span>
             </div>
             <div className={`inline-status ${state.server?.healthy ? 'ok' : 'warn'}`}>

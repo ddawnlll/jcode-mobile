@@ -82,8 +82,16 @@ fn credential_load_all(app: AppHandle) -> Result<CredentialSnapshot, String> {
     let metadata = read_metadata(&app);
     let mut credentials = std::collections::BTreeMap::new();
     for base_url in &metadata.accounts {
-        if let Ok(value) = entry(base_url)?.get_password() {
-            credentials.insert(base_url.clone(), value);
+        match entry(base_url)?.get_password() {
+            Ok(value) => {
+                credentials.insert(base_url.clone(), value);
+            }
+            Err(keyring::Error::NoEntry) => {}
+            Err(error) => {
+                return Err(format!(
+                    "could not read the OS credential store for {base_url}: {error}"
+                ));
+            }
         }
     }
     Ok(CredentialSnapshot {
@@ -108,7 +116,14 @@ fn credential_set(app: AppHandle, base_url: String, secret: String) -> Result<()
 #[tauri::command]
 fn credential_delete(app: AppHandle, base_url: String) -> Result<(), String> {
     if let Ok(entry) = entry(&base_url) {
-        let _ = entry.delete_credential();
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(error) => {
+                return Err(format!(
+                    "could not remove the OS credential for {base_url}: {error}"
+                ));
+            }
+        }
     }
     let mut metadata = read_metadata(&app);
     metadata.accounts.retain(|item| item != &base_url);

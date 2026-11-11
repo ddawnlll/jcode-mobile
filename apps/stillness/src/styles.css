@@ -673,9 +673,9 @@ pre {
   text-overflow: ellipsis;
 }
 .icon-btn {
-  width: 43px;
-  height: 43px;
-  min-width: 43px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
   display: grid;
   place-items: center;
   border-radius: 11px;
@@ -686,9 +686,9 @@ pre {
   background: var(--wash);
 }
 .icon-btn.small {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
 }
 .head-actions {
   display: flex;
@@ -833,7 +833,7 @@ pre {
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: var(--line-strong);
-  min-height: 32px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -850,7 +850,7 @@ pre {
   color: var(--danger);
 }
 .danger-btn {
-  min-height: 44px;
+  min-height: 48px;
   padding: 0 16px;
   border-radius: 9px;
   background: var(--danger);
@@ -1002,7 +1002,7 @@ pre {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 42px;
+  min-height: 48px;
   font-size: 14px;
 }
 .drawer-foot .preview {
@@ -1097,7 +1097,7 @@ pre {
   display: flex;
   gap: 12px;
   align-items: flex-start;
-  min-height: 66px;
+  min-height: 72px;
   border-radius: 0;
 }
 .session-row:hover,
@@ -1179,7 +1179,7 @@ pre {
 }
 .filter-btn {
   padding: 9px 14px;
-  min-height: 39px;
+  min-height: 48px;
   border: 1px solid var(--line);
   border-radius: 7px;
   font-size: 13px;
@@ -1277,6 +1277,7 @@ pre {
   font: 600 15px var(--font-display);
 }
 .project-back-link {
+  min-height: 44px;
   font-size: 13px;
   color: var(--secondary);
   text-decoration: underline;
@@ -1570,7 +1571,7 @@ pre {
 }
 .tool-card-head {
   width: 100%;
-  min-height: 42px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1790,8 +1791,8 @@ pre {
   overflow: hidden;
 }
 .tool-button {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   border-radius: 8px;
@@ -1811,13 +1812,13 @@ pre {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  min-height: 36px;
+  min-height: 44px;
 }
 .send-btn,
 .stop-btn {
-  width: 37px;
-  height: 37px;
-  min-width: 37px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
   border-radius: 9px;
   display: grid;
   place-items: center;
@@ -2420,6 +2421,7 @@ pre {
   flex: none;
 }
 .seg-switch button {
+  min-height: 44px;
   padding: 8px 10px;
   border-radius: 5px;
   font-size: 12px;
