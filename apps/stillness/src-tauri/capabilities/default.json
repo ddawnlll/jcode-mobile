@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Stillness desktop window: local UI, adapter WebSocket, and native credential commands.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

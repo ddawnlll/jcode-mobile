@@ -50,3 +50,14 @@ artifacts/
 docs/evidence/device/
 *.apk
 *.app.zip
+
+# Rust Adapter v2
+/target/
+apps/stillness/dist/
+apps/stillness/.e2e-auth.json
+apps/stillness/.e2e-results/
+apps/stillness/.e2e-report/
+
+# local agent scratch
+/.commandcode/
+apps/stillness/src-tauri/target/
