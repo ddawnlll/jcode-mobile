@@ -109,7 +109,33 @@ const CLIENT_CAPABILITIES = [
   'directory_create',
   'image_input',
   'changes',
+  'message_full_read',
+  'stdin_input',
+  'turn_safe_stop',
+  'exact_route',
+  'persist_session',
 ] as const;
+
+const DELIVERY_ORDER: Record<string, number> = {
+  draft: 0,
+  sending: 1,
+  sent_to_server: 2,
+  accepted: 3,
+  queued: 3,
+  added: 3,
+  rejected: 4,
+  unconfirmed: 4,
+};
+
+export function nextDeliveryState(
+  current: DeliveryRecord['state'],
+  next: DeliveryRecord['state'],
+): DeliveryRecord['state'] {
+  if (current === 'accepted' || current === 'rejected') return current;
+  if (DELIVERY_ORDER[next] < DELIVERY_ORDER[current]) return current;
+  if (current === 'unconfirmed' && (next === 'sent_to_server' || next === 'sending')) return current;
+  return next;
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
@@ -196,6 +222,8 @@ export class AppController {
   private stepSequence = 0;
   private draftTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingDraft: string | null = null;
+  private draftScope: { profileId: string; sessionId: string; revision: number } | null = null;
+  private draftRevision = 0;
   private lastTurnId = 0;
   private attachedSessionId: string | null = null;
   private nearBottom = true;
@@ -247,6 +275,22 @@ export class AppController {
     { title: string | null; displayTitle: string; at: number; revision: number }
   >();
   private titleRevision = 0;
+  private attachSequence = 0;
+  private attachIntent: { sequence: number; profileId: string; sessionId: string; attachmentId: string | null } | null = null;
+  private contextSequence = 0;
+  private catalogSequence = 0;
+  private planSequence = 0;
+  private lastContextObservedAt = 0;
+  private lastCatalogObservedAt = 0;
+  private saveSequence = 0;
+  private lastSaveBySession = new Map<string, { saved: boolean; revision: number }>();
+  private stoppingTurn: { turnId: number; sessionId: string; attachmentId: string | null; requestId: string } | null = null;
+  private retryInFlight = new Set<string>();
+  private sendInFlight: { profileId: string; sessionId: string; clientMessageId: string } | null = null;
+  private fullMessageCache = new Map<string, string>();
+  private historyRevisionSeen = new Map<string, number>();
+  private inventorySequence = 0;
+  private manualDisconnectPersisted: Promise<void> | null = null;
 
   /* ------------------------------------------------------------- ownership */
 
@@ -336,6 +380,10 @@ export class AppController {
     this.clearAttemptDeadline();
     this.recoveryRequested = false;
     this.connectAttempt = null;
+    this.attachIntent = null;
+    this.stoppingTurn = null;
+    this.clearStreamTimers();
+    this.clearReasoningTimer();
     try {
       this.client?.close();
     } catch {
@@ -347,6 +395,18 @@ export class AppController {
     this.continuationConfirmed = false;
   }
 
+  private clearStreamTimers(): void {
+    if (this.streamTimer) clearTimeout(this.streamTimer);
+    this.streamTimer = null;
+    this.streamText = '';
+    this.reasoningBuffer = '';
+  }
+
+  private clearReasoningTimer(): void {
+    if (this.reasoningTimer) clearTimeout(this.reasoningTimer);
+    this.reasoningTimer = null;
+  }
+
   /** Drop the transport without changing the selected profile. */
   private dropTransport(): void {
     this.stopHealthChecks();
@@ -354,6 +414,10 @@ export class AppController {
     this.clearAttemptDeadline();
     this.clientGeneration += 1;
     this.connectAttempt = null;
+    this.attachIntent = null;
+    this.stoppingTurn = null;
+    this.clearStreamTimers();
+    this.clearReasoningTimer();
     try {
       this.client?.close();
     } catch {
@@ -363,6 +427,11 @@ export class AppController {
     this.attachedSessionId = null;
     this.expectedAttachSessionId = null;
     this.continuationConfirmed = false;
+  }
+
+  private isManuallyDisconnected(profileId: string | null): boolean {
+    if (!profileId) return false;
+    return store.get().manualDisconnect?.profileId === profileId;
   }
 
   cancelPairing(): void {
@@ -518,6 +587,7 @@ export class AppController {
         this.dropTransport();
         this.setConnectionState('offline');
       } else if (changed && this.appState === 'active') {
+        if (this.isManuallyDisconnected(this.profile?.id ?? null)) return;
         void this.connectNow({ immediate: true });
       }
     });
@@ -557,10 +627,11 @@ export class AppController {
     this.pendingActivation = null;
     if (pending) {
       await this.activateProfile(pending.profile, pending.options);
-      this.ensureInventoryTimer();
+      if (!this.isManuallyDisconnected(this.profile?.id ?? null)) this.ensureInventoryTimer();
       return;
     }
     if (this.profile) {
+      if (this.isManuallyDisconnected(this.profile.id)) return;
       await this.connectNow({ immediate: true });
       this.ensureInventoryTimer();
     }
@@ -842,9 +913,19 @@ export class AppController {
     if (options.restore) {
       const lastSession = await getPref(LAST_SESSION);
       if (!this.owns(epoch, profile.id)) return;
-      if (lastSession && cached.some((session) => session.session_id === lastSession)) {
-        const session = cached.find((entry) => entry.session_id === lastSession)!;
-        await this.openSession(session);
+      const live = store.get().inventory.sessions.find((session) => session.session_id === lastSession);
+      const restored = live ?? cached.find((session) => session.session_id === lastSession);
+      if (lastSession && restored) {
+        await this.openSession(restored);
+      } else if (lastSession && !restored) {
+        const scopedKey = `lastSession:${profile.id}`;
+        void setPref(scopedKey, lastSession).catch(() => undefined);
+        store.setState((state) => ({
+          conversation: {
+            ...resetConversation({ serverId: profile.id, sessionId: lastSession }),
+            lastError: `Session ${lastSession} was not in the loaded inventory. Reopen it from a fresh list or it may be archived.`,
+          },
+        }));
       }
     }
   }
@@ -863,6 +944,7 @@ export class AppController {
     }
     const epoch = this.lifecycleEpoch;
     const profileId = this.profile.id;
+    if (this.isManuallyDisconnected(profileId)) return;
     const existing = this.connectAttempt;
     if (existing && existing.epoch === epoch && existing.profileId === profileId) {
       // A retry deadline or manual recovery arrived while this attempt runs.
@@ -995,7 +1077,7 @@ export class AppController {
         }
         if (this.recoveryRequested && this.owns(epoch, profileId)) {
           this.recoveryRequested = false;
-          if (!this.client?.isOpen) this.scheduleReconnect();
+          if (!this.client?.isOpen && !this.isManuallyDisconnected(profileId)) this.scheduleReconnect();
         }
       }
     })();
@@ -1031,6 +1113,12 @@ export class AppController {
       if (!this.ownsClient(epoch, profileId, generation, client)) return;
       if (store.get().connection.state !== 'reconciling') return;
       if (store.get().conversation.sessionId !== sessionId) return;
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          execution: { kind: 'unknown', label: 'Status unavailable', detail: 'Reconciliation timed out.', observedAt: Date.now(), turnId: store.get().conversation.execution.turnId },
+        },
+      }));
       void this.handleTransportFailure(
         client,
         generation,
@@ -1131,8 +1219,15 @@ export class AppController {
     this.clearReconciliation();
     this.attachedSessionId = null;
     this.expectedAttachSessionId = null;
+    this.attachIntent = null;
     this.continuationConfirmed = false;
+    this.clearStreamTimers();
+    this.clearReasoningTimer();
     this.markDeliveriesUnconfirmed();
+    if (this.isManuallyDisconnected(profileId)) {
+      this.setConnectionState('cached', message);
+      return;
+    }
     const hadContent = store.get().conversation.messages.length > 0;
     this.setConnectionState(hadContent ? 'reconnecting' : 'offline', message);
     await this.classifyFailure(
@@ -1173,6 +1268,7 @@ export class AppController {
   private scheduleReconnect(immediate = false): void {
     if (this.reconnectTimer || !this.online || this.appState !== 'active') return;
     if (!this.profile || !this.token) return;
+    if (this.isManuallyDisconnected(this.profile.id)) return;
     const delay = immediate ? 0 : backoffDelay(this.reconnectAttempt);
     this.reconnectAttempt += 1;
     store.setState((state) => ({
@@ -1301,33 +1397,53 @@ export class AppController {
     const profileId = this.profile?.id;
     const epoch = this.lifecycleEpoch;
     const titleRevisionAtStart = this.titleRevision;
+    const sequence = ++this.inventorySequence;
     this.noteAttempt();
-    store.setState((current) => ({ inventory: { ...current.inventory, loading: true, error: null } }));
+    store.setState((current) => ({
+      inventory: {
+        ...current.inventory,
+        loading: true,
+        error: null,
+        inventoryGeneration: sequence,
+        inventoryCursor: null,
+        inventoryEnd: false,
+      },
+    }));
     try {
-      const frame = await client.request(
-        { req: 'list_sessions', limit, include_archived: includeArchived },
-        20_000,
-      );
+      const request: Record<string, unknown> = {
+        req: 'list_sessions',
+        limit,
+        include_archived: includeArchived,
+      };
+      const frame = await client.request(request as never, 20_000);
       if (!this.ownsClient(epoch, profileId, generation, client)) {
         return { ok: false, error: 'The server changed.' };
       }
       if (frame.ev !== 'sessions') throw new Error('Unexpected inventory reply.');
+      if (store.get().inventory.inventoryGeneration !== sequence) {
+        return { ok: false, error: 'A newer inventory request superseded this one.' };
+      }
       this.noteContact();
       this.lastSessionRefresh = Date.now();
       const mergedSessions = frame.sessions.map((session) =>
         this.mergeConfirmedTitle(profileId!, session, titleRevisionAtStart),
       );
-      store.setState((current) => ({
-        inventory: {
-          ...current.inventory,
-          sessions: mergedSessions,
-          fetchedAt: Date.now(),
-          loading: false,
-          error: null,
-          partial: frame.partial,
-          includeArchived,
-        },
-      }));
+      store.setState((current) => {
+        if (current.inventory.inventoryGeneration !== sequence) return {};
+        return {
+          inventory: {
+            ...current.inventory,
+            sessions: mergedSessions,
+            fetchedAt: Date.now(),
+            loading: false,
+            error: null,
+            partial: frame.partial,
+            includeArchived,
+            inventoryCursor: frame.cursor ?? null,
+            inventoryEnd: frame.end === true,
+          },
+        };
+      });
       if (profileId) {
         await upsertSessions(profileId, mergedSessions).catch(() => undefined);
       }
@@ -1441,10 +1557,61 @@ export class AppController {
   }
 
   async loadMoreSessions(): Promise<void> {
-    store.setState((current) => ({
-      inventory: { ...current.inventory, limit: Math.min(current.inventory.limit + 50, 200) },
+    const current = store.get().inventory;
+    if (current.inventoryEnd) return;
+    const cursor = current.inventoryCursor;
+    if (!cursor) {
+      if (current.limit < 200) {
+        store.setState((state) => ({
+          inventory: { ...state.inventory, limit: Math.min(state.inventory.limit + 50, 200) },
+        }));
+        await this.refreshSessions({ force: true });
+      }
+      return;
+    }
+    // Cursor pagination: fetch the next page and dedupe by session id.
+    const client = this.client;
+    if (!client?.isOpen) return;
+    const profileId = this.profile?.id;
+    const generation = this.clientGeneration;
+    const epoch = this.lifecycleEpoch;
+    const sequence = ++this.inventorySequence;
+    store.setState((state) => ({
+      inventory: { ...state.inventory, loading: true, inventoryGeneration: sequence },
     }));
-    await this.refreshSessions({ force: true });
+    try {
+      const frame = await client.request(
+        { req: 'list_sessions', limit: current.limit, include_archived: current.includeArchived, cursor },
+        20_000,
+      );
+      if (!this.ownsClient(epoch, profileId, generation, client)) return;
+      if (frame.ev !== 'sessions') return;
+      if (store.get().inventory.inventoryGeneration !== sequence) return;
+      const byId = new Map<string, SessionInfo>();
+      for (const session of [...store.get().inventory.sessions, ...frame.sessions]) {
+        byId.set(session.session_id, session);
+      }
+      const merged = frame.sessions.map((session) =>
+        this.mergeConfirmedTitle(profileId!, session, this.titleRevision),
+      );
+      for (const session of merged) byId.set(session.session_id, session);
+      store.setState((state) => ({
+        inventory: {
+          ...state.inventory,
+          sessions: [...byId.values()],
+          loading: false,
+          error: null,
+          partial: frame.partial,
+          inventoryCursor: frame.cursor ?? null,
+          inventoryEnd: frame.end === true,
+        },
+      }));
+      if (profileId) await upsertSessions(profileId, merged).catch(() => undefined);
+    } catch (error) {
+      store.setState((state) => ({
+        inventory: { ...state.inventory, loading: false, error: errorMessage(error) },
+      }));
+    }
   }
 
   async archiveSession(session: SessionInfo): Promise<{ ok: boolean; error?: string }> {
@@ -1513,6 +1680,10 @@ export class AppController {
     const epoch = this.lifecycleEpoch;
     const profileId = this.profile?.id;
     const generation = this.clientGeneration;
+    const attachmentId = store.get().conversation.attachmentId;
+    const revision = ++this.saveSequence;
+    const key = `${profileId}:${sessionId}`;
+    this.lastSaveBySession.set(key, { saved, revision });
     try {
       const frame = await client.request(
         { req: 'set_session_saved', session_id: sessionId, saved, label: label ?? null },
@@ -1522,18 +1693,34 @@ export class AppController {
         return { ok: false, error: 'The server changed while this action was pending.' };
       }
       if (frame.ev !== 'ok') throw new Error(frame.ev === 'error' ? frame.message : 'Could not update the bookmark.');
-      store.setState((state) => ({
-        conversation: {
-          ...state.conversation,
-          session: state.conversation.session ? { ...state.conversation.session, saved, save_label: label ?? null } : state.conversation.session,
-        },
-        inventory: {
-          ...state.inventory,
-          sessions: state.inventory.sessions.map((session) =>
-            session.session_id === sessionId ? { ...session, saved, save_label: label ?? null } : session,
-          ),
-        },
-      }));
+      if (!frame.session_id || frame.session_id !== sessionId) {
+        throw new Error('The server confirmed a different session.');
+      }
+      const latest = this.lastSaveBySession.get(key);
+      if (latest && latest.revision > revision && latest.saved !== saved) {
+        return { ok: true };
+      }
+      if (!latest || latest.revision <= revision) {
+        store.setState((state) => {
+          const sameConversation =
+            state.conversation.sessionId === sessionId &&
+            (!state.conversation.attachmentId || !attachmentId || state.conversation.attachmentId === attachmentId);
+          return {
+            conversation: sameConversation
+              ? {
+                  ...state.conversation,
+                  session: state.conversation.session ? { ...state.conversation.session, saved, save_label: label ?? null } : state.conversation.session,
+                }
+              : state.conversation,
+            inventory: {
+              ...state.inventory,
+              sessions: state.inventory.sessions.map((session) =>
+                session.session_id === sessionId ? { ...session, saved, save_label: label ?? null } : session,
+              ),
+            },
+          };
+        });
+      }
       return { ok: true };
     } catch (error) {
       return { ok: false, error: errorMessage(error) };
@@ -1548,11 +1735,19 @@ export class AppController {
     if (!store.get().connection.capabilities.includes('file_read')) {
       return { ok: false, error: 'This server does not support file reads.' };
     }
+    const sessionId = conversation.sessionId;
+    const attachmentId = conversation.attachmentId;
     try {
       const frame = await this.client.request(
-        { req: 'read_file', session_id: conversation.sessionId, path, max_bytes: maxBytes },
+        { req: 'read_file', session_id: sessionId, path, max_bytes: maxBytes },
         15_000,
       );
+      if (
+        store.get().conversation.sessionId !== sessionId ||
+        (attachmentId && store.get().conversation.attachmentId !== attachmentId)
+      ) {
+        return { ok: false, error: 'The open conversation changed.' };
+      }
       if (frame.ev !== 'file_content') {
         throw new Error(frame.ev === 'error' ? frame.message : 'The server did not return the file.');
       }
@@ -1641,12 +1836,14 @@ export class AppController {
       this.client.sendFireAndForget({ req: 'detach_session', session_id: previousSession });
     }
     this.flushDraft();
-    this.streamText = '';
-    if (this.streamTimer) clearTimeout(this.streamTimer);
-    this.streamTimer = null;
+    this.clearStreamTimers();
+    this.clearReasoningTimer();
     this.attachedSessionId = null;
     this.lastTurnId = 0;
+    this.attachIntent = null;
+    this.stoppingTurn = null;
     this.nearBottom = true;
+    this.retryInFlight.clear();
     if (epoch !== this.lifecycleEpoch || this.profile?.id !== serverId) return;
     await setPref(LAST_SESSION, session.session_id);
 
@@ -1736,40 +1933,58 @@ export class AppController {
   async attachSession(sessionId: string): Promise<void> {
     const client = this.client;
     if (!client?.isOpen) return;
-    if (this.attachedSessionId === sessionId) return;
+    if (this.attachedSessionId === sessionId && this.expectedAttachSessionId !== sessionId) return;
     const epoch = this.lifecycleEpoch;
     const profileId = this.profile?.id ?? null;
     const generation = this.clientGeneration;
+    const sequence = ++this.attachSequence;
+    this.attachIntent = { sequence, profileId: profileId ?? '', sessionId, attachmentId: null };
     this.attachedSessionId = sessionId;
     this.expectedAttachSessionId = sessionId;
     try {
       const frame = await client.request({ req: 'attach_session', session_id: sessionId }, 20_000);
       if (!this.ownsClient(epoch, profileId, generation, client)) return;
+      if (this.attachIntent?.sequence !== sequence) return;
       this.noteContact();
       if (frame.ev === 'error') {
-        this.attachedSessionId = null;
-        store.setState((state) => ({
-          conversation: { ...state.conversation, lastError: frame.message },
-        }));
+        if (this.attachIntent?.sequence === sequence) {
+          this.attachedSessionId = null;
+          this.expectedAttachSessionId = null;
+          this.attachIntent = null;
+        }
+        store.setState((state) => {
+          if (store.get().conversation.sessionId !== sessionId) return state;
+          return { conversation: { ...state.conversation, lastError: frame.message } };
+        });
       }
     } catch (error) {
       if (!this.ownsClient(epoch, profileId, generation, client)) return;
-      this.attachedSessionId = null;
-      store.setState((state) => ({
-        conversation: { ...state.conversation, lastError: errorMessage(error) },
-      }));
+      if (this.attachIntent?.sequence === sequence) {
+        this.attachedSessionId = null;
+        this.expectedAttachSessionId = null;
+        this.attachIntent = null;
+      }
+      store.setState((state) => {
+        if (store.get().conversation.sessionId !== sessionId) return state;
+        return { conversation: { ...state.conversation, lastError: errorMessage(error) } };
+      });
     }
   }
 
   closeConversation(): void {
     const sessionId = store.get().conversation.sessionId;
     this.flushDraft();
-    this.flushStream();
+    this.clearStreamTimers();
+    this.clearReasoningTimer();
     if (sessionId && this.client?.isOpen) {
       this.client.sendFireAndForget({ req: 'detach_session', session_id: sessionId });
     }
     this.attachedSessionId = null;
     this.lastTurnId = 0;
+    this.attachIntent = null;
+    this.expectedAttachSessionId = null;
+    this.stoppingTurn = null;
+    this.openSequence += 1;
     store.setState({ conversation: resetConversation({ serverId: this.profile?.id ?? null }) });
   }
 
@@ -1883,33 +2098,69 @@ export class AppController {
       this.profile?.id === profileId &&
       store.get().conversation.sessionId === sessionId;
     const clientMessageId = newClientId('msg');
+    const createdAt = Date.now();
     const record: DeliveryRecord = {
       clientMessageId,
       content: trimmed,
       state: 'sending',
-      createdAt: Date.now(),
+      createdAt,
       ...(images.length ? { images } : null),
     };
     this.addDelivery(record);
-    await setDraft(profileId, sessionId, '');
-    await savePendingSend(profileId, sessionId, {
-      client_message_id: clientMessageId,
-      content: trimmed,
-      state: 'sending',
-      error: null,
-      created_at: record.createdAt,
-      ...(images.length ? { images } : null),
-    });
+    this.sendInFlight = { profileId, sessionId, clientMessageId };
+    try {
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientMessageId,
+        content: trimmed,
+        state: 'sending',
+        error: null,
+        created_at: createdAt,
+        ...(images.length ? { images } : null),
+      });
+    } catch {
+      if (owns()) {
+        this.updateDelivery(clientMessageId, { state: 'unconfirmed', error: 'Local save failed. Your message is preserved as a draft.' });
+      }
+      return { ok: false, error: 'Local save failed. Your message is preserved.' };
+    }
     if (!owns() || this.client !== client) {
       await savePendingSend(profileId, sessionId, {
         client_message_id: clientMessageId,
         content: trimmed,
         state: 'unconfirmed',
         error: 'The server changed before this message was sent.',
-        created_at: record.createdAt,
+        created_at: createdAt,
         ...(images.length ? { images } : null),
-      });
+      }).catch(() => undefined);
       return { ok: false, error: 'The server changed before this message was sent.' };
+    }
+    const markRejected = async (message: string) => {
+      if (owns()) this.updateDelivery(clientMessageId, { state: 'rejected', error: message });
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientMessageId,
+        content: trimmed,
+        state: 'rejected',
+        error: message,
+        created_at: createdAt,
+        ...(images.length ? { images } : null),
+      }).catch(() => undefined);
+    };
+    const markSent = async (state: 'sent_to_server' | 'unconfirmed', message?: string) => {
+      if (owns()) this.updateDelivery(clientMessageId, state === 'sent_to_server' ? { state } : { state, error: message });
+      void savePendingSend(profileId, sessionId, {
+        client_message_id: clientMessageId,
+        content: trimmed,
+        state,
+        error: message ?? null,
+        created_at: createdAt,
+        ...(images.length ? { images } : null),
+      }).catch(() => undefined);
+    };
+    const missing = images.filter((image) => !image.base64);
+    if (missing.length) {
+      const message = 'One or more attachments could not be read. Review them before sending.';
+      await markRejected(message);
+      return { ok: false, error: message };
     }
     try {
       const frame = await client.request(
@@ -1920,52 +2171,20 @@ export class AppController {
           client_message_id: clientMessageId,
           ...(images.length
             ? {
-                images: images
-                  .filter((image) => image.base64)
-                  .map((image) => [image.mediaType, image.base64!] as [string, string]),
+                images: images.map((image) => [image.mediaType, image.base64!] as [string, string]),
               }
             : null),
         },
         15_000,
       );
       if (frame.ev === 'error') {
-        if (owns()) this.updateDelivery(clientMessageId, { state: 'rejected', error: frame.message });
-        await savePendingSend(profileId, sessionId, {
-          client_message_id: clientMessageId,
-          content: trimmed,
-          state: 'rejected',
-          error: frame.message,
-          created_at: record.createdAt,
-          ...(images.length ? { images } : null),
-        });
+        await markRejected(frame.message);
         return { ok: false, error: frame.message };
       }
-      if (owns()) this.updateDelivery(clientMessageId, { state: 'sent_to_server' });
-      await savePendingSend(profileId, sessionId, {
-        client_message_id: clientMessageId,
-        content: trimmed,
-        state: 'sent_to_server',
-        error: null,
-        created_at: record.createdAt,
-        ...(images.length ? { images } : null),
-      });
+      await markSent('sent_to_server');
       return { ok: true };
     } catch {
-      // The frame may or may not have reached the server: never auto-resend.
-      if (owns()) {
-        this.updateDelivery(clientMessageId, {
-          state: 'unconfirmed',
-          error: 'Delivery unconfirmed. Check the conversation before sending again.',
-        });
-      }
-      await savePendingSend(profileId, sessionId, {
-        client_message_id: clientMessageId,
-        content: trimmed,
-        state: 'unconfirmed',
-        error: 'Delivery unconfirmed.',
-        created_at: record.createdAt,
-        ...(images.length ? { images } : null),
-      });
+      await markSent('unconfirmed', 'Delivery unconfirmed.');
       return { ok: false, error: 'Delivery unconfirmed. Check the conversation before sending again.' };
     }
   }
@@ -2014,17 +2233,30 @@ export class AppController {
       guidance: true,
       ...(images.length ? { images } : null),
     });
-    await setDraft(profileId, sessionId, '');
-    await savePendingSend(profileId, sessionId, {
-      client_message_id: clientId,
-      content,
-      state: 'sending',
-      kind: 'guidance',
-      error: null,
-      created_at: createdAt,
-      ...(images.length ? { images } : null),
-    });
+    try {
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientId,
+        content,
+        state: 'sending',
+        kind: 'guidance',
+        error: null,
+        created_at: createdAt,
+        ...(images.length ? { images } : null),
+      });
+    } catch {
+      if (owns()) this.updateDelivery(clientId, { state: 'unconfirmed', error: 'Instruction save failed.' });
+      return { ok: false, error: 'Instruction save failed.' };
+    }
     if (!owns() || this.client !== client) {
+      await savePendingSend(profileId, sessionId, {
+        client_message_id: clientId,
+        content,
+        state: 'unconfirmed',
+        kind: 'guidance',
+        error: 'The server changed before this instruction was sent.',
+        created_at: createdAt,
+        ...(images.length ? { images } : null),
+      }).catch(() => undefined);
       return { ok: false, error: 'The server changed before this instruction was sent.' };
     }
     try {
@@ -2145,20 +2377,110 @@ export class AppController {
   }
 
   async retryDelivery(clientMessageId: string): Promise<{ ok: boolean; error?: string }> {
+    const capturedProfile = this.profile;
+    const capturedSession = store.get().conversation.sessionId;
+    const capturedServer = store.get().conversation.serverId;
     const record = store
       .get()
       .conversation.delivery.find((entry) => entry.clientMessageId === clientMessageId);
     if (!record) return { ok: false, error: 'Message not found.' };
-    await this.dismissDelivery(clientMessageId);
-    // Retry carries the original images and instruction intent (SESS-3).
-    if (record.guidance) return this.sendGuidance(record.content, record.images ?? []);
-    return this.send(record.content, record.images ?? []);
+    if (!capturedProfile || !capturedSession) return { ok: false, error: 'No session is open.' };
+    const key = `${capturedProfile.id}:${capturedSession}:${clientMessageId}`;
+    if (this.retryInFlight.has(key)) return { ok: false, error: 'This message is already being retried.' };
+    this.retryInFlight.add(key);
+    try {
+      if (!this.client?.isOpen) return { ok: false, error: 'Reconnect before retrying.' };
+      if (this.profile?.id !== capturedProfile.id) {
+        return { ok: false, error: 'The server changed before this message was retried.' };
+      }
+      if (store.get().conversation.sessionId !== capturedSession) {
+        return { ok: false, error: 'The open session changed before this message was retried.' };
+      }
+      const original = {
+        clientMessageId: record.clientMessageId,
+        content: record.content,
+        guidance: record.guidance ?? false,
+        images: record.images ?? [],
+        createdAt: record.createdAt,
+      };
+      const at = Date.now();
+      if (original.guidance) {
+        const result = await this.sendGuidance(original.content, original.images);
+        if (result.ok) {
+          await deletePendingSend(capturedProfile.id, capturedSession, original.clientMessageId).catch(() => undefined);
+          store.setState((state) => {
+            if (state.conversation.sessionId !== capturedSession) return state;
+            return {
+              conversation: {
+                ...state.conversation,
+                delivery: state.conversation.delivery.filter((entry) => entry.clientMessageId !== original.clientMessageId),
+              },
+            };
+          });
+        }
+        return result;
+      }
+      if (this.profile?.id !== capturedProfile.id || store.get().conversation.sessionId !== capturedSession) {
+        return { ok: false, error: 'The server changed before this message was retried.' };
+      }
+      const newId = original.clientMessageId;
+      const delivery: DeliveryRecord = {
+        clientMessageId: newId,
+        content: original.content,
+        state: 'sending',
+        createdAt: at,
+        ...(original.images.length ? { images: original.images } : null),
+      };
+      const frame = await this.client.request(
+        {
+          req: 'send_message',
+          session_id: capturedSession,
+          content: original.content,
+          client_message_id: newId,
+          ...(original.images.length
+            ? { images: original.images.map((image) => [image.mediaType, image.base64!] as [string, string]) }
+            : null),
+        },
+        15_000,
+      );
+      if (frame.ev === 'error') {
+        await deletePendingSend(capturedProfile.id, capturedSession, original.clientMessageId).catch(() => undefined);
+        return { ok: false, error: frame.message };
+      }
+      if (this.profile?.id !== capturedProfile.id || store.get().conversation.sessionId !== capturedSession || store.get().conversation.serverId !== capturedServer) {
+        return { ok: false, error: 'The server changed before this message was retried.' };
+      }
+      await deletePendingSend(capturedProfile.id, capturedSession, original.clientMessageId).catch(() => undefined);
+      store.setState((state) => {
+        if (state.conversation.sessionId !== capturedSession) return state;
+        return {
+          conversation: {
+            ...state.conversation,
+            delivery: [
+              ...state.conversation.delivery.filter((entry) => entry.clientMessageId !== original.clientMessageId),
+              { ...delivery, state: 'sent_to_server' as const },
+            ],
+          },
+        };
+      });
+      void savePendingSend(capturedProfile.id, capturedSession, {
+        client_message_id: newId,
+        content: original.content,
+        state: 'sent_to_server',
+        error: null,
+        created_at: at,
+        ...(original.images.length ? { images: original.images } : null),
+      }).catch(() => undefined);
+      return { ok: true };
+    } finally {
+      this.retryInFlight.delete(key);
+    }
   }
 
   async dismissDelivery(clientMessageId: string): Promise<void> {
     const conversation = store.get().conversation;
     if (this.profile && conversation.sessionId) {
-      await deletePendingSend(this.profile.id, conversation.sessionId, clientMessageId);
+      await deletePendingSend(this.profile.id, conversation.sessionId, clientMessageId).catch(() => undefined);
     }
     store.setState((state) => ({
       conversation: {
@@ -2180,9 +2502,12 @@ export class AppController {
     store.setState((state) => ({
       conversation: {
         ...state.conversation,
-        delivery: state.conversation.delivery.map((record) =>
-          record.clientMessageId === clientMessageId ? { ...record, ...patch } : record,
-        ),
+        delivery: state.conversation.delivery.map((record) => {
+          if (record.clientMessageId !== clientMessageId) return record;
+          const merged = { ...record, ...patch };
+          if (patch.state) merged.state = nextDeliveryState(record.state, patch.state);
+          return merged;
+        }),
       },
     }));
   }
@@ -2243,7 +2568,15 @@ export class AppController {
     const previous = conversation.execution;
     const client = this.client;
     const generation = this.clientGeneration;
+    const profileId = this.profile?.id ?? null;
     const sessionId = conversation.sessionId;
+    const attachmentId = conversation.attachmentId;
+    const turnId = conversation.execution.turnId;
+    const requestId = newClientId('stop');
+    if (this.stoppingTurn && this.stoppingTurn.turnId === turnId && this.stoppingTurn.sessionId === sessionId) {
+      return { ok: true };
+    }
+    this.stoppingTurn = { turnId, sessionId, attachmentId: attachmentId ?? null, requestId };
     store.setState((state) => ({
       conversation: {
         ...state.conversation,
@@ -2251,11 +2584,20 @@ export class AppController {
       },
     }));
     try {
-      const frame = await client.request({ req: 'cancel', session_id: sessionId }, 10_000);
+      const frame = await client.request({ req: 'cancel', session_id: sessionId, turn_id: turnId, attachment_id: attachmentId ?? undefined, stop_request_id: requestId }, 10_000);
       if (frame.ev === 'error') throw new Error(frame.message);
+      if (!this.ownsClient(this.lifecycleEpoch, profileId, generation, client)) {
+        return { ok: false, error: 'The server changed while stopping this turn.' };
+      }
+      if (store.get().conversation.sessionId !== sessionId) {
+        return { ok: false, error: 'The open session changed while stopping this turn.' };
+      }
+      if (this.stoppingTurn?.turnId !== turnId) {
+        return { ok: false, error: 'This turn already ended.' };
+      }
       return { ok: true };
     } catch (error) {
-      if (generation === this.clientGeneration) {
+      if (generation === this.clientGeneration && this.stoppingTurn?.requestId === requestId) {
         store.setState((state) => ({
           conversation: { ...state.conversation, execution: previous },
         }));
@@ -2275,19 +2617,28 @@ export class AppController {
     const epoch = this.lifecycleEpoch;
     const profileId = this.profile?.id ?? null;
     const generation = this.clientGeneration;
+    const attachmentId = conversation.attachmentId;
+    const sequence = ++this.planSequence;
     store.setState((state) => ({ conversation: { ...state.conversation, planLoading: true } }));
     try {
       const frame = await client.request({ req: 'get_todo_state', session_id: sessionId }, 10_000);
       if (!this.ownsClient(epoch, profileId, generation, client)) return;
-      if (store.get().conversation.sessionId !== sessionId) return;
+      if (sequence < this.planSequence) return;
+      const current = store.get().conversation;
+      if (current.sessionId !== sessionId) return;
+      if (attachmentId && current.attachmentId && current.attachmentId !== attachmentId) return;
       if (frame.ev === 'todo_state') {
-        store.setState((state) => ({
-          conversation: {
-            ...state.conversation,
-            plan: { state: frame.state, observedAt: frame.observed_at_ms },
-            planLoading: false,
-          },
-        }));
+        if (frame.observed_at_ms <= (current.plan?.observedAt ?? 0)) return;
+        store.setState((state) => {
+          if (state.conversation.plan && frame.observed_at_ms <= (state.conversation.plan?.observedAt ?? 0)) return state;
+          return {
+            conversation: {
+              ...state.conversation,
+              plan: { state: frame.state, observedAt: frame.observed_at_ms },
+              planLoading: false,
+            },
+          };
+        });
       } else if (frame.ev === 'error') {
         store.setState((state) => ({
           conversation: {
@@ -2298,7 +2649,7 @@ export class AppController {
         }));
       }
     } catch {
-      if (generation === this.clientGeneration) {
+      if (generation === this.clientGeneration && sequence === this.planSequence) {
         store.setState((state) => ({
           conversation: { ...state.conversation, planLoading: false },
         }));
@@ -2454,24 +2805,41 @@ export class AppController {
         error: null,
         partial: false,
         limit: 50,
+        inventoryCursor: null,
+        inventoryEnd: false,
+        inventoryGeneration: 0,
         includeArchived: false,
         pinnedSessionIds: [],
         projects: [],
         pendingRestore: null,
       },
+      manualDisconnect: null,
       conversation: resetConversation(),
     });
     if (remaining[0]) await this.activateProfile(remaining[0], { restore: false });
   }
 
   async disconnect(): Promise<void> {
+    const profileId = this.profile?.id ?? null;
     this.invalidateLifecycle();
     this.suspendInventoryPolling();
+    this.clearReconnect();
+    this.inventoryRequested = false;
+    if (profileId) {
+      store.setState({ manualDisconnect: { profileId, at: Date.now() } });
+      const key = `manualDisconnect:${profileId}`;
+      void setPref(key, '1').catch(() => undefined);
+      this.manualDisconnectPersisted = Promise.resolve();
+    }
     this.setConnectionState('cached');
   }
 
   async reconnect(): Promise<void> {
     if (this.credentialLoading) return;
+    if (this.profile) {
+      store.setState({ manualDisconnect: null });
+      void setPref(`manualDisconnect:${this.profile.id}`, '0').catch(() => undefined);
+    }
     this.reconnectAttempt = 0;
     this.clearReconnect();
     this.recoveryRequested = true;
@@ -2734,11 +3102,17 @@ export class AppController {
     const client = this.client;
     const sessionId = store.get().conversation.sessionId;
     if (!client?.isOpen || !sessionId) return { models: [], current: null };
+    const sequence = ++this.catalogSequence;
+    const attachmentId = store.get().conversation.attachmentId;
     try {
       const frame = await client.request({ req: 'list_models', session_id: sessionId }, 8_000, {
         suppressEvent: true,
       });
       if (frame.ev !== 'models') return { models: [], current: null };
+      if (sequence < this.catalogSequence) return { models: [], current: null };
+      const current = store.get().conversation;
+      if (current.sessionId !== sessionId) return { models: [], current: null };
+      if (attachmentId && current.attachmentId && current.attachmentId !== attachmentId) return { models: [], current: null };
       this.applyCatalog(frame);
       return { models: frame.models, current: frame.current ?? null };
     } catch {
@@ -2759,8 +3133,6 @@ export class AppController {
           efforts: frame.efforts ?? state.conversation.config.efforts,
           effortsByModel: frame.efforts_by_model ?? state.conversation.config.effortsByModel,
           routes: frame.routes ?? state.conversation.config.routes,
-          // An explicit null means "this route has no effort" (confirmed), not
-          // "keep whatever the previous route used" (CFG-3).
           effort:
             frame.current_effort !== undefined
               ? frame.current_effort
@@ -2971,6 +3343,9 @@ export class AppController {
   private applyContext(frame: Extract<ServerEvent, { ev: 'context_snapshot' }>): void {
     const conversation = store.get().conversation;
     if (frame.session_id !== conversation.sessionId) return;
+    if (frame.attachment_id && conversation.attachmentId && frame.attachment_id !== conversation.attachmentId) return;
+    if (frame.observed_at_ms <= this.lastContextObservedAt) return;
+    this.lastContextObservedAt = frame.observed_at_ms;
     const modelMatches =
       frame.model === null ||
       conversation.config.model === null ||
@@ -2981,11 +3356,13 @@ export class AppController {
       basis: frame.basis,
       model: frame.model,
       observedAt: frame.observed_at_ms,
-      // A snapshot from another route is last-known, never current (CFG-2).
       freshness: modelMatches && frame.cached !== true ? 'current' : 'stale',
       source: 'adapter',
     };
-    store.setState((state) => ({ conversation: { ...state.conversation, context: next } }));
+    store.setState((state) => {
+      if (frame.observed_at_ms <= this.lastContextObservedAt - 1_000) return state;
+      return { conversation: { ...state.conversation, context: next } };
+    });
   }
 
   /** Authenticated read-only server directory listing. */
@@ -3107,24 +3484,32 @@ export class AppController {
 
   setDraftText(sessionId: string, text: string): void {
     if (!this.profile) return;
+    const conversation = store.get().conversation;
+    if (conversation.sessionId !== sessionId) return;
+    const scope = { profileId: this.profile.id, sessionId, revision: ++this.draftRevision };
+    this.draftScope = scope;
     this.pendingDraft = text;
     if (this.draftTimer) return;
     this.draftTimer = setTimeout(() => {
       this.draftTimer = null;
       this.flushDraft();
     }, budgets.draftDebounceMs);
-    void sessionId;
   }
 
   flushDraft(): void {
     if (this.draftTimer) clearTimeout(this.draftTimer);
     this.draftTimer = null;
     if (!this.profile || this.pendingDraft === null) return;
+    const scope = this.draftScope;
     const conversation = store.get().conversation;
+    if (!scope) return;
+    if (this.profile.id !== scope.profileId) return;
+    if (conversation.sessionId && conversation.sessionId !== scope.sessionId) return;
     if (!conversation.sessionId) return;
+    if (scope.revision < this.draftRevision) return;
     const value = this.pendingDraft;
     this.pendingDraft = null;
-    void setDraft(this.profile.id, conversation.sessionId, value);
+    void setDraft(scope.profileId, scope.sessionId, value);
   }
 
   /* ---------------------------------------------------------------- frames */
@@ -3151,19 +3536,18 @@ export class AppController {
           ? this.mergeConfirmedTitle(profileId, frame.session, -1)
           : frame.session;
         const previous = store.get().conversation;
-        if (
-          !this.creatingSession &&
-          this.expectedAttachSessionId &&
-          session.session_id !== this.expectedAttachSessionId &&
-          session.session_id !== previous.sessionId
-        ) {
+        if (!this.creatingSession && this.expectedAttachSessionId && session.session_id !== this.expectedAttachSessionId && session.session_id !== previous.sessionId) {
           return;
         }
+        if (this.attachIntent && this.attachIntent.sessionId !== session.session_id) return;
         this.expectedAttachSessionId = null;
         this.continuationConfirmed = frame.continuation === true;
         const previousAttachment = previous.attachmentId;
         const sameSession = session.session_id === previous.sessionId;
         this.lastTurnId = 0;
+        this.clearStreamTimers();
+        this.clearReasoningTimer();
+        this.stoppingTurn = null;
         // A reattach keeps the transcript; a different session starts clean so
         // the previous conversation can never flash under the new title.
         const base = sameSession
@@ -3177,11 +3561,11 @@ export class AppController {
         store.setState((state) => ({
           connection: { ...state.connection, capabilityGap },
         }));
+        if (this.attachIntent) this.attachIntent = { ...this.attachIntent, attachmentId: frame.attachment_id };
         store.setState({
           conversation: {
             ...base,
             capabilities,
-            // A new attachment identity fences every older event.
             attachmentId: frame.attachment_id,
             sessionId: session.session_id,
             serverId: this.profile?.id ?? previous.serverId,
@@ -3201,6 +3585,7 @@ export class AppController {
           this.markDeliveriesUnconfirmed();
         }
         this.attachedSessionId = session.session_id;
+        this.attachIntent = { sequence: this.attachIntent?.sequence ?? ++this.attachSequence, profileId: profileId ?? '', sessionId: session.session_id, attachmentId: frame.attachment_id };
         void this.refreshSessions({ force: true });
         if (frame.capabilities.includes('session_config')) {
           setTimeout(() => {
@@ -3410,8 +3795,13 @@ export class AppController {
       }
       case 'turn_done': {
         if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.lastTurnId = frame.turn_id;
+        if (this.stoppingTurn && this.stoppingTurn.turnId === frame.turn_id && this.stoppingTurn.sessionId === frame.session_id) {
+          this.stoppingTurn = null;
+        }
         this.flushStream(true, true);
         this.commitProvisional();
+        this.clearStdinRequest();
         this.setExecution({
           kind: 'ready',
           label: 'Ready',
@@ -3423,6 +3813,7 @@ export class AppController {
             ...state.conversation,
             reasoningPhase: 'none',
             reasoningDurationSecs: state.conversation.reasoningDurationSecs,
+            stopReason: frame.stop_reason ?? null,
           },
         }));
         void this.refreshContext();
@@ -3435,6 +3826,8 @@ export class AppController {
       }
       case 'turn_stopped': {
         if (!belongs(frame.attachment_id, frame.session_id) || frame.turn_id < this.lastTurnId) return;
+        this.lastTurnId = frame.turn_id;
+        this.clearStdinRequest();
         this.flushStream(true, true);
         this.commitProvisional();
         this.setExecution({
@@ -3523,17 +3916,27 @@ export class AppController {
         return;
       }
       case 'soft_interrupt_injected': {
-        if (!belongs(frame.attachment_id, frame.session_id)) return;
-        for (const clientId of frame.client_ids) {
-          const record = store
-            .get()
-            .conversation.delivery.find((entry) => entry.clientMessageId === clientId);
-          if (record && record.state === 'queued') {
-            this.updateDelivery(clientId, { state: 'added' });
-            const profile = this.profile;
-            const sessionId = store.get().conversation.sessionId;
-            if (profile && sessionId) {
-              void deletePendingSend(profile.id, sessionId, clientId);
+        if (belongs(frame.attachment_id, frame.session_id) || frame.session_id === store.get().conversation.sessionId) {
+          for (const clientId of frame.client_ids) {
+            const record = store
+              .get()
+              .conversation.delivery.find((entry) => entry.clientMessageId === clientId);
+            if (record && (record.state === 'queued' || record.state === 'sending' || record.state === 'sent_to_server')) {
+              this.updateDelivery(clientId, { state: 'added' });
+              const profile = this.profile;
+              const sessionId = store.get().conversation.sessionId;
+              if (profile && sessionId) {
+                void deletePendingSend(profile.id, sessionId, clientId).catch(() => undefined);
+                void savePendingSend(profile.id, sessionId, {
+                  client_message_id: clientId,
+                  content: record.content,
+                  state: 'added',
+                  kind: 'guidance',
+                  error: null,
+                  created_at: record.createdAt,
+                  ...(record.images?.length ? { images: record.images } : null),
+                }).catch(() => undefined);
+              }
             }
           }
         }
@@ -3543,6 +3946,54 @@ export class AppController {
         for (const clientId of frame.cancelled) {
           this.updateDelivery(clientId, { state: 'rejected', error: 'Cancelled before delivery.' });
         }
+        for (const clientId of frame.not_queued ?? []) {
+          this.updateDelivery(clientId, { state: 'rejected', error: 'Was not queued on the server.' });
+        }
+        return;
+      }
+      case 'stdin_request': {
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
+        store.setState((state) => ({
+          conversation: {
+            ...state.conversation,
+            stdinRequest: {
+              requestId: frame.request_id,
+              tool: frame.tool,
+              prompt: frame.prompt,
+              isPassword: frame.is_password === true,
+              attachmentId: frame.attachment_id,
+            },
+          },
+        }));
+        return;
+      }
+      case 'stdin_response': {
+        if (!belongs(frame.attachment_id, frame.session_id)) return;
+        if (store.get().conversation.stdinRequest?.requestId === frame.request_id) {
+          if (frame.delivered) this.clearStdinRequest();
+          else {
+            store.setState((state) => ({
+              conversation: { ...state.conversation, lastError: frame.message ?? 'The input could not be delivered.' },
+            }));
+          }
+        }
+        return;
+      }
+      case 'message_chunk': {
+        if (frame.session_id !== store.get().conversation.sessionId) return;
+        const key = `${frame.session_id}:${frame.message_index}`;
+        if (frame.offset === 0) this.fullMessageCache.set(key, frame.text);
+        else {
+          const prior = this.fullMessageCache.get(key) ?? '';
+          this.fullMessageCache.set(key, prior + frame.text);
+        }
+        return;
+      }
+      case 'history_revision': {
+        if (frame.session_id !== store.get().conversation.sessionId) return;
+        store.setState((state) => ({
+          conversation: { ...state.conversation, historyRevision: frame.revision, historyGenesis: frame.genesis || null },
+        }));
         return;
       }
       case 'session_renamed': {
@@ -3578,6 +4029,8 @@ export class AppController {
       }
       case 'todo_state': {
         if (frame.session_id !== store.get().conversation.sessionId) return;
+        const currentPlan = store.get().conversation.plan;
+        if (frame.observed_at_ms <= (currentPlan?.observedAt ?? 0)) return;
         store.setState((state) => ({
           conversation: {
             ...state.conversation,
@@ -3600,6 +4053,16 @@ export class AppController {
         if (frame.session_id !== store.get().conversation.sessionId) return;
         store.setState((state) => {
           const modelChanged = frame.model !== null && frame.model !== state.conversation.config.model;
+          const pending = state.conversation.config;
+          if (
+            pending.applying &&
+            frame.model !== null &&
+            pending.pendingModel !== null &&
+            pending.pendingModel !== frame.model &&
+            pending.modelConfirmed === false
+          ) {
+            return state;
+          }
           return {
             conversation: {
               ...state.conversation,
@@ -3635,8 +4098,14 @@ export class AppController {
       case 'image_ack':
         return;
       case 'session_closed': {
+        if (frame.session_id && frame.session_id !== store.get().conversation.sessionId) return;
+        if (frame.attachment_id && store.get().conversation.attachmentId && frame.attachment_id !== store.get().conversation.attachmentId) return;
         store.setState((state) => ({
-          conversation: { ...state.conversation, lastError: frame.reason },
+          conversation: {
+            ...state.conversation,
+            lastError: frame.reason,
+            execution: { kind: 'unknown', label: 'Session closed', detail: frame.reason, observedAt: Date.now(), turnId: state.conversation.execution.turnId },
+          },
         }));
         return;
       }
@@ -3670,6 +4139,68 @@ export class AppController {
       default:
         return;
     }
+  }
+
+  private clearStdinRequest(): void {
+    store.setState((state) => ({
+      conversation: { ...state.conversation, stdinRequest: null },
+    }));
+  }
+
+  async answerStdinRequest(value: string): Promise<{ ok: boolean; error?: string }> {
+    const conversation = store.get().conversation;
+    if (!conversation.stdinRequest || !conversation.sessionId || !this.client?.isOpen) {
+      return { ok: false, error: 'No blocked input is waiting.' };
+    }
+    if (!store.get().connection.capabilities.includes('stdin_input')) {
+      return { ok: false, error: 'This server does not support answering from the phone.' };
+    }
+    const requestId = conversation.stdinRequest.requestId;
+    const attachmentId = conversation.stdinRequest.attachmentId;
+    const sessionId = conversation.sessionId;
+    if (conversation.attachmentId && attachmentId !== conversation.attachmentId) {
+      return { ok: false, error: 'This blocked input belongs to an old attachment.' };
+    }
+    try {
+      const frame = await this.client.request(
+        { req: 'stdin_response', session_id: sessionId, request_id: requestId, value },
+        10_000,
+      );
+      if (frame.ev === 'error') return { ok: false, error: frame.message };
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: errorMessage(error) };
+    }
+  }
+
+  async loadFullMessage(messageIndex: number): Promise<{ ok: boolean; error?: string; text?: string }> {
+    if (!this.client?.isOpen) return { ok: false, error: 'Reconnect to read the full answer.' };
+    if (!store.get().connection.capabilities.includes('message_full_read')) {
+      return { ok: false, error: 'This server does not support full-answer reads.' };
+    }
+    const sessionId = store.get().conversation.sessionId;
+    if (!sessionId) return { ok: false, error: 'No session is open.' };
+    const revision = store.get().conversation.historyRevision ?? undefined;
+    const key = `${sessionId}:${messageIndex}`;
+    let accumulated = this.fullMessageCache.get(key) ?? '';
+    let offset = Buffer.byteLength(accumulated, 'utf8');
+    for (let round = 0; round < 8; round += 1) {
+      try {
+        const frame = await this.client.request(
+          { req: 'get_full_message', session_id: sessionId, message_index: messageIndex, offset, limit: 65_536, revision },
+          10_000,
+        );
+        if (frame.ev !== 'message_chunk') return { ok: false, error: 'The server did not return the answer.' };
+        if (frame.session_id !== sessionId) return { ok: false, error: 'The answer belongs to another session.' };
+        accumulated += frame.text;
+        this.fullMessageCache.set(key, accumulated);
+        offset = frame.offset + Buffer.byteLength(frame.text, 'utf8');
+        if (frame.done) return { ok: true, text: accumulated };
+      } catch (error) {
+        return { ok: false, error: errorMessage(error) };
+      }
+    }
+    return { ok: true, text: accumulated };
   }
 
   private boundTools(tools: ToolRow[]): ToolRow[] {
@@ -3953,11 +4484,8 @@ export class AppController {
   private async applyHistory(frame: Extract<ServerEvent, { ev: 'history' }>): Promise<void> {
     const state = store.get();
     const conversation = state.conversation;
-    if (
-      frame.messages.length === 0 &&
-      frame.total_messages === 0 &&
-      conversation.messages.length > 0
-    ) {
+    const isReset = frame.total_messages === 0 && frame.messages.length === 0;
+    if (isReset && conversation.historyRevision === null && conversation.messages.length > 0 && frame.history_revision === undefined) {
       return;
     }
     if (!this.profile || !conversation.sessionId) return;
@@ -3967,6 +4495,12 @@ export class AppController {
     const epoch = this.lifecycleEpoch;
     const generation = this.clientGeneration;
     const client = this.client;
+    const revision = frame.history_revision;
+    if (revision !== undefined) {
+      const seen = this.historyRevisionSeen.get(sessionId) ?? conversation.historyRevision;
+      if (seen !== null && revision < seen) return;
+      this.historyRevisionSeen.set(sessionId, revision);
+    }
 
     const bookmark = await getBookmark(serverId, sessionId);
     if (
@@ -3983,7 +4517,26 @@ export class AppController {
     }
     const incoming = attachHistoryImages(frame.messages, frame.images);
     const currentConversation = store.get().conversation;
-    // A live snapshot must not drop pages the user already loaded.
+    if (isReset && frame.history_revision !== undefined) {
+      // Authoritative clear/compact lineage: rows beyond the announced total are gone.
+      store.setState((state) => ({
+        conversation: {
+          ...state.conversation,
+          messages: [],
+          totalMessages: 0,
+          baseIndex: 0,
+          hasOlder: false,
+          historyRevision: revision ?? null,
+          historyGenesis: frame.history_genesis ?? null,
+          historyFreshness: { status: 'authoritative', observedAt: Date.now() },
+          lastError: null,
+        },
+      }));
+      this.clearReconciliation();
+      this.noteContact();
+      void clearCachedConversation(serverId, sessionId).catch(() => undefined);
+      return;
+    }
     const older = currentConversation.messages.filter(
       (message) => message.index < frame.base_index,
     );
@@ -4064,6 +4617,8 @@ export class AppController {
         ...current.conversation,
         messages,
         totalMessages: frame.total_messages,
+        historyRevision: revision ?? current.conversation.historyRevision,
+        historyGenesis: frame.history_genesis ?? current.conversation.historyGenesis,
         baseIndex,
         hasOlder: baseIndex > 0,
         loadingOlder: false,
@@ -4092,15 +4647,7 @@ export class AppController {
                 frame.images_omitted === 1 ? 'was' : 'were'
               } too large for this phone and not loaded.`
             : null,
-        execution:
-          current.conversation.execution.kind === 'unknown'
-            ? {
-                kind: 'ready',
-                label: 'Ready',
-                observedAt: Date.now(),
-                turnId: current.conversation.execution.turnId,
-              }
-            : current.conversation.execution,
+        execution: current.conversation.execution,
       },
       connection:
         current.connection.state === 'reconciling'
@@ -4146,10 +4693,17 @@ export class AppController {
         { suppressEvent: true },
       );
       if (frame.ev !== 'history') throw new Error('Unexpected history reply.');
+      if (frame.history_revision !== undefined) {
+        const current = store.get().conversation;
+        if (frame.history_revision < (current.historyRevision ?? frame.history_revision)) return;
+        if (current.historyGenesis && frame.history_genesis && frame.history_genesis !== current.historyGenesis) {
+          return;
+        }
+      }
       if (
         this.profile?.id !== profileId ||
         this.client !== client ||
-        store.get().conversation.attachmentId !== attachmentId
+        (attachmentId && store.get().conversation.attachmentId !== attachmentId)
       ) {
         return;
       }

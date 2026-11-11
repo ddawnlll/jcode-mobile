@@ -71,6 +71,8 @@ export interface ModelRoute {
 export interface HistoryMessage {
   /** Stable zero-based position in the persisted transcript. */
   index: number;
+  /** True when the preview was shortened by the adapter cap. */
+  truncated?: boolean;
   role: 'user' | 'assistant' | 'tool' | string;
   content: string;
   /** Tool names called by this assistant turn, when the daemon reports them. */
@@ -146,6 +148,16 @@ export interface ServerCapabilities {
   image_input?: boolean;
   /** Structured tool-reported file changes. */
   changes?: boolean;
+  /** Bounded full-message chunk reads. */
+  message_full_read?: boolean;
+  /** Interactive tool is blocked waiting for input. */
+  stdin_input?: boolean;
+  /** Turn-safe Stop supported (atomic precondition at daemon). */
+  turn_safe_stop?: boolean;
+  /** Exact provider route selection (same model name via two providers). */
+  exact_route?: boolean;
+  /** Persisted empty session support. */
+  persist_session?: boolean;
   /** No permissions capability is advertised: the bridge does not implement one. */
   permissions: false;
   /** No push capability is advertised. */
@@ -168,6 +180,11 @@ export const CAPABILITY_NAMES = [
   'context_snapshot',
   'image_input',
   'changes',
+  'message_full_read',
+  'stdin_input',
+  'turn_safe_stop',
+  'exact_route',
+  'persist_session',
 ] as const;
 
 export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
@@ -194,7 +211,7 @@ export type ServerEvent =
       display_title?: string;
     }
   | { ev: 'error'; code: ErrorCode; message: string; detail?: string }
-  | { ev: 'sessions'; sessions: SessionInfo[]; partial: boolean }
+  | { ev: 'sessions'; sessions: SessionInfo[]; partial: boolean; cursor?: string | null; end?: boolean }
   | {
       ev: 'attached';
       session: SessionInfo;
@@ -218,6 +235,8 @@ export type ServerEvent =
       /** True when the persisted session was interrupted mid-generation. */
       interrupted_at_attach?: boolean;
       has_older?: boolean;
+      history_revision?: number;
+      history_genesis?: string;
       /** Images anchored to this bounded history window. */
       images?: MessageImage[];
       /** Non-zero when the adapter withheld oversized media from this frame. */
@@ -299,7 +318,9 @@ export type ServerEvent =
       reason: string;
       message: string;
     }
-  | { ev: 'turn_done'; session_id: string; attachment_id: string; turn_id: number; pending_soft_interrupts?: number }
+  | { ev: 'turn_done'; session_id: string; attachment_id: string; turn_id: number; pending_soft_interrupts?: number; stop_reason?: string }
+  | { ev: 'stdin_request'; session_id: string; attachment_id: string; request_id: string; tool: string; prompt: string; is_password?: boolean }
+  | { ev: 'stdin_response'; session_id: string; attachment_id: string; request_id: string; delivered: boolean; message?: string }
   | { ev: 'session_status'; session_id: string; attachment_id: string; status: string; pending_soft_interrupts?: number }
   | { ev: 'connection_phase'; session_id: string; attachment_id: string; phase: string }
   | {
@@ -360,6 +381,8 @@ export type ServerEvent =
       error?: string | null;
     }
   | { ev: 'image_ack'; session_id: string; client_message_id: string; accepted: boolean }
+  | { ev: 'history_revision'; session_id: string; revision: number; total_messages: number; genesis: string }
+  | { ev: 'message_chunk'; session_id: string; message_index: number; offset: number; text: string; total_bytes: number; done: boolean; revision?: number }
   | {
       ev: 'server_info';
       server: string;
@@ -398,7 +421,7 @@ export type ClientRequest =
       /** Largest JSON frame this client can decode; the adapter budgets to it. */
       max_frame_bytes?: number;
     }
-  | { req: 'list_sessions'; include_archived?: boolean; limit?: number }
+  | { req: 'list_sessions'; include_archived?: boolean; limit?: number; cursor?: string }
   | { req: 'attach_session'; session_id: string }
   | { req: 'detach_session'; session_id: string }
   | { req: 'create_session'; working_dir: string; client_request_id: string }
@@ -419,7 +442,9 @@ export type ClientRequest =
       images?: Array<[string, string]>;
     }
   | { req: 'cancel_soft_interrupts'; session_id: string; client_ids: string[] }
-  | { req: 'cancel'; session_id: string }
+  | { req: 'cancel'; session_id: string; turn_id?: number; attachment_id?: string; stop_request_id?: string }
+  | { req: 'stdin_response'; session_id: string; request_id: string; value: string }
+  | { req: 'get_full_message'; session_id: string; message_index: number; offset?: number; limit?: number; revision?: number }
   | { req: 'archive_session'; session_id: string }
   | { req: 'restore_session'; session_id: string }
   | { req: 'rename_session'; session_id: string; title?: string | null }
@@ -454,6 +479,8 @@ const KNOWN_REQUESTS = new Set<ClientRequestName>([
   'soft_interrupt',
   'cancel_soft_interrupts',
   'cancel',
+  'stdin_response',
+  'get_full_message',
   'archive_session',
   'restore_session',
   'rename_session',

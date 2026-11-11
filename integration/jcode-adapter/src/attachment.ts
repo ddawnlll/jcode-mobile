@@ -64,9 +64,23 @@ const BOOTSTRAP_QUEUE_LIMIT = 2000;
 const HISTORY_FRAME_RESERVE = 96 * 1024;
 const HISTORY_IMAGE_SHARE = 0.55;
 
+export interface FullMessageResult {
+  ok: boolean;
+  error?: string;
+  text?: string;
+  total_bytes?: number;
+  offset?: number;
+  session_id?: string;
+  message_index?: number;
+  history_revision?: number;
+  content?: string;
+  truncated?: boolean;
+}
+
 interface CatalogWaiter {
   resolve: (value: { models: string[]; current: string | null }) => void;
   timer: ReturnType<typeof setTimeout>;
+  background?: boolean;
 }
 
 interface TokenUsageSnapshot {
@@ -129,6 +143,21 @@ export class Attachment {
    * is a control reply, never turn completion or execution evidence (STR-4).
    */
   private controlIds = new Set<number>();
+  private savedWaiters = new Map<number, {
+    id: number;
+    expectedSaved: boolean;
+    settled: boolean;
+    resolve: (value: { saved: boolean; label: string | null }) => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+  private savedState: boolean | null = null;
+  private savedLabel: string | null = null;
+  private reconciliationStateId: number | null = null;
+  private reconciliationTurnId: number | null = null;
+  private historyRevision = 0;
+  private retiredCatalogIds = new Set<number>();
+  private stdinPending = new Map<string, { tool: string; prompt: string; isPassword: boolean }>();
 
   constructor(options: AttachmentOptions) {
     this.options = options;
@@ -511,6 +540,17 @@ export class Attachment {
           configWaiter.resolve({ error: message });
           return;
         }
+        const savedWaiter = this.savedWaiters.get(id);
+        if (savedWaiter) {
+          this.savedWaiters.delete(id);
+          clearTimeout(savedWaiter.timer);
+          this.controlIds.delete(id);
+          if (!savedWaiter.settled) {
+            savedWaiter.settled = true;
+            savedWaiter.reject(new Error(message));
+          }
+          return;
+        }
         if (this.completedRenameIds.delete(id)) return;
         if (this.orphanedRename?.id === id) {
           this.orphanedRename = null;
@@ -548,6 +588,13 @@ export class Attachment {
         const turnActive = this.pending.size > 0 || this.turnByRequest.size > 0 || this.tools.size > 0;
         if (!turnActive) {
           this.emit({ ev: 'control_error', ...this.identity(), message });
+          return;
+        }
+        // An unmatched error terminal is not correlated to a tracked turn: it
+        // may describe a peer-owned turn. Reconcile like an unmatched `done`
+        // instead of locally stopping a possibly newer turn.
+        if (this.status === 'working' || this.tools.size > 0 || id === 0) {
+          this.beginReconciliation();
           return;
         }
         this.status = 'ready';
@@ -730,6 +777,21 @@ export class Attachment {
       }
       case 'done': {
         const id = typeof event.id === 'number' ? event.id : -1;
+        // A confirmed saved mutation retires its correlated waiter. This must
+        // be checked before the control/turn tests: `ack` may already have
+        // consumed the control id.
+        const savedWaiter = this.savedWaiters.get(id);
+        if (savedWaiter) {
+          this.savedWaiters.delete(id);
+          clearTimeout(savedWaiter.timer);
+          this.controlIds.delete(id);
+          if (!savedWaiter.settled) {
+            savedWaiter.settled = true;
+            this.savedState = savedWaiter.expectedSaved;
+            savedWaiter.resolve({ saved: this.savedState, label: this.savedLabel });
+          }
+          return;
+        }
         // A control reply (set_session_saved, rename, cancel, ...) must never
         // finish a generation, bump turn_id, or clear tool state (STR-4).
         if (this.controlIds.delete(id)) return;
@@ -752,8 +814,14 @@ export class Attachment {
         const trackedTurn = this.turnByRequest.get(id);
         const pendingMessage = this.pending.get(id);
         if (trackedTurn === undefined && !pendingMessage) {
-          // Uncorrelated `done`: neither an agent turn nor a known control.
-          // Never invent a phantom turn completion from it.
+          // Uncorrelated `done` (peer-owned terminal, or a late duplicate).
+          // While this session is observed working it is a reconciliation
+          // signal, never an immediate local completion: the authoritative
+          // `state` probe decides. When idle, never invent a phantom turn
+          // completion from it.
+          if (this.status === 'working' || this.tools.size > 0 || this.pending.size > 0) {
+            this.beginReconciliation();
+          }
           return;
         }
         const turnId = trackedTurn ?? this.turnId;
@@ -864,6 +932,14 @@ export class Attachment {
       case 'compaction': {
         // Compaction changes the persisted transcript, not live delivery.
         // Re-arming a bootstrap gate here held deltas mid-turn (STR-1).
+        // The retained transcript is stale after compaction: bump the
+        // revision so full-message reads never serve pre-compaction chunks.
+        this.historyRevision += 1;
+        this.historyTotal = 0;
+        this.history = [];
+        this.historyImages = [];
+        this.historyImageBytes = 0;
+        this.historyImagesOmitted = 0;
         this.requestHistory();
         return;
       }
@@ -1009,12 +1085,57 @@ export class Attachment {
       clearTimeout(this.stoppedFallback);
       this.stoppedFallback = null;
     }
+    // Abort any pending reconciliation probe: it was fenced to the turn that
+    // just finished, so a late reply must not flip a newer turn (R01).
+    this.reconciliationStateId = null;
+    this.reconciliationTurnId = null;
     const completed = completedTurnId ?? this.turnId;
     if (completed >= this.turnId) this.turnId = completed + 1;
     this.stoppedThisTurn = false;
     this.tools.clear();
     this.currentToolCallId = null;
     this.emitStatus();
+  }
+
+  /**
+   * Begin a terminal reconciliation (R01): coalesce repeated unmatched
+   * terminals to a single outstanding `state` probe and fence the probe to
+   * the current turn. The probe resolves via the `state` case.
+   */
+  private beginReconciliation(): void {
+    if (this.closed || this.reconciliationStateId !== null) return;
+    if (!this.connection.isOpen) return;
+    const id = this.nextId();
+    this.reconciliationStateId = id;
+    this.reconciliationTurnId = this.turnId;
+    this.connection.send({ type: 'state', id });
+  }
+
+  private resolveReconciliation(processing: boolean): void {
+    const fencedTurn = this.reconciliationTurnId;
+    this.reconciliationStateId = null;
+    this.reconciliationTurnId = null;
+    if (this.closed) return;
+    // A newer turn started since the probe was issued: keep its live state
+    // and never let the stale probe flip it.
+    if (fencedTurn !== null && fencedTurn < this.turnId) return;
+    if (processing) {
+      this.status = 'working';
+      if (this.ready) this.emitStatus();
+      return;
+    }
+    if (this.stoppedThisTurn) {
+      this.status = 'ready';
+      this.finishTurn(fencedTurn ?? this.turnId);
+      return;
+    }
+    // Authoritative idle: publish completion exactly once for the fenced
+    // turn and reconcile the final transcript.
+    this.status = 'ready';
+    const turnId = fencedTurn ?? this.turnId;
+    this.push({ ev: 'turn_done', ...this.identity(), turn_id: turnId });
+    this.finishTurn(turnId);
+    this.requestHistory();
   }
 
   /**
@@ -1040,6 +1161,10 @@ export class Attachment {
 
   private onHistory(event: Record<string, unknown>): void {
     const replyId = typeof event.id === 'number' ? event.id : -1;
+    // Retired catalog replies (R13): a late `get_model_catalog` answer arrives
+    // as a history-shaped frame after its waiter timed out. It must never
+    // mutate transcript rows, revision, or images.
+    if (this.retiredCatalogIds.has(replyId)) return;
     const catalogWaiter = this.catalogWaiters.get(replyId);
     if (catalogWaiter) {
       // `get_model_catalog` is answered with a request-id-bearing history
@@ -1060,6 +1185,9 @@ export class Attachment {
         current: this.modelName,
       });
       this.emitConfig();
+      // Cache-first callers already have a snapshot; an open picker needs the
+      // refreshed snapshot as a live event, not only a resolved promise.
+      if (catalogWaiter.background) this.emitModels();
       return;
     }
     if (typeof event.server_version === 'string' && event.server_version) {
@@ -1197,6 +1325,7 @@ export class Attachment {
     // Parsed indexes are already absolute. Do not add the offset twice.
     this.history = parsed.slice(this.historyOffset);
     this.historyTotal = total;
+    this.historyRevision += 1;
     if (!this.tokenUsage) {
       // The daemon's in-memory last_usage is empty after a reload. Stored turn
       // response stats still carry the last prompt size, which is a real
@@ -1240,6 +1369,42 @@ export class Attachment {
     this.connection.send({ type: 'get_history', id });
   }
 
+  /**
+   * Bounded full-message read (R16). The outbound preview in `history` frames
+   * is truncated; this serves byte-range chunks from the retained in-memory
+   * history so the phone can reassemble the complete answer. Identity is
+   * (session, message index, history revision): a chunk read against a
+   * superseded revision must be retried by the caller.
+   */
+  getFullMessage(messageIndex: number, offset = 0, limit = 64 * 1024): FullMessageResult {
+    const safeOffset = Math.max(0, Math.floor(offset) || 0);
+    const safeLimit = Math.min(Math.max(1, Math.floor(limit) || 1), MAX_HISTORY_MESSAGE_BYTES);
+    const local = messageIndex - this.historyOffset;
+    const entry = local >= 0 && local < this.history.length ? this.history[local] : null;
+    if (!entry || entry.index !== messageIndex) {
+      return { ok: false, error: 'That message is no longer available in the retained history.' };
+    }
+    const full = Buffer.from(entry.content, 'utf8');
+    if (safeOffset >= full.length) {
+      return { ok: false, error: 'offset is beyond the message content' };
+    }
+    const end = Math.min(full.length, safeOffset + safeLimit);
+    const chunk = full.subarray(safeOffset, end);
+    // Never split a multibyte glyph at the chunk end.
+    let text = chunk.toString('utf8');
+    while (text.endsWith('\uFFFD') && text.length > 0) text = text.slice(0, -1);
+    return {
+      ok: true,
+      session_id: this.sessionId,
+      message_index: messageIndex,
+      history_revision: this.historyRevision,
+      offset: safeOffset,
+      total_bytes: full.length,
+      content: text,
+      truncated: end < full.length,
+    };
+  }
+
   /** Slice of retained committed history before an index. */
   getHistoryBefore(beforeIndex: number, limit: number): Record<string, unknown> {
     const start = Math.max(0, this.historyOffset);
@@ -1257,6 +1422,7 @@ export class Attachment {
       messages: bounded.messages,
       base_index: bounded.baseIndex,
       total_messages: this.historyTotal,
+      history_revision: this.historyRevision,
       tail_fingerprint: tailFingerprint(this.history),
       accepted_client_ids: this.options.acceptedClientIds?.() ?? [],
       has_older: hasOlder,
@@ -1377,15 +1543,43 @@ export class Attachment {
     });
   }
 
-  setSaved(saved: boolean, label?: string | null): void {
-    if (!this.connection.isOpen) return;
+  /**
+   * Persisted saved flag (R27). Returns a promise settling on the daemon's
+   * correlated `done` for this exact request: callers publish success only
+   * after confirmation. Rejection, timeout, and disposal produce typed
+   * errors; the latest effective action wins because each waiter is
+   * correlated to its own request id, never to the newest waiter.
+   */
+  setSaved(
+    saved: boolean,
+    label?: string | null,
+  ): Promise<{ saved: boolean; label: string | null }> {
+    if (!this.connection.isOpen) {
+      return Promise.reject(new Error('The session connection is not open.'));
+    }
     const id = this.nextId();
-    this.trackControl(id);
-    this.connection.send({
-      type: 'set_session_saved',
-      id,
-      saved,
-      ...(label ? { label } : null),
+    this.savedLabel = label ?? null;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.savedWaiters.delete(id)) return;
+        this.controlIds.delete(id);
+        reject(new Error('The server did not confirm the saved-state change.'));
+      }, this.options.config.renameTimeoutMs);
+      this.savedWaiters.set(id, { id, expectedSaved: saved, timer, settled: false, resolve, reject });
+      this.trackControl(id);
+      try {
+        this.connection.send({
+          type: 'set_session_saved',
+          id,
+          saved,
+          ...(label ? { label } : null),
+        });
+      } catch (error) {
+        clearTimeout(timer);
+        this.savedWaiters.delete(id);
+        this.controlIds.delete(id);
+        reject(error as Error);
+      }
     });
   }
 
@@ -1411,16 +1605,21 @@ export class Attachment {
         return;
       }
       const id = this.nextId();
+      this.trackControl(id);
       if (this.modelsList.length > 0) {
         // Paint from the known catalog, then refresh in the background. A slow
         // daemon reply must not turn a populated picker into "No models".
-        const timer = setTimeout(() => this.catalogWaiters.delete(id), 4000);
+        const timer = setTimeout(() => {
+          this.catalogWaiters.delete(id);
+          this.retireCatalogId(id);
+        }, 4000);
         timer.unref?.();
-        this.catalogWaiters.set(id, { timer, resolve: () => undefined });
+        this.catalogWaiters.set(id, { timer, resolve: () => undefined, background: true });
         try {
           this.connection.send({ type: 'get_model_catalog', id, subscribe_usage_updates: false });
         } catch {
           this.catalogWaiters.delete(id);
+          this.retireCatalogId(id);
           clearTimeout(timer);
         }
         resolve(snapshot());
@@ -1430,6 +1629,7 @@ export class Attachment {
       // per request so overlapping pickers cannot steal each other's reply.
       const timer = setTimeout(() => {
         this.catalogWaiters.delete(id);
+        this.retireCatalogId(id);
         resolve(snapshot());
       }, 4000);
       this.catalogWaiters.set(id, {
@@ -1438,7 +1638,13 @@ export class Attachment {
           resolve(snapshot());
         },
       });
-      this.connection.send({ type: 'get_model_catalog', id, subscribe_usage_updates: false });
+      try {
+        this.connection.send({ type: 'get_model_catalog', id, subscribe_usage_updates: false });
+      } catch {
+        this.catalogWaiters.delete(id);
+        clearTimeout(timer);
+        resolve(snapshot());
+      }
     });
   }
 
@@ -1681,17 +1887,65 @@ export class Attachment {
     });
   }
 
+  /** Live refreshed catalog snapshot for an open picker (R13). */
+  private emitModels(): void {
+    if (!this.ready) return;
+    this.options.emit({
+      ev: 'models',
+      session_id: this.sessionId,
+      models: this.modelsList,
+      current: this.modelName,
+      efforts: inferredEfforts(this.providerName, this.modelName),
+      efforts_by_model: effortLadders(this.providerName, this.modelsList),
+      routes: this.modelRoutes,
+      current_effort: this.currentEffort,
+    });
+  }
+
+  private settleAllWaiters(message: string): void {
+    const error = new Error(message);
+    if (this.renameWaiter) {
+      clearTimeout(this.renameWaiter.timer);
+      this.renameWaiter.reject(error);
+      this.renameWaiter = null;
+    }
+    this.orphanedRename = null;
+    for (const waiter of this.savedWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    this.savedWaiters.clear();
+    for (const waiter of this.configWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.resolve({ error: message });
+    }
+    this.configWaiters.clear();
+    for (const waiter of this.catalogWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.resolve({ models: this.modelsList, current: this.modelName });
+    }
+    this.catalogWaiters.clear();
+    for (const waiter of this.runtimeWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.resolve();
+    }
+    this.runtimeWaiters.clear();
+    this.reconciliationStateId = null;
+    this.reconciliationTurnId = null;
+  }
+
+  private retireCatalogId(id: number): void {
+    this.retiredCatalogIds.add(id);
+    if (this.retiredCatalogIds.size > 50) {
+      const oldest = this.retiredCatalogIds.values().next().value;
+      if (typeof oldest === 'number') this.retiredCatalogIds.delete(oldest);
+    }
+  }
+
   dispose(): void {
     if (this.closed) return;
     this.closed = true;
-    for (const waiter of this.configWaiters.values()) clearTimeout(waiter.timer);
-    this.configWaiters.clear();
-    for (const waiter of this.catalogWaiters.values()) clearTimeout(waiter.timer);
-    this.catalogWaiters.clear();
-    for (const waiter of this.runtimeWaiters.values()) clearTimeout(waiter.timer);
-    this.runtimeWaiters.clear();
-    // Closing the transport is not cancellation: the daemon keeps the turn
-    // because the subscribe opted into continuation.
+    this.settleAllWaiters('The session connection ended before the request confirmed.');
     this.connection.close();
   }
 

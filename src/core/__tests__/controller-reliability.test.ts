@@ -299,11 +299,15 @@ function resetStore(): void {
       error: null,
       partial: false,
       limit: 50,
+      inventoryCursor: null,
+      inventoryEnd: false,
+      inventoryGeneration: 0,
       includeArchived: false,
       pinnedSessionIds: [],
       projects: [],
       pendingRestore: null,
     },
+    manualDisconnect: null,
     conversation: resetConversation(),
   });
 }

@@ -19,7 +19,7 @@ import * as Clipboard from 'expo-clipboard';
 
 import type { RootStackParamList } from '../../shell/navigation';
 import { BottomSheet } from '../../design/BottomSheet';
-import { Composer } from '../../design/Composer';
+import { Composer, validateImageSet, type ComposerOwner } from '../../design/Composer';
 import { Button, Field, IconButton, TextAction } from '../../design/controls';
 import {
   BackIcon,
@@ -101,6 +101,16 @@ export function ConversationScreen() {
   const draggingRef = useRef(false);
   const anchorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoredScroll = useRef(false);
+  const profileId = useAppStore((state) => state.profileId);
+  // R10/R17 scoping anchors: compose-intent changes per (profile, session) so
+  // drafts/images can never leak across conversations or profiles.
+  const [composeIntentId, setComposeIntentId] = useState(() => String(Date.now()));
+  // R17: images preserved per scope — switching clears the VISIBLE set but
+  // never the scoped drafts in `scopedImagesRef`.
+  const scopedImagesRef = useRef(new Map<string, ComposerImage[]>());
+  const imagesScopeRef = useRef<string | null>(null);
+  const imagesScopeKey = (profile: string | null, session: string | null, intent: string) =>
+    `${profile ?? ''}\0${session ?? ''}\0${intent}`;
   const [draft, setDraft] = useState('');
   const [images, setImages] = useState<ComposerImage[]>([]);
   const [workVisible, setWorkVisible] = useState(false);
@@ -119,6 +129,8 @@ export function ConversationScreen() {
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renameSaving, setRenameSaving] = useState(false);
+  const [savePending, setSavePending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (route.params?.sessionId && conversation.sessionId !== route.params.sessionId) {
@@ -127,14 +139,44 @@ export function ConversationScreen() {
     }
   }, [route.params?.sessionId, conversation.sessionId, sessions]);
 
+  // R17: on scope switch, preserve the visible images under the OLD scope and
+  // show only images stored for the NEW scope (visible set is cleared, scoped
+  // drafts are never leaked into another conversation/profile).
   useEffect(() => {
-    if (!conversation.sessionId) return;
+    if (!profileId || !conversation.sessionId) return;
+    const nextKey = imagesScopeKey(profileId, conversation.sessionId, composeIntentId);
+    const prevKey = imagesScopeRef.current;
+    if (prevKey === nextKey) return;
+    // Preserve what was visible under the previous scope for later restore.
+    if (prevKey !== null) {
+      scopedImagesRef.current.set(prevKey, images);
+    }
+    const restored = scopedImagesRef.current.get(nextKey) ?? [];
+    setImages(restored);
+    imagesScopeRef.current = nextKey;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileId, conversation.sessionId, composeIntentId]);
+
+  // R10: draft reads are fenced to (profile, session) with a revision token —
+  // a stale async read that resolves after a switch is ignored.
+  useEffect(() => {
+    if (!profileId || !conversation.sessionId) return;
     restoredScroll.current = false;
-    void controller.draft(conversation.sessionId).then((value) => setDraft(value));
+    setComposeIntentId(String(Date.now()));
+    const scopedProfileId = profileId;
+    const scopedSessionId = conversation.sessionId;
+    let cancelled = false;
+    void controller.draft(scopedSessionId).then((value) => {
+      if (cancelled) return;
+      if (useAppStore.getState().profileId !== scopedProfileId) return;
+      if (useAppStore.getState().conversation.sessionId !== scopedSessionId) return;
+      setDraft(value);
+    });
     return () => {
+      cancelled = true;
       controller.flushDraft();
     };
-  }, [conversation.sessionId]);
+  }, [conversation.sessionId, profileId]);
 
   const messages = useMemo(
     () =>
@@ -323,6 +365,18 @@ export function ConversationScreen() {
     const text = draft.trim();
     if (!text && images.length === 0) return;
     setComposerError(null);
+    // R17: images must be a valid, usable payload before dispatch. An invalid
+    // set shows a review error and NEVER degrades to a text-only send.
+    if (images.length > 0) {
+      const validation = validateImageSet(images);
+      if (!validation.ok) {
+        setComposerError(
+          validation.reason ??
+            'An image can’t be sent as-is. Review it before sending.',
+        );
+        return;
+      }
+    }
     const result = await controller.send(text, images);
     if (!result.ok) {
       setComposerError(result.error ?? 'Could not send this message.');
@@ -330,6 +384,9 @@ export function ConversationScreen() {
     }
     setDraft('');
     setImages([]);
+    scopedImagesRef.current.delete(
+      imagesScopeKey(profileId, conversation.sessionId, composeIntentId),
+    );
     controller.setNearBottom(true);
     nearBottomRef.current = true;
     scrollToEnd(true);
@@ -342,16 +399,25 @@ export function ConversationScreen() {
   };
 
   const working = conversation.execution.kind === 'working';
+  // R22: blocked (stdin-waiting) is distinct from ordinary working. The store
+  // field is fenced to the open attachment; clear when turn ends or attachment
+  // changes is handled controller-side, but the UI also verifies the fenced
+  // attachment matches before rendering.
+  const stdinRequest = conversation.stdinRequest;
+  const blocked = !!stdinRequest && stdinRequest.attachmentId === conversation.attachmentId;
+  const stdinSupported = capabilities.includes('stdin_input') || conversation.capabilities.includes('stdin_input');
   const sendGate = controller.canSend();
-  const disabledReason =
-    connection.state !== 'current' && connection.state !== 'reconciling'
+  const disabledReason = blocked && !stdinSupported
+    ? 'Waiting for input — this tool isn’t answerable from the phone.'
+    : connection.state !== 'current' && connection.state !== 'reconciling'
       ? 'Reconnect to send.'
       : !sendGate.ok
         ? sendGate.reason
         : undefined;
   const title = conversation.title || 'Session';
-  const statusLabel =
-    conversation.execution.kind === 'working'
+  const statusLabel = blocked
+    ? 'Waiting for input'
+    : conversation.execution.kind === 'working'
       ? conversation.execution.label
       : conversation.execution.kind === 'ready'
         ? 'Ready'
@@ -515,6 +581,32 @@ export function ConversationScreen() {
             The server session was interrupted. Saved history is below; continue only if the server
             offers a recovery path.
           </Text>
+        </View>
+      ) : null}
+
+      {blocked && stdinRequest ? (
+        <View
+          style={[styles.blocked, { backgroundColor: colors.raised, borderColor: colors.warning }]}
+          accessibilityLiveRegion="polite"
+          testID="stdin-blocked"
+        >
+          <Text variant="small" weight="semibold">
+            {stdinRequest.tool} is waiting for input
+          </Text>
+          <Text variant="caption" color="muted" style={{ marginTop: space.xxs }} numberOfLines={2}>
+            Request {stdinRequest.requestId}
+            {stdinRequest.prompt ? ` · ${stdinRequest.prompt}` : null}
+          </Text>
+          {stdinSupported ? (
+            <Text variant="small" color="muted" style={{ marginTop: space.xxs }}>
+              Answer from the Work panel when prompted, or use Stop below.
+            </Text>
+          ) : (
+            <Text variant="small" color="muted" style={{ marginTop: space.xxs }}>
+              This server doesn’t advertise stdin input. Continue from a JCode client or use Stop.
+            </Text>
+          )}
+          <TextAction label="Stop this turn" onPress={() => void stop()} color="error" />
         </View>
       ) : null}
 
@@ -692,7 +784,19 @@ export function ConversationScreen() {
             onSend={() => void send()}
             onBlur={() => controller.flushDraft()}
             images={images}
-            onImagesChange={setImages}
+            onImagesChange={(next) => {
+              setImages(next);
+              if (imagesScopeRef.current) {
+                scopedImagesRef.current.set(imagesScopeRef.current, next);
+              }
+            }}
+            owner={
+              {
+                profileId: profileId ?? '',
+                sessionId: conversation.sessionId ?? '',
+                composeIntentId,
+              } satisfies ComposerOwner
+            }
             working={working}
             disabledReason={composerError ?? disabledReason}
             placeholder={
@@ -865,16 +969,31 @@ export function ConversationScreen() {
             />
             <MenuRow
               label={conversation.session?.saved ? 'Remove from saved' : 'Save session'}
+              pending={savePending}
+              detail={savePending ? 'Saving… waiting for server confirmation.' : undefined}
               onPress={async () => {
-                setMenuVisible(false);
+                if (savePending) return;
                 if (!conversation.sessionId) return;
-                await controller.setSessionSaved(
+                setSavePending(true);
+                setSaveError(null);
+                const result = await controller.setSessionSaved(
                   conversation.sessionId,
                   !conversation.session?.saved,
                   conversation.session?.save_label ?? null,
                 );
+                setSavePending(false);
+                if (!result.ok) {
+                  setSaveError(result.error ?? 'Could not update saved state.');
+                  return;
+                }
+                setMenuVisible(false);
               }}
             />
+            {saveError ? (
+              <Text variant="small" color="error" accessibilityLiveRegion="polite">
+                {saveError}
+              </Text>
+            ) : null}
             <MenuRow
               label="Copy session ID"
               onPress={async () => {
@@ -1211,16 +1330,20 @@ function DeliveryDecisionSheet({
   );
 }
 
-function MenuRow({ label, onPress }: { label: string; onPress: () => void }) {
+function MenuRow({ label, onPress, pending, detail }: { label: string; onPress: () => void; pending?: boolean; detail?: string }) {
   const { colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: pending === true }}
       onPress={onPress}
       style={({ pressed }) => [styles.menuRow, { backgroundColor: pressed ? colors.raised : 'transparent' }]}
     >
-      <Text variant="body">{label}</Text>
+      <View style={{ flex: 1 }}>
+        <Text variant="body">{label}</Text>
+        {detail ? <Text variant="caption" color="muted">{detail}</Text> : null}
+      </View>
     </Pressable>
   );
 }
@@ -1286,6 +1409,14 @@ const styles = StyleSheet.create({
     marginHorizontal: geometry.gutterCompact,
     marginBottom: space.xs,
     borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.xs,
+  },
+  blocked: {
+    marginHorizontal: geometry.gutterCompact,
+    marginBottom: space.xs,
+    borderRadius: radius.control,
+    borderWidth: 1,
     paddingHorizontal: space.sm,
     paddingVertical: space.xs,
   },

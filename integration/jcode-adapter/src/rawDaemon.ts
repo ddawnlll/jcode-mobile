@@ -80,9 +80,25 @@ export class RawDaemonConnection {
     }
   }
 
-  send(value: Record<string, unknown>): void {
+  /**
+   * Write a frame, waiting for drain when the socket is backpressured (R20).
+   * If the peer does not drain within 2s the connection is treated as closed:
+   * the request is NOT re-sent, so a request already dispatched is never
+   * duplicated. The pending-request waiters settle via the close path.
+   */
+  send(value: Record<string, unknown>, onBackpressure?: (error: Error) => void): void {
     if (!this.socket || this.closed) throw new Error('Daemon connection is closed');
-    this.socket.write(`${JSON.stringify(value)}\n`);
+    const flushed = this.socket.write(`${JSON.stringify(value)}\n`);
+    if (flushed) return;
+    const socket = this.socket;
+    const timer = setTimeout(() => {
+      this.closed = true;
+      this.onCloseCallback?.();
+      socket.destroy();
+      onBackpressure?.(new Error('Daemon socket write backpressure timed out.'));
+    }, 2000);
+    timer.unref?.();
+    socket.once('drain', () => clearTimeout(timer));
   }
 
   close(): void {

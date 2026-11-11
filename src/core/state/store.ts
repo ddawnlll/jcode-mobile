@@ -37,12 +37,29 @@ export interface DeliveryRecord {
   content: string;
   state: DeliveryState;
   messageIndex?: number;
+  /** Durable transcript reference once committed. */
+  transcriptRef?: number | null;
   error?: string;
   createdAt: number;
   guidance?: boolean;
   /** Another client's prompt, held until committed history reconciles it. */
   peer?: boolean;
   images?: ComposerImage[];
+}
+
+export interface StdinRequestState {
+  requestId: string;
+  tool: string;
+  prompt: string;
+  isPassword: boolean;
+  attachmentId: string;
+}
+
+export type ConnectionIntent = 'auto' | 'manual_disconnect';
+
+export interface ManualDisconnectState {
+  profileId: string;
+  at: number;
 }
 
 /** One completed assistant message within the live turn. */
@@ -142,6 +159,9 @@ export interface ConversationState {
   workingDir: string | null;
   messages: HistoryMessage[];
   totalMessages: number;
+  /** Last authoritative history revision applied. */
+  historyRevision: number | null;
+  historyGenesis: string | null;
   baseIndex: number;
   /** Oldest loaded committed message; loader asks below this. */
   loadingOlder: boolean;
@@ -170,6 +190,10 @@ export interface ConversationState {
   interrupted: boolean;
   recovery: { continuation_message: string; reconnect_notice?: string } | null;
   lastError: string | null;
+  /** Interactive tool blocked waiting for input, if any. */
+  stdinRequest: StdinRequestState | null;
+  /** Provider finish reason for the settled turn. */
+  stopReason: string | null;
   /** Capabilities the attached adapter actually advertised. */
   capabilities: string[];
   /** Honest notice when oversized media was withheld from reconciliation. */
@@ -183,6 +207,10 @@ export interface InventoryState {
   error: string | null;
   partial: boolean;
   limit: number;
+  /** Opaque pagination cursor from the server, or null at end / unknown. */
+  inventoryCursor: string | null;
+  inventoryEnd: boolean;
+  inventoryGeneration: number;
   includeArchived: boolean;
   pinnedSessionIds: string[];
   projects: ProjectRecord[];
@@ -215,6 +243,7 @@ export interface AppState {
   };
   inventory: InventoryState;
   conversation: ConversationState;
+  manualDisconnect: ManualDisconnectState | null;
   appearance: AppearancePreference;
   themeFamily: string;
   effects: EffectsPreference;
@@ -247,6 +276,8 @@ const emptyConversation: ConversationState = {
   workingDir: null,
   messages: [],
   totalMessages: 0,
+  historyRevision: null,
+  historyGenesis: null,
   baseIndex: 0,
   loadingOlder: false,
   hasOlder: false,
@@ -285,6 +316,8 @@ const emptyConversation: ConversationState = {
   interrupted: false,
   recovery: null,
   lastError: null,
+  stdinRequest: null,
+  stopReason: null,
   capabilities: [],
   imageNotice: null,
 };
@@ -308,6 +341,7 @@ export const useAppStore = create<AppState>()((set) => ({
     error: null,
     attempt: 0,
   },
+  manualDisconnect: null,
   inventory: {
     sessions: [],
     fetchedAt: null,
@@ -315,6 +349,9 @@ export const useAppStore = create<AppState>()((set) => ({
     error: null,
     partial: false,
     limit: 50,
+    inventoryCursor: null,
+    inventoryEnd: false,
+    inventoryGeneration: 0,
     includeArchived: false,
     pinnedSessionIds: [],
     projects: [],

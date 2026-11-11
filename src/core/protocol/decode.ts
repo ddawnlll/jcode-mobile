@@ -130,6 +130,7 @@ function decodeHistoryMessage(value: unknown, fallbackIndex: number): HistoryMes
     : null;
   return {
     index: index !== undefined ? index : fallbackIndex,
+    ...(record.truncated === true ? { truncated: true as const } : null),
     role,
     content: legacy ? legacy.content : content,
     ...(str(record.reasoning)
@@ -294,7 +295,17 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
         ? record.sessions.map(decodeSession).filter((item): item is SessionInfo => item !== null)
         : null;
       if (!sessions) break;
-      return { ok: true, frame: { ev, sessions, partial: bool(record.partial) ?? false, ...base } };
+      return {
+        ok: true,
+        frame: {
+          ev,
+          sessions,
+          partial: bool(record.partial) ?? false,
+          cursor: optionalStr(record.cursor) ?? null,
+          end: bool(record.end) ?? false,
+          ...base,
+        },
+      };
     }
     case 'attached': {
       const info = decodeSession(record.session);
@@ -340,6 +351,8 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
             : null),
           ...(typeof record.has_older === 'boolean' ? { has_older: record.has_older } : null),
           ...(decodeRecovery(record.recovery) ? { recovery: decodeRecovery(record.recovery) } : null),
+          ...(num(record.history_revision) !== undefined ? { history_revision: num(record.history_revision) } : null),
+          ...(str(record.history_genesis) !== undefined ? { history_genesis: str(record.history_genesis) } : null),
           ...base,
         },
       };
@@ -469,7 +482,89 @@ export function decodeFrame(raw: string, maxBytes = budgets.maxFrameBytes): Deco
       if (!identity) break;
       return {
         ok: true,
-        frame: { ev, ...identity, pending_soft_interrupts: num(record.pending_soft_interrupts), ...base },
+        frame: {
+          ev,
+          ...identity,
+          pending_soft_interrupts: num(record.pending_soft_interrupts),
+          stop_reason: str(record.stop_reason),
+          ...base,
+        },
+      };
+    }
+    case 'stdin_request': {
+      const id = str(record.session_id);
+      const attachment = str(record.attachment_id);
+      const request_id = str(record.request_id);
+      if (!id || !attachment || !request_id) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          attachment_id: attachment,
+          request_id,
+          tool: str(record.tool) ?? 'tool',
+          prompt: str(record.prompt) ?? 'Waiting for input.',
+          is_password: bool(record.is_password) ?? false,
+          ...base,
+        },
+      };
+    }
+    case 'stdin_response': {
+      const id = str(record.session_id);
+      const attachment = str(record.attachment_id);
+      const request_id = str(record.request_id);
+      if (!id || !attachment || !request_id) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          attachment_id: attachment,
+          request_id,
+          delivered: bool(record.delivered) ?? false,
+          message: str(record.message),
+          ...base,
+        },
+      };
+    }
+    case 'history_revision': {
+      const id = str(record.session_id);
+      const revision = num(record.revision);
+      const total = num(record.total_messages);
+      if (!id || revision === undefined || total === undefined) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          revision,
+          total_messages: total,
+          genesis: str(record.genesis) ?? '',
+          ...base,
+        },
+      };
+    }
+    case 'message_chunk': {
+      const id = str(record.session_id);
+      const message_index = num(record.message_index);
+      const offset = num(record.offset);
+      const text = str(record.text);
+      const total_bytes = num(record.total_bytes);
+      if (!id || message_index === undefined || offset === undefined || text === undefined || total_bytes === undefined) break;
+      return {
+        ok: true,
+        frame: {
+          ev,
+          session_id: id,
+          message_index,
+          offset,
+          text,
+          total_bytes,
+          done: bool(record.done) ?? false,
+          revision: num(record.revision),
+          ...base,
+        },
       };
     }
     case 'session_status': {
