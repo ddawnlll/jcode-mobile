@@ -1,5 +1,5 @@
 {
-  "status": "proposed fixtures, not recorded backend traffic",
+  "status": "proposed illustrative fixtures (not recorded backend traffic; model names and account availability are test examples)",
   "design": "Stillness v12 Motion",
   "frames": [
     {
@@ -26,19 +26,22 @@
           "major": 1,
           "minor": 11
         },
-        "jcode_sha": "eb867111fffac2efeedd95a7ac9f7d6168260e6f",
+        "jcode_sha": "0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8",
         "capabilities": [
           "sessions.snapshot",
           "sessions.subscribe",
           "operations.lookup",
           "files.list_dir",
-          "plan.snapshot"
+          "plan.snapshot",
+          "provider.command-code"
         ],
         "disabled_capabilities": [
           "exactly_once_send",
           "exact_stop",
           "folders.rename"
-        ]
+        ],
+        "jcode_base": "v1.0.0-preview.394",
+        "jcode_repository": "ddawnlll/jcode"
       },
       "reply_to": "req-1",
       "server_id": "demo-server"
@@ -239,6 +242,75 @@
       },
       "server_id": "demo-server",
       "reply_to": "req-7"
+    },
+    {
+      "v": 2,
+      "kind": "response",
+      "id": "r-provider",
+      "reply_to": "req-runtime",
+      "type": "runtime.info",
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "payload": {
+        "provider": "command-code",
+        "model": "deepseek/deepseek-v4-flash",
+        "auth_method": "api_key",
+        "account_label": "work",
+        "reported_at": "2026-11-11T14:21:04Z",
+        "routes": [
+          {
+            "provider": "command-code",
+            "model": "deepseek/deepseek-v4-flash",
+            "available": true,
+            "api_method": "api_key",
+            "detail": "advertised by daemon; access checked on invocation"
+          }
+        ],
+        "quota": {
+          "status": "unknown",
+          "source": "no_documented_api"
+        }
+      }
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-provider-denied",
+      "type": "session.event",
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "epoch": "epoch-2",
+      "seq": 4,
+      "payload": {
+        "event_type": "provider_error",
+        "data": {
+          "provider": "command-code",
+          "code": "MODEL_NOT_IN_PLAN",
+          "model": "claude-sonnet-5",
+          "retryable": false
+        },
+        "observed_at": "2026-11-11T14:21:05Z"
+      }
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-provider-missing",
+      "type": "session.event",
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "epoch": "epoch-2",
+      "seq": 5,
+      "payload": {
+        "event_type": "provider_error",
+        "data": {
+          "provider": "command-code",
+          "code": "ACCOUNT_REMOVED",
+          "retryable": false,
+          "action": "reconfigure_server_account"
+        },
+        "observed_at": "2026-11-11T14:21:05Z"
+      }
     }
   ]
 }
