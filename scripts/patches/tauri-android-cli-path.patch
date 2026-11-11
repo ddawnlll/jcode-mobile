@@ -1,0 +1,13 @@
+--- a/apps/stillness/src-tauri/gen/android/buildSrc/src/main/java/dev/jcode/stillness/kotlin/BuildTask.kt
++++ b/apps/stillness/src-tauri/gen/android/buildSrc/src/main/java/dev/jcode/stillness/kotlin/BuildTask.kt
+@@ -55,7 +55,8 @@
+     fun runTauriCli(executable: String) {
+         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
+         val target = target ?: throw GradleException("target cannot be null")
+         val release = release ?: throw GradleException("release cannot be null")
+-        val args = listOf("tauri", "android", "android-studio-script");
++        val cli = File(projectDir, "$rootDirRel/../node_modules/@tauri-apps/cli/tauri.js").canonicalFile
++        val args = listOf(cli.path, "android", "android-studio-script");
+ 
+         execOperations.exec {
+             workingDir(File(projectDir, rootDirRel))
