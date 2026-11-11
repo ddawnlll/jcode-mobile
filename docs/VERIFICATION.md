@@ -10,6 +10,7 @@ Adapter v2 and Stillness 12 evidence is in
 | Rust workspace tests | PASS, 30 tests |
 | Rust formatting | PASS |
 | Root TypeScript typecheck | PASS |
+| Legacy unit/RNTL suite | PASS, 14 suites / 139 tests |
 | Stillness build | PASS, Vite 7.3.8 |
 | Stillness lint | PASS, 0 errors (11 warnings) |
 | Repository-wide ESLint | FAIL, 953 pre-existing legacy Expo errors |

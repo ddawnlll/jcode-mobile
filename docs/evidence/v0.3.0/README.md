@@ -26,6 +26,7 @@ Statuses are `PASS`, `FAIL`, `BLOCKED`, `NOT_RUN`, or `NOT_APPLICABLE`.
 | Protocol, store, auth, path, turn, hub, and operation tests | PASS | 30 Rust tests: 18 core, 4 protocol, 4 server unit, 4 operation-flow |
 | `cargo fmt --all -- --check` | PASS | exit 0 |
 | Root TypeScript typecheck | PASS | `bun run typecheck`; root config excludes `apps/stillness`, which has its own strict `tsc --noEmit` build |
+| Legacy unit/RNTL suite | PASS | `bun run test`: 14 suites, 139 tests |
 | Stillness typecheck and production web build | PASS | `tsc --noEmit && vite build`; 431.88 kB JS / 142.43 kB gzip, 39.89 kB CSS / 8.37 kB gzip |
 | Stillness lint | PASS (new surface) | `eslint apps/stillness/src`: 0 errors, 11 unused-symbol warnings |
 | Repository-wide ESLint | FAIL (pre-existing) | `bun run lint` also covers the legacy Expo app: 953 errors / 1003 warnings, none in the v0.3.0 surface except the 11 warnings above |
@@ -51,6 +52,9 @@ cargo fmt --all -- --check
 bun run typecheck
 # exit 0; the legacy Expo surface and root scripts typecheck
 
+bun run test
+# 14 suites / 139 tests passed
+
 cd apps/stillness && bun run build
 # tsc --noEmit passes; Vite production build succeeds
 
@@ -72,8 +76,8 @@ adapter on `127.0.0.1:7650`.
 ## Native Linux evidence
 
 `scripts/build-tauri-linux.sh` used the user-space GTK 3 / WebKitGTK 4.1 prefix
-because the host lacks development packages and sudo. The release build took
-3m55s with `--no-bundle` and produced:
+because the host lacks development packages and sudo. The final release build took
+4m15s with `--no-bundle` and produced:
 
 ```text
 apps/stillness/src-tauri/target/release/stillness   5,071,384 bytes
@@ -126,7 +130,7 @@ These are single-run measurements on the host above, not percentile SLAs.
 | Adapter CPU | 0.9% average | same run, `ps` average |
 | Adapter threads | 16 | includes Tokio workers and one global-event supervisor |
 | Adapter store-ready to harness-connected | 22 ms | adapter log timestamps; process spawn-to-ready not instrumented |
-| Native Tauri RSS | ~110 MiB (112,552 KB) | release binary, welcome screen under Xvfb |
+| Native Tauri RSS | ~109 MiB (111,776 KB) | release binary, welcome screen under Xvfb |
 | Web JS bundle | 431.88 kB (142.43 kB gzip) | Vite production build |
 | Web CSS bundle | 39.89 kB (8.37 kB gzip) | Vite production build |
 | Cold-start latency | NOT_RUN | no reproducible frame-ready timestamp for the native shell |
