@@ -126,9 +126,9 @@ These are single-run measurements on the host above, not percentile SLAs.
 
 | Metric | Observed | Conditions |
 | --- | --- | --- |
-| Adapter RSS | 21,472 KB | debug binary, 88 s uptime, after full Playwright suite |
-| Adapter CPU | 0.9% average | same run, `ps` average |
-| Adapter threads | 16 | includes Tokio workers and one global-event supervisor |
+| Adapter RSS | 21,880 KB | debug binary, 12m28s uptime, idle after Playwright suite |
+| Adapter CPU | 0.3% average | same 12m idle window, `ps` average |
+| Adapter threads | 18 | Tokio workers, global-event supervisor, and per-session child readers |
 | Adapter store-ready to harness-connected | 22 ms | adapter log timestamps; process spawn-to-ready not instrumented |
 | Native Tauri RSS | ~109 MiB (111,776 KB) | release binary, welcome screen under Xvfb |
 | Web JS bundle | 431.88 kB (142.43 kB gzip) | Vite production build |
