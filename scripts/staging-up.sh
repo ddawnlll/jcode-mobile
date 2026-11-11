@@ -15,8 +15,10 @@ RUN_DIR="$STAGE/run"
 WORK_DIR="$STAGE/work"
 
 mkdir -p "$HOME_DIR" "$RUN_DIR" "$WORK_DIR"
+chmod 700 "$HOME_DIR" "$RUN_DIR" "$WORK_DIR"
 if [ ! -f "$HOME_DIR/config.toml" ] && [ -f "$HOME/.jcode/config.toml" ]; then
   cp "$HOME/.jcode/config.toml" "$HOME_DIR/config.toml"
+  chmod 600 "$HOME_DIR/config.toml"
 fi
 
 # Local-only credential snapshot so the isolated daemon can reach the same
@@ -31,6 +33,7 @@ snapshot_credential() {
 }
 snapshot_credential openai-auth.json
 snapshot_credential auth-refresh-state.json
+snapshot_credential command_code_accounts.json
 
 export JCODE_HOME="$HOME_DIR"
 export JCODE_RUNTIME_DIR="$RUN_DIR"
@@ -53,6 +56,31 @@ else
   done
   if [ ! -S "$JCODE_SOCKET" ]; then
     echo "staging daemon did not produce a socket; see $STAGE/serve.log" >&2
+    exit 1
+  fi
+fi
+
+# The harness API bridge is a separate process in this JCode revision. The
+# adapter's curated SDK talks to this socket, not to the legacy daemon socket.
+if [ -S "$JCODE_API_SOCKET" ] && [ -f "$STAGE/api.pid" ] && kill -0 "$(cat "$STAGE/api.pid")" 2>/dev/null; then
+  echo "staging harness API already listening at $JCODE_API_SOCKET"
+else
+  rm -f "$JCODE_API_SOCKET"
+  echo "starting staging harness API bridge (socket=$JCODE_API_SOCKET)"
+  nohup "$JCODE_BIN" api >"$STAGE/api.log" 2>&1 &
+  echo $! >"$STAGE/api.pid"
+  for _ in $(seq 1 120); do
+    if [ -S "$JCODE_API_SOCKET" ]; then break; fi
+    if ! kill -0 "$(cat "$STAGE/api.pid")" 2>/dev/null; then
+      echo "staging harness API exited before creating a socket; see $STAGE/api.log" >&2
+      tail -30 "$STAGE/api.log" >&2 || true
+      exit 1
+    fi
+    sleep 0.25
+  done
+  if [ ! -S "$JCODE_API_SOCKET" ]; then
+    echo "staging harness API did not produce a socket; see $STAGE/api.log" >&2
+    tail -30 "$STAGE/api.log" >&2 || true
     exit 1
   fi
 fi

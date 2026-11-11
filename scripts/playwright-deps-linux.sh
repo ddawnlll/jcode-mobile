@@ -25,7 +25,7 @@ fi
 
 if [ -x "$CHROME" ] && LD_LIBRARY_PATH="$LIBDIR" ldd "$CHROME" 2>/dev/null | grep -q 'not found'; then
   :
-elif [ -x "$CHROME" ] && [ -d "$LIBDIR" ]; then
+elif [ -x "$CHROME" ] && [ -d "$LIBDIR" ] && [ -f "$PREFIX/etc/fonts/fonts.conf" ]; then
   echo "Playwright browser libraries already resolve under $LIBDIR"
   echo "export LD_LIBRARY_PATH=\"$LIBDIR\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\""
   exit 0
@@ -57,10 +57,26 @@ download libxrandr2
 download libdrm2
 download libxi6
 download libxrender1
+download libfontconfig1
+download fonts-dejavu-core
+download fonts-dejavu-mono
 
 for deb in "$DEBS"/*.deb; do
   dpkg -x "$deb" "$PREFIX"
 done
+
+# Chromium's headless shell refuses web fonts when fontconfig is absent. Keep a
+# private fontconfig configuration and DejaVu so text renders in the rootless
+# Playwright target.
+mkdir -p "$PREFIX/etc/fonts" "$PREFIX/cache/fontconfig"
+cat > "$PREFIX/etc/fonts/fonts.conf" <<FONTCONF
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>$PREFIX/usr/share/fonts</dir>
+  <cachedir>$PREFIX/cache/fontconfig</cachedir>
+</fontconfig>
+FONTCONF
 
 if [ -x "$CHROME" ]; then
   missing="$(LD_LIBRARY_PATH="$LIBDIR" ldd "$CHROME" 2>/dev/null | grep 'not found' || true)"
@@ -77,6 +93,7 @@ Playwright browser libraries are under:
 
 Run Playwright with:
   export LD_LIBRARY_PATH="$LIBDIR\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+  export FONTCONFIG_FILE="$PREFIX/etc/fonts/fonts.conf"
 
-scripts/run-e2e.sh sets this automatically.
+scripts/run-e2e.sh and scripts/stillness-e2e.sh set these automatically.
 EOF

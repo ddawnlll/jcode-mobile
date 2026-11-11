@@ -57,6 +57,7 @@ apps/stillness/dist/
 apps/stillness/.e2e-auth.json
 apps/stillness/.e2e-results/
 apps/stillness/.e2e-report/
+apps/stillness/src-tauri/gen/
 
 # local agent scratch
 /.commandcode/

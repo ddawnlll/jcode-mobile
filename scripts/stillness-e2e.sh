@@ -108,6 +108,9 @@ fi
 if [ -d "$HOME/playwright-deps/usr/lib/x86_64-linux-gnu" ]; then
   export LD_LIBRARY_PATH="$HOME/playwright-deps/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 fi
+if [ -f "$HOME/playwright-deps/etc/fonts/fonts.conf" ]; then
+  export FONTCONFIG_FILE="$HOME/playwright-deps/etc/fonts/fonts.conf"
+fi
 export STILLNESS_E2E_BASE_URL="http://127.0.0.1:$PORT"
 export STILLNESS_E2E_PAIR_CODE="$PAIR_CODE"
 
