@@ -4,12 +4,12 @@
 **Date:** 2026-11-11  
 **Design source:** `jcode-stillness-v12-motion(1).html`, 1,994 lines; supersedes Stillness 06 / Precision.  
 **App repository:** `ddawnlll/jcode-mobile`, `main` `37f8ead9917989e05d40009c9956bd49a4f72b0c`; PR #45 remains open and has unresolved E2E/native verification gates.  
-**JCode baseline:** `1jehuang/jcode` `v1.0.0-preview.394`, `eb867111fffac2efeedd95a7ac9f7d6168260e6f`; harness API major 1/minor 11. Upstream preview is experimental.  
+**JCode baseline (runtime and SDK):** `ddawnlll/jcode` branch `command-code-native-provider`, pinned to `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` (19 commits atop upstream `v1.0.0-preview.394` / `eb867111fffac2efeedd95a7ac9f7d6168260e6f`); harness API major 1/minor 11. Experimental fork, not an official upstream release.  
 **Related previous plan:** `JCODE_STILLNESS_030_ADAPTER_V2_UPSTREAM_PLAN.md`. This RFC **replaces the v6 screen-to-contract matrix**, without erasing prior reliability/security requirements.
 
 ## 0 — Decision and scope
 
-Build a **thin, server-side Rust Adapter v2** using JCode's `jcode-sdk` and `jcode-harness-api` as the only agent-control interface. Expose one authenticated mobile v2 API to the Stillness client (Tauri 2 + web front end is the candidate, not a proven winner yet). Keep one process and one SQLite journal. **Do not** port JCode's raw daemon protocol, invent a second agent, or fork the provider runtime.
+Build a **thin, server-side Rust Adapter v2** using JCode's `jcode-sdk` and `jcode-harness-api` as the only agent-control interface. Expose one authenticated mobile v2 API to the Stillness client (Tauri 2 + web front end is the candidate, not a proven winner yet). Keep one process and one SQLite journal. **Do not** port JCode's raw daemon protocol or invent a second agent/provider implementation. The dedicated JCode fork already contains the native Command Code integration; pin and reuse it, rather than rebuilding provider auth and transport inside Adapter v2.
 
 This revision is **contract and implementation design**; no live adapter or Tauri binary is produced by these documents. A production implementation needs upstream extension(s), JCode compatibility tests, and physical-device validation. Support the old app with the current adapter until the new one passes.
 
@@ -113,7 +113,7 @@ Envelope: `{ "v": 2, "kind": "request|response|event", "id": "uuid", "server_id"
 
 ## 5 — Upstream compatibility and required changes
 
-Current pinned JCode (preview.394 / `eb867111`):
+Current pinned JCode (fork `command-code-native-provider` / `0abff12c7`, based on preview.394 / `eb867111`):
 - `jcode-sdk` Rust client and `jcode-harness-api` v1.11 provide sessions, models, plans, file status/read/search, live event streams, and SSH transport.
 - `SendMessage` has no `client_operation_id`; `MessageAccepted` carries just `session_id`. `JcodeClient::send_message` can return `Ok` without observing an acceptance if its wait times out. No durable exactly-once guarantee.
 - `Cancel` is session-scoped, not `expected_turn_id` guarded.
@@ -139,8 +139,51 @@ Contribute *small upstream PRs* for per-operation message receipt/ingestion dedu
 ## 7 — Concrete next work
 
 1. Land PR-0 independently with this v12 contract. Do **not** merge open PR #45 just to unblock the new architecture; review its overlapping fixes separately.
-2. Implement the smallest Rust link using pinned upstream SDK before selecting Tauri for production; run tests on a real preview.394 daemon in isolated test home.
+2. Implement the smallest Rust link using the **pinned fork SDK** before selecting Tauri for production; run tests on a real fork-built JCode daemon from the exact same SHA in an isolated test home.
 3. Implement secure directory traversal and durable operation journal; do not wire simulated HTML handlers to real filesystem mutation without that layer.
 4. Create Stillness v12 typed client bindings and retain v1 React Native release as rollback until Android and iOS native E2E pass.
 
 **Scope statement:** This document updates the Adapter v2 design to Stillness 12. It intentionally does not imply that the runtime has been rewritten, that JCode has adopted the upstream API extensions, or that Android/iOS/Tauri builds have passed.
+## 13 — Mandatory native Command Code provider integration (2026-11-11)
+
+**Requirement / baseline correction.** Stillness 0.3.0 must support Command Code as a **built-in, first-class JCode provider**, not as a manually configured OpenAI-compatible endpoint. The selected JCode source is the user's fork [`ddawnlll/jcode@command-code-native-provider`](https://github.com/ddawnlll/jcode/tree/command-code-native-provider), pinned to commit `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8`. This is exactly **19 commits ahead, 0 behind** upstream preview.394 at `eb867111fffac2efeedd95a7ac9f7d6168260e6f`. It is **not merged** upstream: [draft PR #2132](https://github.com/1jehuang/jcode/pull/2132), related to [PR #1271](https://github.com/1jehuang/jcode/pull/1271).
+
+### 13.1 Boundary
+
+```text
+Stillness 12 (mobile/desktop)
+   -> Rust Adapter v2 mobile protocol (auth, session state, operation journal)
+   -> JCode fork's jcode-sdk / jcode-harness-api (same pinned commit)
+   -> JCode fork daemon with native provider id command-code
+   -> Command Code documented Provider API
+```
+
+The adapter **never** holds, proxies, forwards or logs Command Code API keys. JCode owns provider credentials, authentication, account routing, model catalogs, generation and tools. Pairing tokens are a separate adapter/device security domain. Model and provider selection **must** use the authoritative `ListModels` and `GetRuntimeInfo` SDK responses. Do not treat a Command Code static catalog or default model as an entitlement guarantee.
+
+### 13.2 Implementation facts, scope and caveats
+
+- Native user-facing provider id: `command-code`. The fork implements it using JCode's existing OpenAI-compatible provider framework **internally** (not a new `ActiveProvider` variant), plus native login/catalog, endpoint selection and session affinity. This is compatible with the requirement for a built-in provider: the end user must not configure custom URLs or generic profiles.
+- Supported documented generation endpoints in the fork: `/provider/v1/chat/completions`, `/responses`, and `/messages`; Muse routes to Responses, Claude-family models to Messages, and others generally to Chat pending per-family verification. Never use the undocumented CLI `/alpha/generate` protocol.
+- Server setup: JCode CLI `jcode login --provider command-code --account work` (with an API key supplied via a secure path) and a server-side provider-doctor check. Browser-assisted login is **not implemented**; do not promise it in the mobile UI.
+- Labeled API-key accounts and stored session identity `openai-compatible:command-code@<label>` are preserved across session resume, fork and daemon restart; removed accounts fail closed. There is no proven automatic cross-account failover or mobile-side account switcher. **Never silently rebind the session to an active account.**
+- Quota/remaining credits are **unknown** without a documented quota API. Token/cache observations may be shown when present with timestamps. Catalog inclusion does not prove plan access; `MODEL_NOT_IN_PLAN` must be a clear error.
+- The branch's evidence reports passing provider mock and live integration checks, including tool-result continuation and account affinity, but also documents unresolved external entitlements and unrelated suite failures. Those are **repository-reported tests, not independently rerun by this RFC**.
+
+### 13.3 Stillness 12 UI requirements
+
+1. **Model sheet:** show a provider section `Command Code` only when advertised by the authenticated JCode daemon; list real `ModelRouteInfo` choices and effective session identity; never invent model availability or account quota.
+2. **Session header:** display verified provider, exact route/model and account label when exposed. If absent, display `Unknown` rather than guessing based on the last selected UI option.
+3. **Account missing / plan denied:** surface a typed error with instructions to configure the server-side account; do not show `sent` or silently retry on another provider.
+4. **Session restore/fork:** preserve the existing JCode provider-route/account affinity and refresh it from `GetRuntimeInfo` after reconnect.
+5. **Pairing / Settings:** device pairing is **not** Command Code login; do not ask for the provider API key on the phone. The secure key remains on the JCode server.
+6. **Streaming:** handle reasoning, text deltas, replacements, tools, tool results, terminal errors and cancellation unchanged through official harness event shapes. An adapter receipt is **not** proof of successful model generation.
+
+### 13.4 Pinning and compatibility gates
+
+- For the adapter's `Cargo.toml`, use `jcode-sdk = { git = "https://github.com/ddawnlll/jcode", rev = "0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8" }` and matching `jcode-harness-api` if directly imported; commit the reproducible `Cargo.lock`. Never follow a moving branch in production.
+- Build and start the JCode daemon from the **same fork commit**; don't mix the fork SDK with unmodified upstream preview.394 without an explicit compatibility test.
+- Contract tests: handshake API 1.11; provider list and model catalog; `GetRuntimeInfo` route/account identity; regular Chat turn plus tool-result continuation; Muse Responses turn; state after reconnect/fork/restart; explicit 401/403/429 failures; cancelled tool call; stale/missing account fail-closed; no API keys in mobile data, SQLite, traces, or crash reports.
+- Require physical-device smoke for Stillness model picker, stream rendering, interrupted connection, operation receipts and post-resume model identity before calling v0.3.0 production ready.
+- On eventual upstream merge, re-pin to a **verified upstream commit/tag** only after the same contract suite passes; do not auto-upgrade to a new preview.
+
+**References:** [fork provider documentation](https://github.com/ddawnlll/jcode/blob/command-code-native-provider/docs/COMMAND_CODE_PROVIDER.md) · [implementation/status evidence](https://github.com/ddawnlll/jcode/blob/command-code-native-provider/COMMAND_CODE_IMPLEMENTATION_STATUS.md) · [upstream PR #2132](https://github.com/1jehuang/jcode/pull/2132).
