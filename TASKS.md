@@ -126,9 +126,9 @@ Status is DONE only with evidence in `docs/evidence/v0.3.0/README.md`.
 | 9.3 | Isolated pinned-daemon integration | DONE | `scripts/stillness-e2e.sh` against `0abff12c7`; adapter health connected |
 | 9.4 | Real Command Code generation and delivery truth | DONE | Unique token generated via `deepseek/deepseek-v4-flash`; accepted state; no pending card |
 | 9.5 | Stop-only cancellation and navigation persistence | DONE | Playwright stops one active turn after leaving and reopening the session |
-| 9.6 | Tauri desktop shell with OS credential storage | PARTIAL | Release build and Xvfb launch PASS; OS-keyring pairing NOT_RUN under Xvfb |
+| 9.6 | Tauri desktop shell with OS credential storage | DONE | Release build and Xvfb launch PASS; Secret Service round trip and UI pairing PASS; relaunch restored the keyring credential |
 | 9.7 | Native Linux release artifact | DONE | 5,071,384-byte release binary built with user-space GTK/WebKit |
 | 9.8 | Android build | BLOCKED | no Java or Android SDK on this host |
 | 9.9 | iOS build | NOT_APPLICABLE | requires macOS and Xcode |
-| 9.10 | Repository-wide lint | FAIL (pre-existing) | 953 legacy Expo errors remain; Stillness surface lint passes with 0 errors |
+| 9.10 | Repository-wide lint | DONE | Repository and Stillness lint pass with 0 errors and 0 warnings; generated/vendored paths ignored explicitly |
 | 9.11 | Performance measurements | PARTIAL | Adapter RSS/CPU and native RSS measured; cold-start and frame timing NOT_RUN |

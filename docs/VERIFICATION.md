@@ -12,12 +12,13 @@ Adapter v2 and Stillness 12 evidence is in
 | Root TypeScript typecheck | PASS |
 | Legacy unit/RNTL suite | PASS, 14 suites / 139 tests |
 | Stillness build | PASS, Vite 7.3.8 |
-| Stillness lint | PASS, 0 errors (11 warnings) |
-| Repository-wide ESLint | FAIL, 953 pre-existing legacy Expo errors |
+| Stillness lint | PASS, 0 errors, 0 warnings |
+| Repository-wide ESLint | PASS, 0 errors, 0 warnings |
 | Pinned JCode real-stack Playwright | PASS, 4 passed / 3 project-guarded skips |
 | Command Code generation | PASS, unique `deepseek/deepseek-v4-flash` token |
 | Native Linux Tauri build | PASS, 5,071,384-byte release binary |
-| Native Linux launch | PASS under Xvfb; OS-keyring pairing NOT_RUN |
+| Native Linux launch | PASS under Xvfb |
+| Native Secret Service keyring | PASS, round trip plus UI pairing and credential reload |
 | Android | BLOCKED, no Java/Android SDK |
 | iOS | NOT_APPLICABLE, Linux host |
 

@@ -14,7 +14,8 @@ Updated: 2026-11-11
 | Web build | PASS, Vite 7.3.8 |
 | Pinned real-stack e2e | PASS, `bash scripts/stillness-e2e.sh` |
 | Native Linux release | PASS, 5,071,384-byte Tauri binary |
-| Native Linux launch | PASS under Xvfb; OS-keyring pairing NOT_RUN |
+| Native Linux launch | PASS under Xvfb |
+| Native Secret Service keyring | PASS, round trip plus UI pairing and credential reload |
 | Android | BLOCKED, no Java/Android SDK |
 | iOS | NOT_APPLICABLE on Linux |
 | Evidence | `docs/evidence/v0.3.0/README.md` |
