@@ -81,4 +81,5 @@ Expo 0.2.2 package does not migrate, and 0.2.2 remains the previous release.
   client and adapter as a preview pair, not a drop-in replacement for the
   existing production adapter.
 
-Full evidence: [`docs/evidence/v0.3.0/README.md`](evidence/v0.3.0/README.md).
+Full evidence:
+[`docs/evidence/v0.3.0/README.md`](https://github.com/ddawnlll/jcode-mobile/blob/v0.3.0/docs/evidence/v0.3.0/README.md).
