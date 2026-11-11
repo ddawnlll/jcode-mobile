@@ -11,6 +11,13 @@
   <sub>A native iOS and Android companion for <a href="https://github.com/1jehuang/jcode">JCode</a>.</sub>
 </p>
 
+> **v0.3.0 development surface.** The Rust Adapter v2 lives in `crates/adapter-*`
+> and the Stillness 12 web/desktop client lives in `apps/stillness`. Adapter
+> tests, the pinned real-stack Playwright run, Command Code generation, and the
+> native Linux release are recorded in
+> [`docs/evidence/v0.3.0/README.md`](docs/evidence/v0.3.0/README.md). The
+> v0.2.2 mobile release below remains the last shipped native artifact.
+
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.2"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>

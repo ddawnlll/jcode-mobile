@@ -114,3 +114,21 @@ Status is DONE only with evidence in `docs/V0_2_1_VERIFICATION.md`.
 | 8.6 | Android release APK | DONE (CI) / NOT_RUN (device install) | CI release build, checksum in `docs/BUILD_STATE.md` |
 | 8.7 | README, website, marketing tests and docs | DONE | Real 0.2.1 welcome captures; 76 marketing tests pass |
 | 8.8 | Native pacing, large text and screen reader | NOT_RUN | No physical Android/iOS device or macOS host in this session |
+
+## Phase 9 — v0.3.0 Adapter v2 and Stillness 12
+
+Status is DONE only with evidence in `docs/evidence/v0.3.0/README.md`.
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 9.1 | Rust Adapter v2 (protocol, SQLite WAL, auth, roots, operations) | DONE | 30 Rust tests; workspace compiles; `cargo fmt` clean |
+| 9.2 | Stillness 12 web surface and three-pane desktop | DONE (Chromium) | Production Vite build; Playwright mobile and desktop projects pass |
+| 9.3 | Isolated pinned-daemon integration | DONE | `scripts/stillness-e2e.sh` against `0abff12c7`; adapter health connected |
+| 9.4 | Real Command Code generation and delivery truth | DONE | Unique token generated via `deepseek/deepseek-v4-flash`; accepted state; no pending card |
+| 9.5 | Stop-only cancellation and navigation persistence | DONE | Playwright stops one active turn after leaving and reopening the session |
+| 9.6 | Tauri desktop shell with OS credential storage | PARTIAL | Release build and Xvfb launch PASS; OS-keyring pairing NOT_RUN under Xvfb |
+| 9.7 | Native Linux release artifact | DONE | 5,071,384-byte release binary built with user-space GTK/WebKit |
+| 9.8 | Android build | BLOCKED | no Java or Android SDK on this host |
+| 9.9 | iOS build | NOT_APPLICABLE | requires macOS and Xcode |
+| 9.10 | Repository-wide lint | FAIL (pre-existing) | 953 legacy Expo errors remain; Stillness surface lint passes with 0 errors |
+| 9.11 | Performance measurements | PARTIAL | Adapter RSS/CPU and native RSS measured; cold-start and frame timing NOT_RUN |

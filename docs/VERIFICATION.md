@@ -1,5 +1,25 @@
 # Verification
 
+## v0.3.0 (2026-11-11)
+
+Adapter v2 and Stillness 12 evidence is in
+[`evidence/v0.3.0/README.md`](evidence/v0.3.0/README.md). Summary:
+
+| Check | Result |
+| --- | --- |
+| Rust workspace tests | PASS, 30 tests |
+| Rust formatting | PASS |
+| Root TypeScript typecheck | PASS |
+| Stillness build | PASS, Vite 7.3.8 |
+| Stillness lint | PASS, 0 errors (11 warnings) |
+| Repository-wide ESLint | FAIL, 953 pre-existing legacy Expo errors |
+| Pinned JCode real-stack Playwright | PASS, 4 passed / 3 project-guarded skips |
+| Command Code generation | PASS, unique `deepseek/deepseek-v4-flash` token |
+| Native Linux Tauri build | PASS, 5,071,384-byte release binary |
+| Native Linux launch | PASS under Xvfb; OS-keyring pairing NOT_RUN |
+| Android | BLOCKED, no Java/Android SDK |
+| iOS | NOT_APPLICABLE, Linux host |
+
 > v0.1.1 is a corrective release for the independent review of `a632a6a`. The finding-by-finding response is in [`REVIEW_FIXES.md`](REVIEW_FIXES.md). Native evidence below was collected on v0.1.0/0.1.1 staging and remains representative; new regression tests run in CI.
 
 Release records: [`V0_2_0_VERIFICATION.md`](V0_2_0_VERIFICATION.md),

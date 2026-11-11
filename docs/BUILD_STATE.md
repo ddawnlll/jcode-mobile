@@ -1,22 +1,39 @@
 # Build state
 
-Updated: 2026-11-10
+Updated: 2026-11-11
+
+## v0.3.0 implementation state
+
+| Item | Value |
+| --- | --- |
+| Branch | `design/adapter-v2-stillness-v12-20261111` |
+| Adapter | Rust Adapter v2 (`crates/adapter-*`), protocol v2 |
+| Client | Stillness 12 under `apps/stillness`, Tauri 2 desktop shell |
+| Pinned JCode fork | `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8`, `jcode v0.99.999-dev` |
+| Adapter tests | 30 Rust tests pass; `cargo fmt` clean |
+| Web build | PASS, Vite 7.3.8 |
+| Pinned real-stack e2e | PASS, `bash scripts/stillness-e2e.sh` |
+| Native Linux release | PASS, 5,071,384-byte Tauri binary |
+| Native Linux launch | PASS under Xvfb; OS-keyring pairing NOT_RUN |
+| Android | BLOCKED, no Java/Android SDK |
+| iOS | NOT_APPLICABLE on Linux |
+| Evidence | `docs/evidence/v0.3.0/README.md` |
 
 ## Current state
 
 | Item | Value |
 | --- | --- |
-| Branch | `main` |
+| Branch | `design/adapter-v2-stillness-v12-20261111` |
 | Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
-| App version | 0.2.2 |
+| App version | 0.3.0 |
 | Expo SDK | 58.0.23 |
 | React Native / React | 0.88.1 / 19.3.0 |
 | Hermes / new architecture | enabled (SDK default) |
-| JCode (installed + staging) | 0.99.1, commit `7206efd0c1dbf49ef38d06b63f3a96a3a7cee611` |
-| Adapter protocol | v1 |
+| JCode (pinned staging) | 0.99.999-dev, commit `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
+| Adapter protocol | v2 (Rust) |
 | Active iOS Simulator | iPhone 17 Pro, iOS 26.1 (`E9144064-F5FC-4846-A88C-E43DF837F103`) |
 | Staging daemon | `$JCODE_SCRATCH_DIR/jcode-mobile-staging` (private home/runtime dirs) |
-| Staging adapter | `127.0.0.1:7643` (plain ws, loopback development exception); stopped after verification |
+| Staging adapter | `127.0.0.1:7650` for Stillness e2e, `7651` for interactive smoke; isolated from production |
 
 ## Decisions that affect resumption
 
