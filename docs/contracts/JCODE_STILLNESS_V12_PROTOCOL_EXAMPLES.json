@@ -1,0 +1,244 @@
+{
+  "status": "proposed fixtures, not recorded backend traffic",
+  "design": "Stillness v12 Motion",
+  "frames": [
+    {
+      "v": 2,
+      "kind": "request",
+      "id": "req-1",
+      "type": "client.hello",
+      "payload": {
+        "supported_versions": [
+          2
+        ],
+        "client": "stillness/0.3.0",
+        "platform": "android"
+      }
+    },
+    {
+      "v": 2,
+      "kind": "response",
+      "id": "r-1",
+      "type": "server.hello",
+      "payload": {
+        "protocol_version": 2,
+        "jcode_harness_api": {
+          "major": 1,
+          "minor": 11
+        },
+        "jcode_sha": "eb867111fffac2efeedd95a7ac9f7d6168260e6f",
+        "capabilities": [
+          "sessions.snapshot",
+          "sessions.subscribe",
+          "operations.lookup",
+          "files.list_dir",
+          "plan.snapshot"
+        ],
+        "disabled_capabilities": [
+          "exactly_once_send",
+          "exact_stop",
+          "folders.rename"
+        ]
+      },
+      "reply_to": "req-1",
+      "server_id": "demo-server"
+    },
+    {
+      "v": 2,
+      "kind": "request",
+      "id": "req-2",
+      "type": "sessions.create",
+      "payload": {
+        "project_id": "p-jcode-mobile",
+        "working_dir": null
+      },
+      "server_id": "demo-server",
+      "session_id": "s-new"
+    },
+    {
+      "v": 2,
+      "kind": "request",
+      "id": "req-3",
+      "type": "operations.reserve",
+      "payload": {
+        "payload_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "utf8_bytes": 300
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "operation_id": "op-1"
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-1",
+      "type": "operations.state",
+      "payload": {
+        "state": "unknown",
+        "reason": "unattributed_daemon_acceptance",
+        "source": "transport_only"
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "operation_id": "op-1"
+    },
+    {
+      "v": 2,
+      "kind": "request",
+      "id": "req-4",
+      "type": "sessions.subscribe",
+      "payload": {
+        "after": {
+          "epoch": "epoch-1",
+          "seq": 45
+        },
+        "snapshot_on_gap": true
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1"
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-2",
+      "type": "sessions.snapshot",
+      "payload": {
+        "revision": "revision-3",
+        "authoritative_at": "2026-11-11T14:21:02Z",
+        "stale": false,
+        "view": {
+          "execution": {
+            "state": "generating",
+            "observed_at": "2026-11-11T14:21:01Z"
+          },
+          "plan": {
+            "reported": false,
+            "steps": []
+          },
+          "context": {
+            "value": null,
+            "freshness": "unavailable"
+          }
+        }
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "epoch": "epoch-2",
+      "seq": 0
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-3",
+      "type": "session.event",
+      "payload": {
+        "event_type": "text_delta",
+        "data": {
+          "stream_message_id": "local-msg-id",
+          "text": "Working on "
+        },
+        "observed_at": "2026-11-11T14:21:02Z"
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "epoch": "epoch-2",
+      "seq": 1
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-4",
+      "type": "session.event",
+      "payload": {
+        "event_type": "text_replace",
+        "data": {
+          "stream_message_id": "local-msg-id",
+          "text": "Working on Adapter v2."
+        },
+        "observed_at": "2026-11-11T14:21:03Z"
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "epoch": "epoch-2",
+      "seq": 2
+    },
+    {
+      "v": 2,
+      "kind": "event",
+      "id": "ev-5",
+      "type": "session.event",
+      "payload": {
+        "event_type": "turn_done",
+        "data": {},
+        "observed_at": "2026-11-11T14:21:04Z"
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "epoch": "epoch-2",
+      "seq": 3
+    },
+    {
+      "v": 2,
+      "kind": "response",
+      "id": "r-2",
+      "type": "files.list_dir",
+      "payload": {
+        "root_id": "allowed-projects",
+        "path": "src",
+        "entries": [
+          {
+            "name": "main.rs",
+            "kind": "file",
+            "size_bytes": 533
+          },
+          {
+            "name": "provider",
+            "kind": "directory"
+          }
+        ],
+        "next_cursor": null
+      },
+      "server_id": "demo-server",
+      "reply_to": "req-5"
+    },
+    {
+      "v": 2,
+      "kind": "response",
+      "id": "r-3",
+      "type": "plan.snapshot",
+      "payload": {
+        "source": "jcode.todo_state",
+        "freshness": "current",
+        "reported": true,
+        "observed_at": "2026-11-11T14:21:04Z",
+        "steps": [
+          {
+            "id": "a",
+            "title": "Inspect files",
+            "state": "done"
+          },
+          {
+            "id": "b",
+            "title": "Run tests",
+            "state": "active"
+          }
+        ]
+      },
+      "server_id": "demo-server",
+      "session_id": "s-1",
+      "reply_to": "req-6"
+    },
+    {
+      "v": 2,
+      "kind": "response",
+      "id": "r-4",
+      "type": "server.error",
+      "payload": {
+        "code": "unsupported_capability",
+        "message": "Server folder rename not enabled"
+      },
+      "server_id": "demo-server",
+      "reply_to": "req-7"
+    }
+  ]
+}
