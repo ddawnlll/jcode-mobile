@@ -441,7 +441,11 @@ export class Controller {
         sessionsSource: '',
       });
     }
-    this.setState({ server: hello.server, device: hello.device });
+    this.setState({
+      server: hello.server,
+      device: hello.device,
+      jcodeConnected: hello.server.healthy,
+    });
   }
 
   private bind(client: AdapterClient) {
