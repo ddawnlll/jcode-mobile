@@ -1,8 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const suffix = `${Date.now().toString(36)}`;
-test.beforeEach(async ({}, testInfo) => {
+test.beforeEach(async ({ page }, testInfo) => {
   // Both viewport projects run this file; keep created titles distinct.
+  page.setDefaultTimeout(120_000);
   testInfo.setTimeout(120_000);
 });
 
