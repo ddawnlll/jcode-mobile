@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JCode Mobile 0.3.0 social card</title>
+<style>
+  @font-face {
+    font-family: "Bricolage";
+    font-weight: 600;
+    src: url("../../assets/fonts/BricolageGrotesque-SemiBold.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Hanken";
+    font-weight: 400;
+    src: url("../../assets/fonts/HankenGrotesk-Regular.ttf") format("truetype");
+  }
+  @font-face {
+    font-family: "Plex Mono";
+    font-weight: 400;
+    src: url("../../assets/fonts/IBMPlexMono-Regular.ttf") format("truetype");
+  }
+  :root {
+    --bg: #111F20;
+    --ink: #E5F0EB;
+    --muted: #A0B6AD;
+    --line: #344D48;
+    --brand: #B5D6C5;
+    --accent: #F2B09A;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 1200px;
+    height: 630px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hanken", sans-serif;
+    overflow: hidden;
+  }
+  .card {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .brand {
+    position: absolute;
+    left: 64px;
+    top: 48px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: "Bricolage", sans-serif;
+    font-size: 40px;
+    letter-spacing: -.05em;
+  }
+  .brand img { width: 42px; height: 42px; }
+  .rule {
+    position: absolute;
+    left: 64px;
+    right: 64px;
+    top: 118px;
+    height: 1px;
+    background: var(--line);
+  }
+  .copy {
+    position: absolute;
+    left: 64px;
+    top: 172px;
+    width: 720px;
+  }
+  .eyebrow {
+    margin: 0;
+    font-family: "Plex Mono", monospace;
+    font-size: 16px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--brand);
+  }
+  h1 {
+    margin: 22px 0 0;
+    font-family: "Bricolage", sans-serif;
+    font-size: 70px;
+    line-height: .94;
+    letter-spacing: -.06em;
+  }
+  h1 .dot { color: var(--accent); }
+  .lede {
+    margin: 22px 0 0;
+    max-width: 560px;
+    font-size: 23px;
+    line-height: 1.3;
+    color: var(--muted);
+  }
+  .lede strong { color: var(--ink); font-weight: 500; }
+  .foot {
+    position: absolute;
+    left: 64px;
+    bottom: 40px;
+    font-family: "Plex Mono", monospace;
+    font-size: 15px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .foot b { color: var(--accent); font-weight: 400; }
+  .phone {
+    position: absolute;
+    right: 62px;
+    top: 76px;
+    width: 270px;
+    padding: 6px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: #192C2B;
+    overflow: hidden;
+    transform: rotate(2deg);
+  }
+  .phone img { display: block; width: 100%; border-radius: 16px; }
+  .corner {
+    position: absolute;
+    right: 64px;
+    top: 48px;
+    width: 9px;
+    height: 9px;
+    background: var(--accent);
+  }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand">
+    <img src="../../assets/mark/jcode-mark.png" alt="">
+    <span>jcode</span>
+  </div>
+  <div class="rule"></div>
+  <div class="corner"></div>
+  <section class="copy">
+    <p class="eyebrow">JCode Mobile / Stillness 12</p>
+    <h1>Leave the desk.<br>Keep the thread<span class="dot">.</span></h1>
+    <p class="lede"><strong>Your server keeps working.</strong> Return to the same session, plan, and tool trail from your phone.</p>
+  </section>
+  <div class="foot"><b>0.3.0</b> / Rust Adapter v2 / Android + Linux</div>
+  <figure class="phone" style="margin:0">
+    <img src="../../docs/media/marketing/session-v030.png" alt="">
+  </figure>
+</main>
+</body>
+</html>

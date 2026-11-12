@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111F20">
   <title>JCode Mobile · Leave the desk. Keep the thread.</title>
-  <meta name="description" content="A native phone client for JCode on your own Linux server. Send work, put the phone down, and return to the exact session, plan, and tool trail. Android 0.2.2 APK available for sideload.">
+  <meta name="description" content="A Tauri client for JCode on your own Linux server. Send work, leave the phone, and return to the same session, plan, and tool trail. Android 0.3.0 APK available for sideload.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/icon.png">
@@ -55,12 +55,12 @@
   <link rel="stylesheet" href="styles.css">
   <meta property="og:type" content="website">
   <meta property="og:title" content="JCode Mobile · Leave the desk. Keep the thread.">
-  <meta property="og:description" content="A native phone client for JCode on your own Linux server. The server executes while the phone disconnects. Return to the exact session, plan, and tool trail.">
+  <meta property="og:description" content="A Tauri client for JCode on your own Linux server. The server executes while the phone disconnects. Return to the exact session, plan, and tool trail.">
   <meta property="og:image" content="assets/social-card.png">
-  <meta property="og:image:alt" content="JCode Mobile field guide card with a real conversation screen and an ASCII orbit plate.">
+  <meta property="og:image:alt" content="JCode Mobile 0.3.0 social card with a real session and the words Leave the desk. Keep the thread.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="JCode Mobile · Leave the desk. Keep the thread.">
-  <meta name="twitter:description" content="A native phone client for JCode on your own Linux server. Android 0.2.2 APK available for sideload.">
+  <meta name="twitter:description" content="A Tauri client for JCode on your own Linux server. Android 0.3.0 APK available for sideload.">
   <meta name="twitter:image" content="assets/social-card.png">
   <script type="application/ld+json">
     {
@@ -70,11 +70,11 @@
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "Remote development client",
       "operatingSystem": "Android",
-      "softwareVersion": "0.2.2",
-      "downloadUrl": "https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.2/jcode-mobile-0.2.2-android-release.apk",
+      "softwareVersion": "0.3.0",
+      "downloadUrl": "https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk",
       "codeRepository": "https://github.com/ddawnlll/jcode-mobile",
       "softwareHelp": "https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md",
-      "releaseNotes": "https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.2"
+      "releaseNotes": "https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.0"
     }
   </script>
 </head>
@@ -86,12 +86,13 @@
       <a class="brand" href="#top" aria-label="JCode Mobile, back to top">
         <img src="assets/mark/jcode-mark.png" width="28" height="28" alt="">
         <span class="brand-name">JCode Mobile</span>
-        <span class="brand-edition mono">Field guide 02</span>
+        <span class="brand-edition mono">Stillness 12</span>
       </a>
       <nav id="site-nav" aria-label="Primary">
+        <a class="nav-link" href="#premise">Premise</a>
         <a class="nav-link" href="#how">Continuity</a>
         <a class="nav-link" href="#inspect">Inspect</a>
-        <a class="nav-link" href="#palettes">Palettes</a>
+        <a class="nav-link" href="#setup">Setup</a>
         <a class="nav-link" href="#release">Release</a>
         <a class="nav-link nav-link--github" data-link="github" href="https://github.com/ddawnlll/jcode-mobile">
           GitHub
@@ -114,29 +115,29 @@
       <div class="wrap hero-grid">
         <div class="hero-copy">
           <div class="hero-kicker">
-            <p class="mono eyebrow">A phone client for JCode on your own server</p>
-            <p class="mono hero-edition">Edition 02 · November 2026</p>
+            <p class="mono eyebrow">A Tauri client for JCode on your own server</p>
+            <p class="mono hero-edition">Stillness 12 · Adapter v2 · 0.3.0</p>
           </div>
           <h1 class="hero-title" id="hero-title">
             <span class="hero-line">Leave the desk.</span>
             <span class="hero-line hero-line--second">Keep the <span class="thread-word">thread.</span></span>
           </h1>
-          <p class="hero-lede">Your JCode daemon keeps working on the Linux server. The phone is how you send an instruction, leave, and return to the exact session, plan, and tool trail.</p>
+          <p class="hero-lede">JCode keeps working on your Linux server. The phone is how you send an instruction, leave, and return to the exact session, plan, and tool trail.</p>
           <div class="hero-actions">
-            <a class="button button--primary" id="download-apk" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.2/jcode-mobile-0.2.2-android-release.apk" referrerpolicy="no-referrer">
+            <a class="button button--primary" id="download-apk" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk" referrerpolicy="no-referrer">
               <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
                 <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12v2h10v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
               </svg>
-              <span>Download Android 0.2.2</span>
+              <span>Download Android 0.3.0</span>
               <span class="button-meta mono">APK</span>
             </a>
-            <a class="button button--text" href="#how">See it in motion <span class="arrow" aria-hidden="true">↓</span></a>
+            <a class="button button--text" href="#how">See the return path <span class="arrow" aria-hidden="true">↓</span></a>
           </div>
-          <p class="caveat"><span class="caveat-mark" aria-hidden="true">!</span> Sideload only. Debug-signed APK for arm64-v8a and armeabi-v7a. Not a Play Store build. No physical-iPhone artifact yet.</p>
+          <p class="caveat"><span class="caveat-mark" aria-hidden="true">!</span> 10.5 MiB. Debug-signed APK for arm64-v8a and armeabi-v7a. No Play Store listing. iOS is not built on this Linux host.</p>
           <dl class="hero-facts">
-            <div><dt class="mono">Execution</dt><dd>On your server</dd></div>
-            <div><dt class="mono">Return</dt><dd>Exact server + session</dd></div>
-            <div><dt class="mono">Palettes</dt><dd>11 families, 22 modes</dd></div>
+            <div><dt class="mono">Adapter</dt><dd>Rust v2</dd></div>
+            <div><dt class="mono">Provider</dt><dd>Command Code</dd></div>
+            <div><dt class="mono">Client</dt><dd>Stillness 12</dd></div>
           </dl>
         </div>
 
@@ -173,13 +174,13 @@
  ..*.  #   * . + +. =.-:;                 #%%%%%%  %#.* .
 . * . * ..* . * +. =.=.-,-:               #%%%%.% %#  * +</pre>
             </div>
-            <div class="plate-annot plate-annot--a mono" aria-hidden="true">CONTINUE_ON_DISCONNECT<br>= TRUE</div>
+            <div class="plate-annot plate-annot--a mono" aria-hidden="true">ADAPTER V2<br>= TRUE</div>
             <div class="plate-annot plate-annot--b mono" aria-hidden="true">SITE SPECIMEN<br>30 FPS CAP</div>
             <div class="device-sheet device-sheet--hero">
-              <img src="assets/media/conversation-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview conversation with sample data, the Session work sheet open, and the composer." decoding="async">
+              <img src="assets/media/session-v030.png" width="860" height="1800" alt="JCode Mobile 0.3.0 session with a real answer from deepseek-v4-flash, reasoning, and the composer." decoding="async">
             </div>
             <div class="plate-foot">
-              <span class="mono plate-provenance">Preview capture / v0.2.0 / Night</span>
+              <span class="mono plate-provenance">Real capture / v0.3.0</span>
               <button class="motion-toggle" id="motion-toggle" type="button" aria-pressed="true" aria-label="Pause orbit animation" data-playing="true">
                 <span class="motion-glyph" aria-hidden="true">
                   <svg class="glyph-pause" viewBox="0 0 14 14" width="14" height="14" focusable="false"><path d="M4 2v10M10 2v10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>
@@ -190,7 +191,7 @@
               <span class="sr-only" id="motion-status" role="status" aria-live="polite">Orbit animation running.</span>
             </div>
           </div>
-          <figcaption class="figure-caption" id="hero-figure-caption">A v0.2.0 Preview capture with the Session work sheet open. Sample data is labelled in the capture. The torus is a design specimen, not a live status display.</figcaption>
+          <figcaption class="figure-caption" id="hero-figure-caption">A real v0.3.0 capture from an isolated adapter. The answer, model route, and token counts came from the running stack. The torus is a design specimen, not a live status display.</figcaption>
         </figure>
       </div>
     </section>
@@ -202,30 +203,30 @@
       </div>
       <div class="wrap premise-grid">
         <div class="premise-statement">
-          <h2 id="premise-title">The work runs on your server. The phone is how you check in.</h2>
+          <h2 id="premise-title">The work runs on your server. The phone is how you return.</h2>
         </div>
         <div class="premise-body">
-          <p class="lead">JCode Mobile does not run a second agent, a shadow transcript, or a cloud relay. It attaches to the JCode daemon you already run. Continuation is set during attach, not in a final goodbye frame.</p>
-          <p>When the screen goes dark, the daemon does not read that as cancel. When you reopen, the app reconciles the same server and the same session. If the target is missing, it says so instead of quietly creating a replacement.</p>
+          <p class="lead">Adapter v2 is one Rust process beside JCode. It speaks to the curated SDK and harness API, keeps one SQLite journal, and exposes an authenticated mobile WebSocket. It does not run a second agent or proxy a provider key.</p>
+          <p>Navigation, backgrounding, socket close, and force-quit are not cancellation. The adapter keeps the operation journal. When you reopen, the client reconciles the same server and the same session, or shows an honest recovery state.</p>
         </div>
       </div>
       <div class="wrap ledger" role="list">
         <div class="ledger-row" role="listitem">
           <span class="mono ledger-index">A</span>
           <h3>The server executes.</h3>
-          <p>Prompts, tools, plans, and file reads stay with the daemon on your VPS.</p>
+          <p>Prompts, tools, plans, and file reads stay with JCode on your Linux server.</p>
           <span class="mono ledger-tag">Owner / daemon</span>
         </div>
         <div class="ledger-row" role="listitem">
           <span class="mono ledger-index">B</span>
-          <h3>The phone observes.</h3>
-          <p>Cached history paints first and is labelled as saved on this phone. Only reconciliation may call it current.</p>
+          <h3>The adapter journals.</h3>
+          <p>Reserve, dispatch, accepted, rejected, unknown, and observed in history stay distinct.</p>
           <span class="mono ledger-tag">Source / fenced</span>
         </div>
         <div class="ledger-row" role="listitem">
           <span class="mono ledger-index">C</span>
           <h3>The return is exact.</h3>
-          <p>Server, session, reading anchor, draft, and pending send are scoped and restored together.</p>
+          <p>Server, session, draft, and reading position are scoped and restored together.</p>
           <span class="mono ledger-tag">Seam / continuous</span>
         </div>
       </div>
@@ -234,11 +235,11 @@
         <span class="signal-link" aria-hidden="true"></span>
         <span class="signal-node">WSS + token</span>
         <span class="signal-link" aria-hidden="true"></span>
-        <span class="signal-node">Mobile adapter</span>
+        <span class="signal-node">Adapter v2</span>
         <span class="signal-link" aria-hidden="true"></span>
-        <span class="signal-node">Daemon socket</span>
+        <span class="signal-node">JCode SDK</span>
         <span class="signal-link" aria-hidden="true"></span>
-        <span class="signal-node">JCode session</span>
+        <span class="signal-node">JCode daemon</span>
         <span class="signal-link" aria-hidden="true"></span>
         <span class="signal-node signal-node--end">Your repo</span>
       </div>
@@ -251,41 +252,41 @@
           <h2 id="how-title">Your phone can leave.<br><span class="sage">The work does not.</span></h2>
         </div>
         <div class="narrative-intro">
-          <p class="lead">Three illustrative states, built from real v0.2.0 captures. They show what the app preserves when attention stops.</p>
-          <p class="mono disclaimer">Illustrative states. Not a live connection.</p>
+          <p class="lead">Three states from the real v0.3.0 stack. They show what the adapter and client preserve when attention stops.</p>
+          <p class="mono disclaimer">Real captures. Isolated adapter.</p>
         </div>
       </div>
 
       <div class="wrap narrative-grid">
         <div class="narrative-copy">
           <article class="scene-step" data-scene="send" id="step-send" aria-labelledby="step-send-title">
-            <p class="mono scene-state">Draft saved → Sending → Sent to server → Accepted</p>
+            <p class="mono scene-state">Staged → Reserved → Dispatching → Accepted</p>
             <h3 id="step-send-title">Four states, not one spinner.</h3>
-            <p>The composer does not blur sending, sent, and accepted into one spinner. A lost write becomes Delivery unconfirmed. It is never resent automatically.</p>
+            <p>The composer does not blur writing, acceptance, and ambiguity. A lost write becomes an explicit unknown state. It is never resent automatically.</p>
             <ul class="scene-list">
               <li>Draft saved locally, scoped to the server and session.</li>
-              <li>Sent to the adapter, then accepted by the agent.</li>
-              <li>Stop is explicit. Navigation, backgrounding, and socket close are not cancel.</li>
+              <li>Accepted only after authoritative JCode evidence.</li>
+              <li>Stop is explicit. Navigation is not cancel.</li>
             </ul>
           </article>
           <article class="scene-step" data-scene="away" id="step-away" aria-labelledby="step-away-title">
-            <p class="mono scene-state">Attach / continue_on_disconnect = true</p>
+            <p class="mono scene-state">Session scope / epoch + seq</p>
             <h3 id="step-away-title">The phone can go dark.</h3>
-            <p>The session stays attached to the daemon with continuation set during attach. Work keeps recording while the phone is away, including tools and plan changes.</p>
+            <p>JCode keeps the turn. Events carry a session scope, an adapter epoch, and a monotonic sequence. A slow answer cannot overwrite newer work.</p>
             <ul class="scene-list">
-              <li>The daemon owns execution, history, and the live session runtime.</li>
-              <li>Cached history returns first and is labelled as saved on this phone.</li>
-              <li>Daemon death is not treated as phone absence. The app shows a source-backed interruption.</li>
+              <li>The daemon owns execution, history, and the live runtime.</li>
+              <li>Cached content paints first and is labelled as saved.</li>
+              <li>A gap forces a snapshot, not a guessed patch.</li>
             </ul>
           </article>
           <article class="scene-step" data-scene="return" id="step-return" aria-labelledby="step-return-title">
             <p class="mono scene-state">Exact server + session / reconcile</p>
             <h3 id="step-return-title">Return to the same thread.</h3>
-            <p>Reopening restores the exact server and session. If that target is gone, the app shows an honest recovery state and never invents a replacement session.</p>
+            <p>Reopening restores the exact server and session. If the target is gone, the app shows a recovery state instead of creating a replacement.</p>
             <ul class="scene-list">
               <li>Reading anchor and draft are restored in scope.</li>
-              <li>Work and plan inspectors reflect the same session.</li>
-              <li>The return seam marks only what was actually recorded while you were away.</li>
+              <li>Plan, context, and activity stay source-backed.</li>
+              <li>Missing data stays unknown. It is not zero.</li>
             </ul>
           </article>
           <p class="narrative-end mono">End of sequence / <a href="#inspect">Inspect the work ↓</a></p>
@@ -322,16 +323,16 @@
           <div class="stage-panel" id="scene-panel" role="tabpanel" aria-labelledby="tab-send" tabindex="0">
             <div class="stage-device">
               <div class="scene-images">
-                <img class="scene-image is-active" data-scene-image="send" src="assets/media/conversation-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview conversation with sample data, the Session work sheet open, and the composer." decoding="async">
-                <img class="scene-image" data-scene-image="away" src="assets/media/sessions-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview sessions screen with sample recent sessions and a New session button." decoding="async">
-                <img class="scene-image" data-scene-image="return" src="assets/media/work-v020.png" width="860" height="1800" alt="JCode Mobile v0.2.0 Preview session work sheet with sample activity rows and a Stop this turn control." decoding="async">
+                <img class="scene-image is-active" data-scene-image="send" src="assets/media/session-v030.png" width="860" height="1800" alt="JCode Mobile 0.3.0 session with a real answer, reasoning, and the composer." decoding="async">
+                <img class="scene-image" data-scene-image="away" src="assets/media/home-v030.png" width="860" height="1800" alt="JCode Mobile 0.3.0 home screen with a live session and the jcode-mobile project." decoding="async">
+                <img class="scene-image" data-scene-image="return" src="assets/media/settings-v030.png" width="860" height="1800" alt="JCode Mobile 0.3.0 preferences with theme, glass, motion, connection, and capability state." decoding="async">
                 <div class="motion-scene-images" id="motion-scene-images" aria-hidden="true"></div>
               </div>
             </div>
             <div class="stage-caption">
               <span class="mono stage-scene" id="stage-scene">01 / Send</span>
-              <span id="stage-caption-text">Draft saved, sending, sent to server, accepted. Four states, one explicit path.</span>
-              <span class="mono stage-provenance" id="stage-provenance">Preview capture / v0.2.0 / Night</span>
+              <span id="stage-caption-text">Staged, reserved, dispatching, accepted. Four states, one explicit path.</span>
+              <span class="mono stage-provenance" id="stage-provenance">Real capture / v0.3.0</span>
               <div class="motion-caption" id="motion-caption"></div>
             </div>
           </div>
@@ -348,133 +349,59 @@
     <section class="section inspect" id="inspect" aria-labelledby="inspect-title">
       <div class="wrap section-index">
         <span class="mono">03 / Inspect</span>
-        <span class="mono">Activity / Plan / Appearance</span>
+        <span class="mono">Models / Context / Preferences</span>
       </div>
       <div class="wrap inspect-head">
         <h2 id="inspect-title">Read the work. Not a status guess.</h2>
-        <p class="lead">A session is more than the last message. Activity lists the committed tool calls. Plan reports the steps the agent actually reported. Neither invents progress.</p>
+        <p class="lead">The model sheet reads routes from JCode. Context reports the last request, not a lifetime guess. Preferences stay local and do not change execution.</p>
       </div>
       <div class="wrap inspect-grid">
         <figure class="specimen specimen--work">
           <div class="specimen-sheet">
-            <img src="assets/media/work-v020.png" width="860" height="1800" alt="Session work sheet from v0.2.0 Preview mode. Sample activity rows for read, edit, and bash." decoding="async">
+            <img src="assets/media/models-v030.png" width="860" height="1800" alt="Model sheet from v0.3.0 with Command Code routes and the selected deepseek model." decoding="async">
           </div>
           <figcaption>
-            <span class="mono">Specimen A / Activity</span>
-            <span>Session work sheet, recorded in v0.2.0 Preview mode. Sample data is labelled in the capture.</span>
+            <span class="mono">Specimen A / Models</span>
+            <span>Command Code is a native provider. The selected route is `deepseek/deepseek-v4-flash`. Entitlement is not inferred from the catalog.</span>
           </figcaption>
         </figure>
         <div class="inspect-notes">
           <div class="inspect-note">
             <span class="mono">01</span>
-            <h3>Activity</h3>
-            <p>Tool calls, file reads, and command rows, deduped by call id. The live row wins over the historical copy.</p>
+            <h3>Models</h3>
+            <p>Routes come from `ListModels` and `GetRuntimeInfo`. The adapter reports availability and provider. It never proxies a key.</p>
           </div>
           <div class="inspect-note">
             <span class="mono">02</span>
-            <h3>Plan</h3>
-            <p>Shown only when the session reports todos. Each row keeps its reported state. No percentages and no estimates.</p>
+            <h3>Context</h3>
+            <p>Input, output, cache, and effective budget are shown when reported. A missing value stays unknown, never zero.</p>
           </div>
           <div class="inspect-note">
             <span class="mono">03</span>
-            <h3>Appearance</h3>
-            <p>Eleven theme families, each with Light and Night. Tidal is the default. Preferences stay independent of system appearance.</p>
+            <h3>Preferences</h3>
+            <p>Theme, glass, motion, and reasoning visibility are local. Drafts and pending operations stay scoped to the server and session.</p>
           </div>
         </div>
         <figure class="specimen specimen--plan">
           <div class="specimen-sheet">
-            <img src="assets/media/plan-v020.png" width="1080" height="2400" alt="Plan tab from v0.2.0. Three reported steps, inspect the repo, run the tests, and report, all pending at capture time." decoding="async">
+            <img src="assets/media/settings-v030.png" width="860" height="1800" alt="Preferences from v0.3.0 showing theme, glass, motion, connection status, and adapter capabilities." decoding="async">
           </div>
           <figcaption>
-            <span class="mono">Specimen B / Plan</span>
-            <span>Plan tab, recorded in v0.2.0. Three reported steps, none complete at capture time.</span>
+            <span class="mono">Specimen B / Preferences</span>
+            <span>Reduced motion is a first-class setting. The connection panel reports verified capabilities and the credential store.</span>
           </figcaption>
         </figure>
       </div>
     </section>
 
-    <section class="section section--raised palettes" id="palettes" aria-labelledby="palettes-title">
-      <div class="wrap section-index">
-        <span class="mono">04 / Appearance</span>
-        <span class="mono">11 families / 22 modes</span>
-      </div>
-      <div class="wrap palettes-head">
-        <h2 id="palettes-title">22 palettes.<br>Same quiet instrument.</h2>
-        <div class="palettes-intro">
-          <p class="lead">Tidal is the default. Every family ships a Light and a Night mode. The app keeps appearance, theme family, and reasoning display independent.</p>
-          <p class="mono disclaimer">Field index, not a live theme switch. Swatches: background / ink / brand / accent.</p>
-        </div>
-      </div>
-      <div class="wrap palette-ledger">
-        <div class="palette-header mono" aria-hidden="true">
-          <span>Family</span><span>Light</span><span>Night</span>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Tidal</span><span class="mono palette-sub">Default. Original colors.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#F3F6F5;--s2:#173B3A;--s3:#164F49;--s4:#E56F4D" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#111F20;--s2:#E5F0EB;--s3:#B5D6C5;--s4:#F2B09A" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Gruvbox</span><span class="mono palette-sub">Retro warmth.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#FBF1C7;--s2:#3C3836;--s3:#427B58;--s4:#AF3A03" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#282828;--s2:#EBDBB2;--s3:#B8BB26;--s4:#FE8019" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Catppuccin</span><span class="mono palette-sub">Latte and Mocha.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#EFF1F5;--s2:#4C4F69;--s3:#8839EF;--s4:#D20F39" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#1E1E2E;--s2:#CDD6F4;--s3:#CBA6F7;--s4:#F5C2E7" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Dracula</span><span class="mono palette-sub">A vivid classic.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#F6F5FA;--s2:#302B45;--s3:#6944A5;--s4:#A33372" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#282A36;--s2:#F8F8F2;--s3:#BD93F9;--s4:#FF79C6" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Nord</span><span class="mono palette-sub">Arctic clarity.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#ECEFF4;--s2:#2E3440;--s3:#416D8A;--s4:#8B5F36" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#2E3440;--s2:#ECEFF4;--s3:#88C0D0;--s4:#EBCB8B" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Tokyo Night</span><span class="mono palette-sub">Night and Day.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#E1E2E7;--s2:#343B58;--s3:#3760BF;--s4:#7847BD" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#1A1B26;--s2:#C0CAF5;--s3:#7AA2F7;--s4:#BB9AF7" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Solarized</span><span class="mono palette-sub">A measured spectrum.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#FDF6E3;--s2:#586E75;--s3:#007C86;--s4:#9C4C12" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#002B36;--s2:#EEE8D5;--s3:#2AA198;--s4:#B58900" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">One</span><span class="mono palette-sub">One Dark and One Light.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#FAFAFA;--s2:#383A42;--s3:#2866B0;--s4:#8A3DB3" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#282C34;--s2:#ABB2BF;--s3:#61AFEF;--s4:#C678DD" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">GitHub</span><span class="mono palette-sub">Quiet utility.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#F6F8FA;--s2:#24292E;--s3:#0366D6;--s4:#6F42C1" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#24292E;--s2:#F6F8FA;--s3:#79B8FF;--s4:#B392F0" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Rosé Pine</span><span class="mono palette-sub">Main and Dawn.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#FAF4ED;--s2:#464261;--s3:#286983;--s4:#B4637A" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#191724;--s2:#E0DEF4;--s3:#EBBCBA;--s4:#C4A7E7" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-        <div class="palette-row">
-          <div class="palette-name"><span class="palette-title">Monokai</span><span class="mono palette-sub">Classic contrast.</span></div>
-          <div class="palette-mode"><span class="mono mode-label">Light</span><div class="swatches" style="--s1:#F5F5EE;--s2:#36382F;--s3:#4C6E13;--s4:#9C4B00" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-          <div class="palette-mode"><span class="mono mode-label">Night</span><div class="swatches swatches--night" style="--s1:#272822;--s2:#F8F8F2;--s3:#A6E22E;--s4:#FD971F" aria-hidden="true"><span></span><span></span><span></span><span></span></div></div>
-        </div>
-      </div>
-    </section>
-
     <section class="section section--night release" id="release" aria-labelledby="release-title">
       <div class="wrap section-index">
-        <span class="mono">05 / Release ledger</span>
+        <span class="mono">04 / Release ledger</span>
         <span class="mono">Source-backed</span>
       </div>
       <div class="wrap release-head">
         <h2 id="release-title">What exists today.</h2>
-        <p class="lead">The repository is public. The Android artifact is real. The iOS artifact is a Simulator app, not a signed IPA. The v0.2.1 full-screen ASCII welcome ships in the app.</p>
+        <p class="lead">The repository is public. The Android artifact is real. The native Linux shell builds from source. There is no signed iOS IPA or Play Store listing.</p>
       </div>
       <div class="wrap table-wrap">
         <table>
@@ -485,102 +412,76 @@
           <tbody>
             <tr>
               <td data-label="Artifact">Android APK</td>
-              <td data-label="Version" class="mono">0.2.2</td>
+              <td data-label="Version" class="mono">0.3.0</td>
               <td data-label="State"><span class="state-mark state-mark--available" aria-hidden="true"></span> Available</td>
-              <td data-label="Notes">About 63 MiB. Debug-signed, sideload only. arm64-v8a and armeabi-v7a.</td>
+              <td data-label="Notes">10.5 MiB. Debug-signed, sideload only. arm64-v8a and armeabi-v7a.</td>
             </tr>
             <tr>
-              <td data-label="Artifact">iOS Simulator app</td>
-              <td data-label="Version" class="mono">0.2.2</td>
-              <td data-label="State"><span class="state-mark state-mark--available" aria-hidden="true"></span> Available as zip</td>
-              <td data-label="Notes">Release Simulator .app zip. Not a signed IPA.</td>
+              <td data-label="Artifact">Native Linux shell</td>
+              <td data-label="Version" class="mono">0.3.0</td>
+              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Source build</td>
+              <td data-label="Notes">Tauri 2 and Secret Service. Built and launched on Debian 13.</td>
             </tr>
             <tr>
-              <td data-label="Artifact">ASCII welcome</td>
-              <td data-label="Version" class="mono">0.2.1</td>
-              <td data-label="State"><span class="state-mark state-mark--available" aria-hidden="true"></span> Shipped</td>
-              <td data-label="Notes">1.6 s character-grid reveal, Skip and Pause, reduced-motion still frame.</td>
+              <td data-label="Artifact">Web preview</td>
+              <td data-label="Version" class="mono">0.3.0</td>
+              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Verification</td>
+              <td data-label="Notes">Browser token in localStorage. Not a product surface or keystore.</td>
             </tr>
             <tr>
-              <td data-label="Artifact">Source</td>
-              <td data-label="Version" class="mono">main</td>
-              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Public</td>
-              <td data-label="Notes">Adapter contract and setup docs in the repository.</td>
+              <td data-label="Artifact">iOS</td>
+              <td data-label="Version" class="mono">—</td>
+              <td data-label="State"><span class="state-mark state-mark--preview" aria-hidden="true"></span> Not built</td>
+              <td data-label="Notes">Requires macOS and Xcode. No IPA is provided.</td>
             </tr>
           </tbody>
         </table>
       </div>
       <div class="wrap release-foot">
         <p class="mono">Not here yet</p>
-        <p>Signed iOS IPA / App Store listing / push notifications / browser client / live demo. The app needs a reachable server.</p>
-      </div>
-    </section>
-
-    <section class="section welcome" id="welcome" aria-labelledby="welcome-title">
-      <div class="wrap section-index">
-        <span class="mono">06 / Welcome</span>
-        <span class="mono">v0.2.1 / Shipped</span>
-      </div>
-      <div class="wrap welcome-grid">
-        <div class="welcome-copy">
-          <p class="mono eyebrow">Shipped in 0.2.1</p>
-          <h2 id="welcome-title">The first 1.6 seconds.</h2>
-          <p class="lead">The v0.2.1 welcome assembles from an ASCII character grid. A torus resolves out of noise, then hands off to the words and the first action. The same screen ships in the app, not a separate design reference.</p>
-          <p class="preview-note"><strong>Recorded from the 0.2.1 web verification build.</strong> 390 × 844 in Tidal Night. Skip and Pause are visible controls; Reduce Motion paints the settled frame without a timer.</p>
-          <dl class="welcome-facts">
-            <div><dt class="mono">Sequence</dt><dd>1.6 s character-grid reveal</dd></div>
-            <div><dt class="mono">Reduced motion</dt><dd>Settled still frame</dd></div>
-            <div><dt class="mono">State</dt><dd>Shipped in 0.2.1</dd></div>
-          </dl>
-        </div>
-        <figure class="welcome-figure">
-          <div class="welcome-device">
-            <img src="assets/media/welcome-v021-night.png" width="240" height="519" alt="JCode Mobile 0.2.1 welcome with an ASCII halftone torus above the words Welcome to jcode and the Get started action." decoding="async" loading="lazy">
-          </div>
-          <figcaption>
-            <span class="mono">0.2.1 capture / 390 × 844 / Tidal Night</span>
-            <span>Real app capture from the web verification build. The native build renders the same screen.</span>
-          </figcaption>
-        </figure>
+        <p>Signed iOS IPA / Play Store listing / push notifications / live public demo. The app needs a reachable server.</p>
       </div>
     </section>
 
     <section class="section setup" id="setup" aria-labelledby="setup-title">
       <div class="wrap section-index">
-        <span class="mono">07 / Setup</span>
+        <span class="mono">05 / Setup</span>
         <span class="mono">Server first</span>
       </div>
       <div class="wrap setup-grid">
         <div class="setup-intro">
           <h2 id="setup-title">Three moves. One server.</h2>
-          <p class="lead">The phone cannot start work on its own. You need a reachable JCode daemon on a Linux server, the mobile adapter, and TLS for any remote connection.</p>
-          <p class="mono setup-prereq">Prerequisite / JCode 0.99.1 or newer + Linux + TLS</p>
+          <p class="lead">The phone cannot start work on its own. You need a reachable JCode daemon on a Linux server, Adapter v2, and TLS for any remote connection.</p>
+          <p class="mono setup-prereq">Prerequisite / JCode pinned fork + Rust + TLS</p>
           <figure class="setup-plate">
             <div class="specimen-sheet specimen-sheet--compact">
-              <img src="assets/media/connect-v020.png" width="1206" height="2622" alt="Pairing screen from v0.2.0. Server address, pairing code, server label, and device name fields." decoding="async">
+              <img src="assets/media/pair-v030.png" width="860" height="1800" alt="Pairing screen from v0.3.0 with server address, pairing code, and device name fields." decoding="async">
             </div>
-            <figcaption class="mono">Pairing screen / v0.2.0 / Night</figcaption>
+            <figcaption class="mono">Pairing screen / v0.3.0</figcaption>
           </figure>
         </div>
         <ol class="setup-steps">
           <li>
-            <div class="step-head"><span class="mono step-num">01</span><h3>Run JCode and the adapter.</h3></div>
-            <p>The adapter speaks WebSocket to the phone and the daemon's Unix socket to JCode. It does not run a second agent.</p>
-            <pre><code>JCODE_ADAPTER_HOST=127.0.0.1 \
-JCODE_ADAPTER_PORT=7644 \
-bun integration/jcode-adapter/src/main.ts</code></pre>
+            <div class="step-head"><span class="mono step-num">01</span><h3>Build and run Adapter v2.</h3></div>
+            <p>One Rust binary speaks the mobile WebSocket and the JCode SDK. It does not run a second agent.</p>
+            <pre><code>cargo build --release -p adapter-server --bin jcode-adapter-v2
+
+JCODE_ADAPTER_ALLOWED_ROOTS="$HOME/src" \
+JCODE_ADAPTER_BIND=127.0.0.1:7646 \
+./target/release/jcode-adapter-v2</code></pre>
             <p class="step-note">Put a TLS reverse proxy in front of the adapter. Never expose plain ws:// to the internet.</p>
           </li>
           <li>
-            <div class="step-head"><span class="mono step-num">02</span><h3>Mint a pairing code.</h3></div>
-            <p>Run this as the same user that owns <code class="inline-code">JCODE_HOME</code>. The six-digit code is valid for five minutes and is exchanged once for a device token.</p>
-            <pre><code>jcode pair</code></pre>
-            <p class="step-note">If the command is missing, check <code class="inline-code">jcode --version</code> and upgrade JCode.</p>
+            <div class="step-head"><span class="mono step-num">02</span><h3>Read the pairing code.</h3></div>
+            <p>The adapter prints a single-use code for this run. It expires after ten minutes and is exchanged once for a device token.</p>
+            <pre><code>Pairing code (valid for 10 minutes, single use):
+ABCD-EFGH-JKLM</code></pre>
+            <p class="step-note">`jcode pair` is the 0.2.x path. Adapter v2 generates and hashes its own code.</p>
           </li>
           <li>
             <div class="step-head"><span class="mono step-num">03</span><h3>Install and pair the phone.</h3></div>
-            <p>Install the Android APK, allow sideloading for your file manager, then enter host:port and the code. iOS needs a Simulator build or your own dev build.</p>
-            <pre><code>adb install -r jcode-mobile-0.2.2-android-release.apk</code></pre>
+            <p>Install the Android APK, allow sideloading, then enter the TLS hostname and the code. The token goes into Android Keystore or Linux Secret Service.</p>
+            <pre><code>adb install -r jcode-mobile-0.3.0-android-release.apk</code></pre>
             <p class="step-note"><a class="inline-link" data-link="docs" href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md">Read the full setup and TLS notes</a></p>
           </li>
         </ol>
@@ -590,20 +491,20 @@ bun integration/jcode-adapter/src/main.ts</code></pre>
     <section class="section section--night closing" id="download" aria-labelledby="closing-title">
       <div class="wrap closing-grid">
         <div class="closing-copy">
-          <p class="mono eyebrow">08 / Return</p>
+          <p class="mono eyebrow">06 / Return</p>
           <h2 id="closing-title">The thread is already running.</h2>
           <p class="lead">Download the Android build, or read the setup path first. The server does the work. The phone is how you return.</p>
         </div>
         <div class="closing-action">
-          <a class="button button--primary button--primary-night" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.2/jcode-mobile-0.2.2-android-release.apk" referrerpolicy="no-referrer">
+          <a class="button button--primary button--primary-night" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk" referrerpolicy="no-referrer">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12v2h10v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
             </svg>
-            <span>Download Android 0.2.2</span>
+            <span>Download Android 0.3.0</span>
             <span class="button-meta mono">APK</span>
           </a>
           <p class="caveat caveat--night">Sideload only. Debug-signed. No Play Store listing. No signed iOS IPA.</p>
-          <p class="mono closing-meta">63 MiB / arm64-v8a + armeabi-v7a</p>
+          <p class="mono closing-meta">10.5 MiB / arm64-v8a + armeabi-v7a</p>
         </div>
       </div>
       <div class="wrap seam" aria-hidden="true">
@@ -627,16 +528,16 @@ bun integration/jcode-adapter/src/main.ts</code></pre>
         <a data-link="github" href="https://github.com/ddawnlll/jcode-mobile">GitHub</a>
         <a href="https://github.com/1jehuang/jcode">JCode upstream</a>
         <a data-link="docs" href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md">Getting started</a>
-        <a href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/ADAPTER_CONTRACT.md">Adapter contract</a>
-        <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.2.2">Release v0.2.2</a>
+        <a href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/API.md">API</a>
+        <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.0">Release v0.3.0</a>
       </nav>
       <div class="footer-meta">
-        <p class="mono">Android 0.2.2 / Debug-signed / Sideload only</p>
-        <p class="mono">Source / main / 10 November 2026</p>
+        <p class="mono">Android 0.3.0 / Debug-signed / Sideload only</p>
+        <p class="mono">Source / main / 12 November 2026</p>
       </div>
     </div>
     <div class="wrap footer-legal">
-      <p>Bricolage Grotesque, Hanken Grotesk, and IBM Plex Mono are bundled under the SIL Open Font License. The JCode mark keeps its own license. Product captures are from v0.2.0 or v0.2.1 unless labelled otherwise.</p>
+      <p>Bricolage Grotesque, Hanken Grotesk, and IBM Plex Mono are bundled under the SIL Open Font License. The JCode mark keeps its own license. Product captures are from v0.3.0 and are labelled as real captures.</p>
       <p><a href="https://github.com/ddawnlll/jcode-mobile/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a></p>
     </div>
   </footer>

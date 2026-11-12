@@ -1,0 +1,16 @@
+{
+  "captured_at": "2026-11-12T09:22:11.517Z",
+  "app_url": "http://127.0.0.1:7652/",
+  "session_title": "Release notes, from the train",
+  "prompt": "In three plain sentences, explain why server-side execution matters when the phone disconnects. Do not use tools.",
+  "viewport": {
+    "width": 430,
+    "height": 900
+  },
+  "desktop_viewport": {
+    "width": 1280,
+    "height": 900
+  },
+  "auth_file": ".staging/marketing/playwright-auth.json",
+  "errors": []
+}

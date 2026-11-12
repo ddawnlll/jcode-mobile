@@ -20,22 +20,21 @@ This document describes the root-owned tooling around it:
 
 ## Verified
 
-On 2026-11-09, against `a2d9556` plus the motion upgrade:
+On 2026-11-12, against the 0.3.0 site source:
 
 - `bun install --frozen-lockfile`: 1063 packages, no changes.
-- `bun run check`: typecheck, lint, and 75 Jest tests pass.
-- `bun run marketing:build`: 26 files, 4514.6 KiB total site.
+- `bun run check`: typecheck, lint, and the Jest suite pass (139 tests).
+- `bun run marketing:build`: 24 files, 2,700,648 bytes total site.
 - Motion bundles: `assets/motion.js` 121,053 B (47 KB gzip) plus split
   `assets/island-*.js` 360,090 B (115 KB gzip) and a 910 B loader chunk.
   Combined raw bundle 482,053 B, 162 KB gzip.
-- `bun test scripts/marketing/*.test.mjs`: 25 pass.
+- `bun test scripts/marketing/*.test.mjs`: 25 pass, 0 fail, 125 assertions.
 - `bunx --bun playwright test -c e2e/marketing/playwright.config.ts`: 76 pass,
   3 skipped (the desktop pin intentionally does not run below 921 px), 0 fail.
-- `bun run adapter:test`: 16 pass.
+- The Playwright matrix covers 320, 390, 768, and 1440 px, the no-JavaScript
+  fallback, and the static server contract.
 - Visually reviewed desktop 1440 and mobile 390/320: no horizontal overflow,
-  the hero entrance timeline measures 1050 ms with the CTA and plate complete
-  before 900 ms, the pinned stage holds, and the welcome GIF keeps its
-  "Design preview. Not recorded app footage." label.
+  the pinned stage holds, and the scene images are the real v0.3.0 captures.
 
 Deployment is manual through `.github/workflows/marketing.yml`; the live URL is
 https://ddawnlll.github.io/jcode-mobile/.
@@ -89,10 +88,10 @@ Every build writes `build-manifest.json` beside the copied files:
   "schemaVersion": 1,
   "generator": "scripts/marketing/build.mjs",
   "entry": "index.html",
-  "productVersion": "0.2.1",
+  "productVersion": "0.3.0",
   "basePath": ".",
-  "fileCount": 26,
-  "totalBytes": 1234567,
+  "fileCount": 24,
+  "totalBytes": 2700648,
   "files": [
     { "path": "index.html", "bytes": 1234, "sha256": "..." }
   ],
@@ -165,10 +164,10 @@ MARKETING_ALLOWED_EXTERNAL_PREFIXES="https://example.com/product" \
 The exact primary CTA target is:
 
 ```text
-https://github.com/ddawnlll/jcode-mobile/releases/download/v0.2.1/jcode-mobile-0.2.1-android-release.apk
+https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk
 ```
 
-`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.2.1`
+`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.3.0`
 version, and `referrerpolicy="no-referrer"`.
 
 ## Commands
@@ -233,7 +232,7 @@ Assertions include:
 
 - no horizontal document/body overflow and a single visible `h1`
 - visible heading hierarchy with no skipped levels
-- exact v0.2.1 APK CTA and visible version text
+- exact v0.3.0 APK CTA and visible version text
 - every internal anchor and local image resolves
 - custom fonts load and all runtime requests stay inside `/jcode-mobile/`
 - scene tabs are keyboard operable (`ArrowRight`, `Home`, `End`, `Enter`),

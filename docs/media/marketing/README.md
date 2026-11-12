@@ -1,185 +1,122 @@
 # Marketing media
 
-Owned assets for the README and marketing site. Everything here is either a
-capture of the real v0.2.0 app surfaces or a real capture of the shipped v0.2.1
-welcome. The older `welcome-preview.gif` and `welcome-poster.png` are kept as
-the historical issue #14 design reference, not as current product footage.
+Current assets for JCode Mobile 0.3.0. Every current screenshot is a real
+capture from an isolated adapter and a real Command Code turn. No mockup,
+hand-drawn app UI, or fabricated runtime state is used.
 
-## Files
+The older `*-v020.png`, `welcome-v021*`, and `welcome-preview.gif` files are
+retained as historical evidence for the 0.2.x verification records. They are
+not current product footage and are not used by the 0.3.0 README or website.
+
+## Current 0.3.0 captures
 
 | File | Dimensions | Bytes | What it is |
 | --- | --- | --- | --- |
-| `readme-hero.png` | 3200x1800 (1600x900 at 2x) | 1,637,132 | Typographic README hero. Real v0.2.0 Preview screenshots, Bricolage Grotesque, Hanken Grotesk, IBM Plex Mono, and Tidal Glass colors. |
-| `welcome-v021.png` | 1170x2532 (390x844 at 3x) | 193,326 | **Shipped v0.2.1 welcome**, Tidal Light, captured from the Expo web verification build after the opening settled. |
-| `welcome-v021-night.png` | 1170x2532 (390x844 at 3x) | 199,776 | **Shipped v0.2.1 welcome**, Tidal Night, same capture path. Used by the README and website. |
-| `welcome-preview.gif` | 240x519, 60 frames, 20 fps, 3.0 s, infinite loop | 1,529,838 | **Historical design reference.** Animated capture of the issue #14 HTML reference. Superseded by `welcome-v021.png`; not the shipping app. |
-| `welcome-poster.png` | 780x1688 | 599,535 | Still poster for the historical design reference GIF. |
-| `sessions-v020.png` | 860x1800 (430x900 at 2x) | 131,832 | Current v0.2.0 Sessions surface in labelled Preview mode. |
-| `conversation-v020.png` | 860x1800 (430x900 at 2x) | 196,139 | Current v0.2.0 Conversation surface in labelled Preview mode, showing rich Markdown, table, quote, and math. |
-| `work-v020.png` | 860x1800 (430x900 at 2x) | 132,356 | Current v0.2.0 Session work surface in labelled Preview mode. |
-| `connect-v020.png` | 860x1800 (430x900 at 2x) | 141,138 | Current v0.2.0 connection setup screen, empty form, no server contacted. |
+| `readme-hero.png` | 3200x1800 | 1,913,212 | README hero. Real 0.3.0 home and session captures with typography and the JCode mark. |
+| `welcome-v030.png` | 860x1800 | 145,322 | Stillness 12 welcome screen. |
+| `pair-v030.png` | 860x1800 | 120,958 | Pairing form with server address, code, and device name. |
+| `pair-verified-v030.png` | 860x1800 | 98,925 | Paired state after a real token exchange. |
+| `home-v030.png` | 860x1800 | 122,906 | Home with a live session and the `jcode-mobile` project. |
+| `session-v030.png` | 860x1800 | 195,919 | Session with a real `deepseek/deepseek-v4-flash` answer, reasoning, and composer. |
+| `models-v030.png` | 860x1800 | 191,077 | Model sheet with Command Code routes and the selected route. |
+| `settings-v030.png` | 860x1800 | 155,825 | Preferences and verified connection capabilities. |
+| `desktop-v030.png` | 2560x1800 | 332,782 | Three-pane Stillness 12 desktop shell at 1280x900, scale factor 2. |
 
-## Provenance and honesty
+`website/assets/social-card.png` is rendered separately at 2400x1260 (1200x630
+at scale factor 2) from `scripts/marketing-media/social-card.html`. It uses the
+real session capture and the JCode mark.
 
-### Shipped v0.2.1 welcome captures
+## Provenance
 
-- Source: Expo web export of the v0.2.1 app, `CI=1 expo export -p web`.
-- Driver: Playwright Chromium at 390x844 with device scale factor 3, light and
-  night color schemes. The capture waits for `window.__JCODE_WELCOME_PERF__`
-  to report at least one idle paint, so it is the settled screen, not a frame
-  during the opening.
-- Status: **shipped v0.2.1 welcome.** The same screen is in the native build.
-  The capture is from the web verification surface, not a device recording.
-- The title, actions, Skip/Pause control, theme strip, and ASCII torus are the
-  real components. No hand-built replacement UI.
+- Capture date: 2026-11-12.
+- Driver: `scripts/marketing-media/capture-stillness-screens.mjs`.
+- Source: Stillness 12 served by an isolated Rust Adapter v2 on
+  `127.0.0.1:7652`, with an isolated `JCODE_HOME` and a real Command Code
+  route.
+- Phone viewport: 430x900 at device scale factor 2, which produces the
+  860x1800 PNGs. Desktop viewport: 1280x900 at scale factor 2.
+- The session title and prompt are sample content chosen for the capture. The
+  answer, model route, token counts, delivery state, and capability list came
+  from the running stack.
+- No production adapter, production daemon, private session, provider key, or
+  credential is present in these files.
+- The capture script refuses to run against a production adapter. Its manifest
+  is `capture.json`; the run reported no page errors.
 
-### Historical welcome GIF and poster
+The screenshot sequence is:
 
-- Source: `origin/design/v0.2.1-ascii-welcome`, file
-  `docs/v0.2.1/JCode_Mobile_ASCII_Welcome.html`.
-- Driver: `scripts/marketing-media/capture-welcome.mjs`, which reads the file
-  with `git show` and never switches branches.
-- Status: **historical design reference.** It was produced while issue #14 was
-  open and is superseded by `welcome-v021.png`.
-- The phrase `v0.2.1 DESIGN PREVIEW` is baked into every GIF frame and into the
-  poster so the asset cannot be mistaken for v0.2.0 app footage.
-- Capture method: Playwright Chromium at 390x844, device scale factor 1 for the
-  GIF and 2 for the poster. `requestAnimationFrame` and `performance.now` were
-  replaced with a virtual clock before the page booted. Each screenshot advances
-  exactly 50 ms and calls the reference's own `paint()`. This is deterministic:
-  no dropped frames, no speed changes, and no hand-drawn replacement frames.
-- Encoding: ffmpeg at 20 fps, 240 px wide, 48-color palette, no dithering, then
-  ImageMagick `-layers Optimize` for inter-frame transparency. The first frame
-  is the real ASCII noise field, not a blank or transparent placeholder. The
-  loop returns to that opening state.
-- The reference HTML embeds its own welcome fonts. The repository fonts in
-  `assets/fonts` are not used by the reference capture.
+1. Welcome.
+2. Pairing form.
+3. Pairing verified by a real token exchange.
+4. Home with the new session.
+5. The live session while the real answer streams.
+6. The model sheet.
+7. Preferences and connection capabilities.
+8. The desktop shell during the same live turn.
 
-### v0.2.0 app screenshots
+The desktop shell is captured before the page reload that would drop the live
+assistant text. That is why the session image and the desktop image show the
+same turn.
 
-- App: current `main` at `f74c6b6`, package version `0.2.0`.
-- Build: `CI=1 bunx --bun expo export -p web --output-dir .staging/marketing/web`
-  served by `scripts/serve-web.mjs` on `127.0.0.1:8092`.
-- Driver: `scripts/marketing-media/capture-app-screens.mjs`.
-- Browser: Playwright Chromium, 430x900 at device scale factor 2, dark color
-  scheme, reduced motion, empty local storage.
-- State: the app's own **Preview** mode. The screens show sample data and the
-  app's own "Preview sample data. Nothing is sent to a server." banner.
-- No adapter, daemon, provider, pairing code, credential, private session, or
-  live server was contacted. Browser storage is cleared before the run.
-- Theme: Tidal Glass night, the default family. Colors are defined in
-  `src/design/themes.json` and projected by `src/design/tokens.ts`.
+## README hero and social card
 
-### README hero
+- `scripts/marketing-media/readme-hero.html` is a typographic composition. Its
+  phone areas are the real `home-v030.png` and `session-v030.png` captures. It
+  draws only type, rules, the real JCode mark, and a grain plate.
+- Render it with `node scripts/marketing-media/render-readme-hero.mjs`.
+- `scripts/marketing-media/social-card.html` is the 1200x630 social card. It
+  uses `session-v030.png`, the JCode mark, and no drawn app UI.
+- Render it with `node scripts/marketing-media/render-social-card.mjs`.
+- Both compositions use the bundled Bricolage Grotesque, Hanken Grotesk, and
+  IBM Plex Mono fonts. They make no remote font or image request.
 
-- Source: `scripts/marketing-media/readme-hero.html`, rendered by
-  `scripts/marketing-media/render-readme-hero.mjs`.
-- The phone areas are the real `sessions-v020.png` and
-  `conversation-v020.png` captures above. The hero draws only typography,
-  rules, the real JCode mark, and a grain plate. It does not draw app UI.
-- Fonts: `assets/fonts/BricolageGrotesque-SemiBold.ttf`,
-  `assets/fonts/HankenGrotesk-Regular.ttf`,
-  `assets/fonts/HankenGrotesk-Medium.ttf`, and
-  `assets/fonts/IBMPlexMono-Regular.ttf`.
-- Colors: Tidal Glass night tokens, `#111F20` bg, `#E5F0EB` ink,
-  `#A0B6AD` muted, `#344D48` line, `#B5D6C5` brand, `#F2B09A` accent.
-- The honesty line reads `V0.2.0 CAPTURES / PREVIEW BUILD, SAMPLE DATA`.
+## Historical assets
 
-## Suggested captions and alt text
+These files remain for the v0.2.x verification records only:
 
-`welcome-v021-night.png`
+| File | Status |
+| --- | --- |
+| `sessions-v020.png`, `conversation-v020.png`, `work-v020.png`, `connect-v020.png` | Expo 0.2.0 Preview-mode captures, sample data. |
+| `welcome-v021.png`, `welcome-v021-night.png` | Shipped 0.2.1 welcome, Expo web capture. |
+| `welcome-preview.gif`, `welcome-poster.png` | Issue #14 design reference, labelled as a design preview. |
 
-> JCode Mobile 0.2.1 welcome. Real app capture, Tidal Night, 390x844.
+Do not use a historical asset on a current product page. Do not crop the
+Preview banner out of a v0.2.0 capture. Do not describe the GIF or poster as
+shipped app footage.
 
-Alt: "An ASCII halftone torus spins above the words Welcome to jcode, with
-Get started and Preview without connecting actions."
+## Reproduce the current captures
 
-`welcome-preview.gif`
-
-> Historical design reference for the v0.2.1 ASCII welcome. Not current app
-> footage.
-
-Alt: "Animated portrait design preview: an ASCII torus assembles from noise,
-spins, and the words Welcome to jcode appear over a deep green screen."
-
-`welcome-poster.png`
-
-> Historical v0.2.1 ASCII welcome design reference, still frame.
-
-Alt: "Deep green portrait screen with a spinning ASCII torus above the words
-Welcome to jcode and a v0.2.1 design preview label."
-
-`readme-hero.png`
-
-> JCode Mobile v0.2.0. Real Preview-mode captures, sample data only.
-
-Alt: "Swiss-style dark green hero. Large type reads Your work. In reach. Two
-JCode Mobile phone screenshots show the Sessions list and a conversation with a
-Markdown table. A line reads v0.2.0 captures, preview build, sample data."
-
-`sessions-v020.png`
-
-> JCode Mobile 0.2.0 Sessions in Preview mode, sample data.
-
-`conversation-v020.png`
-
-> JCode Mobile 0.2.0 Conversation in Preview mode, sample data.
-
-`work-v020.png`
-
-> JCode Mobile 0.2.0 Session work in Preview mode, sample data.
-
-`connect-v020.png`
-
-> JCode Mobile 0.2.0 connection setup. No server contacted.
-
-## Reproduce
-
-Prerequisites: Bun 1.4.4, dependencies installed, Playwright Chromium,
-ffmpeg, ImageMagick, and `origin/design/v0.2.1-ascii-welcome` fetched.
+Prerequisites: Bun 1.4.4, Rust, the pinned JCode fork, Playwright Chromium, and
+the rootless Playwright library prefix on Debian/Ubuntu.
 
 ```sh
-# 1. Current v0.2.0 web build and an isolated static server.
-CI=1 bunx --bun expo export -p web --output-dir .staging/marketing/web
-PORT=8092 HOST=127.0.0.1 bun --bun scripts/serve-web.mjs .staging/marketing/web
+# A real adapter and session are already running for the capture script.
+# It refuses production and uses the isolated URL supplied by the operator.
+node scripts/marketing-media/capture-stillness-screens.mjs
 
-# 2. Real app captures.
-node scripts/marketing-media/capture-app-screens.mjs
-
-# 3. v0.2.1 design reference GIF and poster.
-node scripts/marketing-media/capture-welcome.mjs
-
-# 4. README hero.
+# Typographic compositions.
 node scripts/marketing-media/render-readme-hero.mjs
+node scripts/marketing-media/render-social-card.mjs
 ```
 
-The scripts write intermediate frames, the reference HTML copy, and the capture
-manifest under `.staging/marketing/`. Only the assets in this directory are
-tracked.
+The isolated capture run used:
 
-Capture manifest for the final GIF:
-
-```json
-{
-  "source": "origin/design/v0.2.1-ascii-welcome:docs/v0.2.1/JCode_Mobile_ASCII_Welcome.html",
-  "sourceKind": "v0.2.1 ASCII welcome design reference; issue #14 open",
-  "label": "v0.2.1 DESIGN PREVIEW",
-  "fps": 20,
-  "frameCount": 60,
-  "durationMs": 3000,
-  "captureViewport": { "width": 390, "height": 844 },
-  "gifWidth": 240,
-  "posterAtMs": 2800
-}
+```text
+JCODE_ADAPTER_BIND=127.0.0.1:7652
+JCODE_ADAPTER_DATA_DIR=.staging/marketing/adapter-v030d
+JCODE_ADAPTER_WEB_DIR=apps/stillness/dist
+JCODE_ADAPTER_PAIRING_CODE=<test-only code>
 ```
 
-## Constraints for website use
+The exact run metadata is in `capture.json`. Staging paths under `.staging/`
+are gitignored.
 
-- Use `welcome-v021-night.png` or `welcome-v021.png` for current product pages.
-  They are portrait 1170x2532. Do not crop them to 16:9 or 4:3.
-- The historical GIF/poster must keep their design-reference captions if used.
-  Do not present them as shipped app footage.
-- The v0.2.0 screenshots already say Preview and sample data. Do not crop that
-  banner out.
-- The hero is 3200x1800 for a 1600x900 layout. It can be displayed at README
-  width without cutting the headline, subhead, or honesty line.
+## Website use
+
+- Use the 860x1800 v0.3.0 captures at their native aspect ratio.
+- `readme-hero.png` is 3200x1800 for a 1600x900 layout. It can be displayed at
+  README width without cutting the headline, subhead, or provenance line.
+- Keep the `Real capture / v0.3.0` label. Do not add a claim that the torus or
+  orbit plate is live telemetry; it is a design specimen.
+- The Android artifact is debug-signed and sideload-only. Do not imply a Play
+  Store listing or a signed iOS build.

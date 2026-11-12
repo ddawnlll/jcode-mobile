@@ -140,7 +140,7 @@ test.describe('bundled GSAP and Framer Motion', () => {
 
     await page.locator('#tab-return').click();
 
-    await expect(page.locator('.motion-caption-text')).toContainText('work and plan');
+    await expect(page.locator('.motion-caption-text')).toContainText('source-backed');
     await expect
       .poll(() => page.locator('.motion-scene-image[data-scene-image="return"]').count())
       .toBe(1);
@@ -200,7 +200,7 @@ test.describe('bundled GSAP and Framer Motion', () => {
     expect(longRunning, 'running long CSS/WAAPI animations').toBe(0);
 
     await page.locator('#tab-away').click();
-    await expect(page.locator('.motion-caption-text')).toContainText('daemon');
+    await expect(page.locator('.motion-caption-text')).toContainText('Session scope');
     await expect(page.locator('.motion-scene-image')).toHaveAttribute('data-scene-image', 'away');
     await expect(page.locator('#download-apk')).toBeVisible();
   });

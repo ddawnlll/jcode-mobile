@@ -2,8 +2,8 @@
 /**
  * Render the README hero from the committed HTML composition.
  *
- * The composition is only typography rules and the real v0.2.0 Preview
- * screenshots. It does not draw app UI.
+ * The composition is typography, rules, and the real v0.3.0 home and session
+ * captures. It does not draw app UI.
  *
  * Usage:
  *   node scripts/marketing-media/render-readme-hero.mjs

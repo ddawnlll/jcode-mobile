@@ -571,18 +571,18 @@
   const SCENE_COPY = {
     send: {
       label: "01 / Send",
-      caption: "Draft saved, sending, sent to server, accepted. Four states, one explicit path.",
-      provenance: "Preview capture / v0.2.0 / Night"
+      caption: "Staged, reserved, dispatching, accepted. Four states, one explicit path.",
+      provenance: "Real capture / v0.3.0"
     },
     away: {
       label: "02 / Step away",
-      caption: "The transcript stays with the daemon. The seam marks recorded updates, not a simulated live feed.",
-      provenance: "Preview capture / v0.2.0 / Night"
+      caption: "Session scope, epoch, and sequence keep a slow answer from overwriting newer work.",
+      provenance: "Real capture / v0.3.0"
     },
     return: {
       label: "03 / Return",
-      caption: "Session work and plan are inspectable after the return. The app restores the same target or says it cannot.",
-      provenance: "Preview capture / v0.2.0 / Night"
+      caption: "Models, context, and preferences stay source-backed after the return.",
+      provenance: "Real capture / v0.3.0"
     }
   };
 
