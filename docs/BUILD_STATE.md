@@ -1,180 +1,149 @@
 # Build state
 
-Updated: 2026-11-11
+Updated: 2026-11-12
 
-## v0.3.0 implementation state
-
-| Item | Value |
-| --- | --- |
-| Branch | `design/adapter-v2-stillness-v12-20261111` |
-| Adapter | Rust Adapter v2 (`crates/adapter-*`), protocol v2 |
-| Client | Stillness 12 under `apps/stillness`, Tauri 2 desktop shell |
-| Pinned JCode fork | `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8`, `jcode v0.99.999-dev` |
-| Adapter tests | 30 Rust tests pass; `cargo fmt` clean |
-| Web build | PASS, Vite 7.3.8 |
-| Pinned real-stack e2e | PASS, `bash scripts/stillness-e2e.sh` |
-| Native Linux release | PASS, 5,071,384-byte Tauri binary |
-| Native Linux launch | PASS under Xvfb |
-| Native Secret Service keyring | PASS, round trip plus UI pairing and credential reload |
-| Android | PASS, JCode Mobile 0.3.0 APK (Stillness client), 11,020,965 bytes, v2/v3 debug-signed; emulator launch, pairing, and credential restore PASS |
-| iOS | NOT_APPLICABLE on Linux |
-| Evidence | `docs/evidence/v0.3.0/README.md` |
-
-## Current state
+## Current line
 
 | Item | Value |
 | --- | --- |
-| Branch | `design/adapter-v2-stillness-v12-20261111` |
-| Remote | `https://github.com/ddawnlll/jcode-mobile` (private) |
+| Branch | `main` |
+| Release | `v0.3.0` |
 | App version | 0.3.0 |
-| Expo SDK | 58.0.23 |
-| React Native / React | 0.88.1 / 19.3.0 |
-| Hermes / new architecture | enabled (SDK default) |
-| JCode (pinned staging) | 0.99.999-dev, commit `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
-| Adapter protocol | v2 (Rust) |
-| Active iOS Simulator | iPhone 17 Pro, iOS 26.1 (`E9144064-F5FC-4846-A88C-E43DF837F103`) |
-| Staging daemon | `$JCODE_SCRATCH_DIR/jcode-mobile-staging` (private home/runtime dirs) |
-| Staging adapter | `127.0.0.1:7650` for Stillness e2e, `7651` for interactive smoke; isolated from production |
+| Adapter | Rust Adapter v2, protocol v2 |
+| Client | Stillness 12, Tauri 2 |
+| Android package | `dev.jcode.stillness` |
+| Android versionCode | 3000 |
+| JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
+| JCode harness API | v1.11 |
+| Runtime | Bun 1.4.4, Rust stable |
+| Repository | `https://github.com/ddawnlll/jcode-mobile` |
 
-## Decisions that affect resumption
+## Components
 
-- The project root is this directory (named `jcode-mobile-app`); the GitHub repository is `jcode-mobile`.
-- `src/shell/` holds the app root and native stack. It is intentionally not `src/app/` because Expo tooling treats that as an Expo Router routes directory.
-- The adapter is TypeScript running on Bun 1.4.4, not a Rust patch. It reuses the daemon runtime, persisted history, the curated harness bridge for control reads, and JCode's own `devices.json` pairing registry.
-- Session attachment always uses the raw daemon socket with `continue_on_disconnect: true`; the curated bridge is never used to attach.
-- Delivery receipts use the daemon `ack` plus a bounded adapter ledger keyed by client message id.
-- Identity fencing is adapter-normalized: `attachment_id` per attach and a monotonic `turn_id` per attachment.
-- iOS builds need a local compatibility patch for `expo-modules-jsi@58.0.22` (Xcode 26.1 Swift 6.2 sendability). `scripts/patch-expo-modules-jsi.js` runs on postinstall and is idempotent.
-- Local simulator pairing is seeded through a development-only file import (`__DEV__` only, loopback only). Production pairing uses the real `/pair` endpoint with a code from `jcode pair`.
-- The same attachment identity can arrive as history and as a live tool event; Work dedupes by `call_id` and prefers the live row. Attaching a different session resets the transcript and title instead of reusing the previous session's.
-- Sending forces the transcript to the newest item even when the reader was parked at the seam.
-- `JCODE_ADAPTER_FAULT=drop_after_send` is a test-only hook that closes the daemon attachment after a prompt write; it is off by default and used for the A05 capture.
-
-## Release artifacts (freeze build)
-
-| Artifact | Bytes (approx) | SHA-256 |
+| Component | Path | State |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.3.0-android-release.apk` | 10.5 MiB (11,020,965 B) | `4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2` |
-| `artifacts/jcode-mobile-0.2.2-android-release.apk` | 62.7 MiB (65,731,410 B) | `f2ee7c4f0eae836c8361f956cd3ffe0403ddae389bac4c3a2fd59a17c001ddf9` |
-| `artifacts/jcode-mobile-0.2.2-ios-simulator.app.zip` | 29 MiB | `33269e4e09d34d3da5d35653451172c4f49225edee0e22966d8343c84e8e3859` |
-| `artifacts/jcode-mobile-0.2.1-android-release.apk` | 62.7 MiB (65,709,266 B) | `6f383af7f30cf97ac89934a69d8a2319e8390cf1fc7c3ef24d819f4dc810a6cb` |
-| `artifacts/jcode-mobile-0.2.0-android-release.apk` | 63 MiB | `016890e42a293256fa1370c43176d65cb4aa67d2d7df0809847cb6ca03432351` |
-| `artifacts/jcode-mobile-0.1.3-ios-simulator.app.zip` | 24 MiB | `d5b5259a22baf88b7a0b03e03a13f8bc9a66b0fc687b69e8e9bde3eb6c578586` |
-| `artifacts/jcode-mobile-0.1.3-android-release.apk` | 60 MiB | `eb5c7029561c16b9dfb19dd06cece12794fcb49f0bc9a872c06e69b884ac1960` |
+| Adapter protocol | `crates/adapter-protocol` | v2 envelopes, events, errors |
+| Adapter core | `crates/adapter-core` | SQLite WAL, auth, paths, SDK link |
+| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch |
+| Stillness web | `apps/stillness` | React 19, Vite 7 |
+| Tauri shell | `apps/stillness/src-tauri` | Desktop and Android |
+| Android project | `apps/stillness/src-tauri/gen/android` | Committed, patched Tauri CLI path |
+| Legacy Expo app | `src/` | 0.2.x client, not the 0.3.0 artifact |
+| Legacy adapter | `integration/jcode-adapter` | 0.2.x Bun adapter |
 
-The 0.3.0 APK is the Stillness 12 Tauri client for `arm64-v8a` and `armeabi-v7a`, debug-signed for sideloading. The 0.2.2 APK is the previous Expo client. The 0.2.1 APK was the last embedded-Hermes Expo release. The iOS artifact remains the v0.1.3 Release-configuration Simulator `.app` zip with `main.jsbundle`. Artifacts are not committed.
-
-## v0.2.2 repair release
-
-`docs/V0_2_2_VERIFICATION.md` records the audit repair matrix, the follow-up
-fixes from the published builds, and native simulator evidence.
+## Checks
 
 | Check | Result |
 | --- | --- |
-| `bun run check` | PASS, 11 suites / 99 tests |
-| `bun run adapter:test` | PASS, 27 tests |
-| `bun run e2e` | PASS, 32/32 on clean isolated staging |
-| iOS Release Simulator | PASS, ad-hoc signed, paired, context/model/projects/direct create verified |
-| Android release APK | PASS, JCode Mobile 0.3.0 (Stillness client), 11,020,965 bytes, v2/v3 debug-signed; SHA-256 `4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2`; emulator runtime PASS |
+| `cargo test --workspace` | PASS, 30 tests |
+| `cargo fmt --all -- --check` | PASS |
+| `bun run typecheck` | PASS |
+| `bun run lint` | PASS, 0 errors, 0 warnings |
+| `bun run test` | PASS, 14 suites / 139 tests |
+| `cd apps/stillness && bun run build` | PASS |
+| `bash scripts/stillness-e2e.sh` | PASS, 4 passed / 3 skipped |
+| `bun run marketing:test` | PASS, 25 unit tests; 76 passed / 3 skipped |
+| Native Linux Tauri build | PASS, 5,071,384-byte release binary |
+| Native Linux launch | PASS under Xvfb |
+| Native Secret Service keyring | PASS |
+| Android release APK | PASS, static verification |
+| Android emulator runtime | PASS, same-source x86_64 debug build |
+| Physical Android | NOT_RUN |
+| iOS | NOT_APPLICABLE on Linux |
 
-## v0.2.1 welcome release
+## Release artifacts
 
-Issue #14 is implemented on `main`: full-screen character grid, bitmap title
-silhouette, torus-band idle redraw, Skip, Pause/Play, Reduce Motion still frame,
-saved-server routing, and retained theme preview. Evidence is in
-`docs/V0_2_1_VERIFICATION.md`.
+| Artifact | Bytes | SHA-256 |
+| --- | --- | --- |
+| `artifacts/jcode-mobile-0.3.0-android-release.apk` | 11,020,965 | `4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2` |
 
-| Check | Result |
-| --- | --- |
-| `bun run check` | PASS, 11 suites / 81 tests |
-| `bun run adapter:test` | PASS, 16 tests |
-| `bun run e2e` | PASS, 26/26 |
-| `bun run marketing:test` | PASS, 76 passed / 3 skipped |
-| Android release APK | PASS, 62.7 MiB, `arm64-v8a` + `armeabi-v7a`, debug-signed; checksum above |
-| Native device pacing, large text, screen reader | NOT_RUN |
+The 0.3.0 APK is a Tauri 2 build for `arm64-v8a` and `armeabi-v7a`,
+debug-signed for sideloading. It is attached to the
+[`v0.3.0` release](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.0)
+with its `.sha256` file. Artifacts are not committed.
 
-## Commands verified for v0.2.0
+Historical artifacts:
 
-```sh
-bun run typecheck           # pass, including a Bun-only PATH
-bun run lint                # pass (one pre-existing warning in registry.ts)
-bun run test                # 10 suites / 75 tests
-bun run adapter:test        # 16 tests
-bun run e2e                 # 20/20 Playwright tests, isolated staging
-bunx --bun expo export -p web
-bunx --bun expo prebuild --platform android --no-install  # Bun Gradle config generated
-gh workflow run check.yml --ref feature/v0.2.0-tidal-glass -f release=true  # release APK
+- Expo 0.2.2 Android APK, 65,731,410 bytes, SHA-256
+  `f2ee7c4f0eae836c8361f956cd3ffe0403ddae389bac4c3a2fd59a17c001ddf9`.
+- Expo 0.2.2 iOS Simulator `.app` zip, 29 MiB, SHA-256
+  `33269e4e09d34d3da5d35653451172c4f49225edee0e22966d8343c84e8e3859`.
+- Older Android and iOS artifacts are recorded in
+  [`V0_2_2_VERIFICATION.md`](V0_2_2_VERIFICATION.md) and the v0.2.1 notes.
+
+The 0.2.2 iOS artifact is a Simulator `.app`, not a signed IPA. There is no
+signed iOS artifact in 0.3.0.
+
+## Android build
+
+```text
+JDK 21.0.13
+Android SDK 37
+Build tools 37.0.0
+NDK 27.1.12297006
+Gradle 9.6.1
+compileSdk 37, minSdk 24, targetSdk 37
 ```
 
-Historical native artifact commands below were run on the v0.1.3 host. They
-are not re-certified for v0.2.0 on this VPS (no JDK/Android SDK or macOS):
+Build:
 
 ```sh
-bun run ios --device "iPhone 17 Pro"
-bun run android
 bash scripts/build-android-release.sh
-bash scripts/build-ios-simulator.sh
-gh workflow run check.yml --ref main
 ```
 
-## v0.1.4 reliability patch
+The script detects JDK/SDK/NDK, installs the ARM Rust targets, builds the web
+bundle, runs `tauri android build --apk --target aarch64 armv7`, zipaligns,
+signs with the repository debug keystore, verifies v2/v3 signatures, and writes
+the checksum. The generated Android project is committed; build output,
+`local.properties`, `jniLibs`, and generated Wry Kotlin remain ignored.
 
-Ten reliability fixes for issues #2-#11 are implemented on `reliability/v0.1.4`, followed by nine review-round race fixes. Full evidence is in `docs/V0_1_4_VERIFICATION.md`. Current checks under Node 22.21.1: `npm run check` (62 Jest tests), `npm run adapter:test` (12 tests), `npm run e2e` (10 tests, Expo web/Chromium). Native Android/iOS checks remain NOT_RUN on this host.
+## Native Linux build
 
-## v0.2.0 Tidal Glass and Bun
+```sh
+bash scripts/build-tauri-linux.sh
+```
 
-Bun 1.4.4 is the sole host runtime and package manager. `bun.lock` is the one
-lockfile; CI uses `oven-sh/setup-bun` and `bun install --frozen-lockfile`.
-Adapter, typecheck, lint, Jest/RNTL, Playwright, and Expo web export run under
-Bun. Full evidence, coverage matrix, and the Bun/Node performance comparison are
-in `docs/V0_2_0_VERIFICATION.md`.
+Without system GTK 3/WebKitGTK 4.1 development packages:
+
+```sh
+TAURI_SYSROOT="$HOME/tauri-sysroot" bash scripts/build-tauri-linux.sh
+```
+
+The 5,071,384-byte release binary is local-only and is not attached to the
+GitHub release.
+
+## Test environment
 
 | Item | Value |
 | --- | --- |
-| Theme families | 11 families / 22 Light+Night palettes; Tidal preserved |
-| Rich content | CommonMark/GFM + footnotes + math, highlight.js, native LaTeX |
-| Images | bounded prompt images + controlled Markdown image loading |
-| Adapter additions | directory browse, config/effort, context snapshot, images, changes |
-| Web e2e | iPhone 14, Pixel 7, and 320-wide projects |
-| Native v0.2 gates | Android debug CI PASS (`assembleDebug`); device release NOT_RUN |
-
-## Web target (verified 2026-11-09 on Debian 13)
-
-| Item | Value |
-| --- | --- |
-| Web runtime | Expo export with `react-native-web`; expo-sqlite WASM with COOP/COEP |
-| Web server | `scripts/serve-web.mjs`, or the adapter with `JCODE_ADAPTER_WEB_DIR` |
-| Playwright | 1.65 / Chromium, iPhone 14 and Pixel 7 profiles |
-| E2E environment | isolated `.staging/jcode` daemon, adapter 7645, web 8091 |
-| E2E coverage | Connect, sessions, conversation reply, Work/Plan, rich content, themes, context, Find, Changes, New session, 320-wide |
-| Result | `bun run e2e`: 20 passed (2026-11-09) |
-| Live deployment | Caddy `https://dawnll.duckdns.org` proxies to adapter `127.0.0.1:7644` |
-| Rootless browsers | Chromium libraries extracted under `~/playwright-deps` |
-
-The e2e seed is gated by the build-time `EXPO_PUBLIC_E2E=1` constant and is
-inert in a normal web export. Web tokens live in localStorage, so the web
-target is a preview/test surface, not a replacement for the native
-Keystore/Keychain build.
-
-## Commands that failed and why
-
-| Command | Result | Resolution |
-| --- | --- | --- |
-| `brew install --cask temurin@17` | FAIL: sudo password required | Downloaded Temurin 17 tarball into `~/.local/android-toolchain` |
-| `brew install --cask android-commandlinetools` | FAIL: Homebrew download error | Downloaded command-line tools from Google and installed SDK 36 into `~/.local/android-toolchain/sdk` |
-| `xcodebuild` (first iOS build) | FAIL: expo-modules-jsi Swift 6 data-race error | Local postinstall patch wraps the pointer in the package's `UncheckedSendable` |
-| `npm install` | FAIL: shared npm cache permission | Project-local cache `.npm-cache` for all installs |
+| Host | Debian 13 (trixie), Linux 6.12, x86_64 |
+| RAM | 11.7 GiB |
+| Rust | 1.99.1 |
+| Bun | 1.4.4 |
+| JCode staging | Pinned fork commit, isolated home |
+| Playwright | Chromium 1.65 |
+| Android emulator | API 36, x86_64 |
+| Native Linux | Xvfb + user-space GTK/WebKit prefix |
 
 ## Resumption point
 
-1. Final release artifacts are rebuilt from the freeze commit; checksums are in `artifacts/*.sha256`.
-2. Native integration, offline/reconnect, Work, Night, and large-text evidence is under `docs/evidence/native/`.
-3. Remaining gates are enumerated in `docs/VERIFICATION.md` as NOT_RUN/PARTIAL/BLOCKED (physical devices, live VPS, some adversarial scenarios).
-4. Push the freeze commit and inspect the GitHub Actions run. Done at `d2bccc8`; CI `42497990160` passed. Staging daemon/adapter/emulator were stopped after verification; restart with `scripts/staging-up.sh` and `scripts/staging-adapter.sh`.
+1. The current release is `v0.3.0` on `main`.
+2. The release APK and checksum are attached to the GitHub release and verified
+   by download.
+3. The evidence matrix is [`VERIFICATION.md`](VERIFICATION.md).
+4. The full command log and captures are in
+   [`evidence/v0.3.0/README.md`](evidence/v0.3.0/README.md).
+5. Physical Android, iOS, and a human screen-reader pass remain open.
+6. Staging runs use `.staging/` and must never touch the production daemon.
 
-## Device/build identifiers
+## Known gaps
 
-- iOS bundle: `com.jcodemobile.app`
-- Android package: `com.jcodemobile.app`
-- Simulator device: iPhone 17 Pro, iOS 26.1
-- Staging session IDs are recorded in `docs/evidence/` (not production).
+- No release keystore or Play Store listing.
+- No x86_64 library in the release APK.
+- No physical Android validation.
+- No iOS build on this host.
+- The adapter uses session-scoped upstream cancellation.
+- File-level diffs are not available.
+- Attachments are not implemented.
+- A persisted snapshot may omit the assistant side of a just-completed turn;
+  the live stream carries it.

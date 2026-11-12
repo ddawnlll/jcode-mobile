@@ -61,7 +61,8 @@ Expo 0.2.2 package does not migrate, and 0.2.2 remains the previous release.
 - Stillness typecheck, production Vite build, and lint.
 - Real isolated JCode daemon plus curated SDK handshake.
 - Playwright pairing, persistence, sessions, drafts, plans, files, delivery
-  truth, and stop-only cancellation; root e2e 32/32 on clean staging.
+  truth, and stop-only cancellation; 4 passed with 3 project-guarded skips on
+  clean staging.
 - Native Linux Tauri release build, Xvfb launch, Secret Service round trip, and
   keyring-backed pairing and relaunch.
 - Android release APK static verification: package metadata, label, ABIs,

@@ -204,6 +204,26 @@ These are single-run measurements on the host above, not percentile SLAs.
 | `android-stillness-pairing.png` | Real adapter pairing accepted on Android |
 | `android-stillness-relaunch.png` | Android Keystore credential restored after force-stop |
 
+## Documentation and marketing refresh
+
+On 2026-11-12, the README, setup guide, API reference, adapter contract,
+development guide, verification page, build state, and media manifest were
+rewritten for 0.3.0. The website and README images were regenerated from the
+real isolated stack:
+
+- `scripts/marketing-media/capture-stillness-screens.mjs` paired with the
+  isolated adapter on `127.0.0.1:7652`, created a session, and sent a real
+  Command Code turn.
+- The eight current captures are in `docs/media/marketing/`; the website uses
+  the five product-screen captures and the 2400x1260 social card.
+- `bun run marketing:test` passed: 25 unit tests, then 76 Playwright tests with
+  3 desktop-project skips. The site build was 24 files and 2,700,648 bytes.
+- The README hero and social card were rendered from the same captures. No
+  mock app UI was drawn.
+- `bun run check` passed: typecheck, lint, and 14 Jest suites / 139 tests.
+- `cargo test --workspace` passed 30 tests and `cargo fmt --all -- --check`
+  passed.
+
 ## Claim boundaries
 
 - Playwright Chromium is browser coverage. It is not Android, iOS, or native

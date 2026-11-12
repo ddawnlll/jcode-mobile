@@ -1,149 +1,249 @@
 <p align="center">
-  <img src="docs/media/marketing/readme-hero.png" alt="JCode Mobile on a phone, a precise control surface for a server-side JCode session" width="100%" />
+  <img src="docs/media/marketing/readme-hero.png" alt="JCode Mobile 0.3.0 on a phone: the home screen and a live session beside it" width="100%" />
 </p>
 
-<p align="center"><sub><code>JCODE MOBILE / WORK IN ORBIT</code></sub></p>
+<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.3.0</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
 <p align="center">
-  <strong>Your phone directs. Your server executes. The exact thread waits for your return.</strong><br />
-  <sub>A native iOS and Android companion for <a href="https://github.com/1jehuang/jcode">JCode</a>.</sub>
+  <strong>Your server runs JCode. The phone is the return surface.</strong><br />
+  <sub>A Tauri 2 client for <a href="https://github.com/1jehuang/jcode">JCode</a> on your own Linux server.</sub>
 </p>
-
-> **v0.3.0 development surface.** The Rust Adapter v2 lives in `crates/adapter-*`
-> and the Stillness 12 web/desktop client lives in `apps/stillness`. Adapter
-> tests, the pinned real-stack Playwright run, Command Code generation, and the
-> native Linux release are recorded in
-> [`docs/evidence/v0.3.0/README.md`](docs/evidence/v0.3.0/README.md). The
-> v0.3.0 JCode Mobile Android APK, built on the Stillness client, is the
-> current mobile artifact; v0.2.2 remains the previous Expo release.
 
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.0"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>
+  <a href="docs/API.md"><img src="https://img.shields.io/badge/API-Adapter_v2-2F6F52?style=flat-square" alt="Adapter v2 API" /></a>
   <br />
-  <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the live site</strong></a>
+  <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the site</strong></a>
 </p>
 
 <table>
   <tr>
-    <td width="50%" align="center" valign="top">
+    <td width="33%" align="center" valign="top">
       <sub><code>ANDROID / 0.3.0 / 10.5 MiB</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk"><strong>Download the APK</strong></a><br />
       <sub>Debug-signed sideload. No Play Store listing.</sub>
     </td>
-    <td width="50%" align="center" valign="top">
-      <sub><code>SERVER / JCODE + BUN</code></sub><br /><br />
+    <td width="33%" align="center" valign="top">
+      <sub><code>SERVER / JCODE + ADAPTER V2</code></sub><br /><br />
       <a href="docs/GETTING_STARTED.md"><strong>Run the adapter</strong></a><br />
-      <sub>TLS, one pairing code, five minutes.</sub>
+      <sub>One pairing code. Ten minutes. Then a device token.</sub>
+    </td>
+    <td width="33%" align="center" valign="top">
+      <sub><code>SOURCE / TAURI 2 + RUST</code></sub><br /><br />
+      <a href="docs/DEVELOPMENT.md"><strong>Build from source</strong></a><br />
+      <sub>Android, native Linux, and a browser verification surface.</sub>
     </td>
   </tr>
 </table>
 
-## A first launch, in motion
+> **0.3.0 is a development preview.** It replaces the Expo client with the
+> Stillness 12 Tauri client and the Rust Adapter v2. The Android APK is
+> debug-signed for sideloading. The native Linux shell builds from source.
+> There is no iOS artifact or Play Store listing.
 
-<p align="center">
-  <img src="docs/media/marketing/welcome-v021-night.png" alt="JCode Mobile 0.2.1 welcome: an ASCII halftone torus spinning above the words Welcome to jcode" width="240" />
-</p>
+## What 0.3.0 is
 
-<p align="center">
-  <strong>v0.2.1 · SHIPPED WELCOME</strong><br />
-  <sub>The first unpaired launch assembles the full screen from ASCII noise in 1.6 seconds, resolves the title silhouette into real type, then keeps the torus turning. Skip and Pause are always available. Reduce Motion paints one readable still frame.</sub>
-</p>
+JCode Mobile is two processes:
 
-## Work in orbit
+1. **Adapter v2** is one Rust binary on your server. It speaks to JCode through
+   the pinned `jcode-sdk` and harness API, keeps one SQLite journal, and exposes
+   an authenticated mobile WebSocket.
+2. **Stillness 12** is the Tauri 2 client. It paints a paired, cached, or
+   reconnecting state without inventing work, and it restores the exact server
+   and session you left.
 
-Your JCode session lives on a server. The model, tools, files, and long turn stay there. This app gives that session a surface you can hold.
+The phone never runs the agent. Prompts, tools, files, and long turns stay on
+the server. Navigation, backgrounding, socket close, and app kill never send
+Cancel. Only the explicit **Stop** control targets the current turn.
 
-Send a prompt. Put the phone down. Come back to the same server, the same session, and a seam that says what changed. Only Stop stops a turn. Back, swipe, background, and force-quit never do.
-
-<table>
-  <tr>
-    <td width="33%" align="center" valign="top">
-      <img src="docs/media/marketing/sessions-v020.png" alt="JCode Mobile sessions list with live state, folders, labels, and search" width="240" /><br />
-      <sub><strong>SESSIONS</strong><br />Find the work. See what is live.</sub>
-    </td>
-    <td width="33%" align="center" valign="top">
-      <img src="docs/media/marketing/conversation-v020.png" alt="JCode Mobile conversation with rich markdown, math, a running command, and the Work dock" width="240" /><br />
-      <sub><strong>CONVERSATION</strong><br />Read the reply. Keep the thread.</sub>
-    </td>
-    <td width="33%" align="center" valign="top">
-      <img src="docs/media/marketing/work-v020.png" alt="JCode Mobile Work sheet with read, edit, and bash tool rows and Stop this turn" width="240" /><br />
-      <sub><strong>WORK</strong><br />Inspect the actual tool calls.</sub>
-    </td>
-  </tr>
-</table>
-
-<p align="center"><sub>Captured in the v0.2.0 Preview build with sample data. The session, conversation, and Work surfaces are unchanged in 0.2.1. Nothing runs in these captures.</sub></p>
-
-## Three things worth holding
-
-<table>
-  <tr>
-    <td width="33%" valign="top">
-      <sub><code>RETURN</code></sub><br /><br />
-      <strong>The server keeps working.</strong><br /><br />
-      Leave mid-turn, lock it, force-quit. Reopen into the exact session<br />
-      and a seam that counts the updates.
-    </td>
-    <td width="33%" valign="top">
-      <sub><code>WORK</code></sub><br /><br />
-      <strong>Nothing is inferred.</strong><br /><br />
-      Real tool calls, the reported plan, confirmed changes, context use, Markdown, math, and images.
-    </td>
-    <td width="33%" valign="top">
-      <sub><code>APPEARANCE</code></sub><br /><br />
-      <strong>11 families. 22 palettes.</strong><br /><br />
-      Light and Night for Tidal, Gruvbox, Catppuccin, Dracula, Nord, Tokyo Night,<br />
-      Solarized, One, GitHub, Rosé Pine, and Monokai. Local drafts stay scoped<br />
-      to the server and session.
-    </td>
-  </tr>
-</table>
-
-## Three moves to orbit
-
-**1. Put the adapter on your server.** A small Bun process sits beside JCode and speaks to your
-daemon. It does not run a second agent. [Setup guide](docs/GETTING_STARTED.md)
-
-**2. Run `jcode pair`.** Six digits, valid for five minutes, exchanged once for a device token.
-
-**3. Install and pair.** Sideload the APK, enter your server address and the six digits. The token
-goes into Keychain or Keystore, never SQLite, logs, or the URL.
-
-Full setup, TLS, iOS source builds, and staging: [`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
-
-## For builders
-
-| Read | Why |
+| Surface | State |
 | --- | --- |
-| [Development](docs/DEVELOPMENT.md) | Architecture, invariants, commands, test surfaces, design system |
-| [Adapter contract](docs/ADAPTER_CONTRACT.md) | Wire protocol, source evidence, explicit non-goals |
-| [Verification](docs/VERIFICATION.md) | PASS, PARTIAL, NOT_RUN, and BLOCKED, with observed evidence |
+| Android | Tauri 2 APK, `arm64-v8a` and `armeabi-v7a`, minSdk 24 |
+| Native Linux | Tauri 2 release binary, Secret Service credentials |
+| Web | Verification surface only; browser token in `localStorage` |
+| iOS | Not built on this Linux host; no IPA |
+
+## One pairing
+
+<p align="center">
+  <img src="docs/media/marketing/pair-v030.png" alt="JCode Mobile pairing screen with server address, pairing code, and device name" width="260" />
+</p>
+
+Start the adapter. Its terminal prints a single-use pairing code for this run.
+The code expires after ten minutes. Enter it once, and the adapter returns a
+device token. The token is stored in Android Keystore or the Linux Secret
+Service, never in SQLite, logs, or the URL.
+
+## Your work, in reach
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/media/marketing/home-v030.png" alt="JCode Mobile home screen with a live session and the jcode-mobile project" width="260" /><br />
+      <sub><strong>HOME</strong><br />Continue the session. See the project.</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <img src="docs/media/marketing/session-v030.png" alt="JCode Mobile session with a real answer, reasoning, model, and composer" width="260" /><br />
+      <sub><strong>SESSION</strong><br />Read the answer. Keep the thread.</sub>
+    </td>
+  </tr>
+</table>
+
+The transcript is fenced by `session_id`, `epoch`, `seq`, `turn_id`, and
+`operation_id`. A slow answer cannot overwrite newer work. A gap triggers a
+fresh snapshot instead of a guessed patch. Drafts, reading positions, and pending
+sends are scoped to the server and session.
+
+## Command Code, in the route list
+
+<p align="center">
+  <img src="docs/media/marketing/models-v030.png" alt="JCode Mobile model sheet with Command Code routes and the selected deepseek model" width="260" />
+</p>
+
+The pinned JCode fork exposes Command Code as a native provider. The adapter
+lists routes from `ListModels` and `GetRuntimeInfo`. It does not infer
+entitlement from a catalog, invent a provider key, or proxy a credential.
+
+## The desktop shell
+
+<p align="center">
+  <img src="docs/media/marketing/desktop-v030.png" alt="JCode Mobile Stillness 12 desktop shell with sidebar, conversation, and inspector" width="100%" />
+</p>
+
+The same build runs as a three-pane Tauri window on Linux. The sidebar, central
+session, and inspector read one shared connection. The inspector exposes only
+what the server reported: plan, context, activity, runtime, and provider.
+
+## Install the Android APK
+
+```text
+jcode-mobile-0.3.0-android-release.apk
+11,020,965 bytes
+SHA-256 4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2
+package dev.jcode.stillness
+versionCode 3000, versionName 0.3.0
+minSdk 24, targetSdk 37, compileSdk 37
+arm64-v8a + armeabi-v7a
+APK Signature Scheme v2 and v3, Android Debug certificate
+```
+
+```sh
+adb install -r jcode-mobile-0.3.0-android-release.apk
+```
+
+The package identifier is new. A clean install is expected. App data from the
+Expo 0.2.2 package does not migrate.
+
+## Run the server side
+
+```sh
+git clone https://github.com/ddawnlll/jcode-mobile.git
+cd jcode-mobile
+cargo build --release -p adapter-server --bin jcode-adapter-v2
+
+JCODE_ADAPTER_ALLOWED_ROOTS="$HOME/src" \
+JCODE_ADAPTER_BIND=127.0.0.1:7646 \
+./target/release/jcode-adapter-v2
+```
+
+The adapter prints its pairing code and the roots it will expose. It discovers
+the JCode harness socket from `JCODE_API_SOCKET` or the platform runtime
+directory. Data lives in `~/.local/share/jcode-mobile-adapter-v2` unless
+`JCODE_ADAPTER_DATA_DIR` is set.
+
+For a remote phone, terminate TLS at a reverse proxy and keep the adapter on
+loopback:
+
+```caddyfile
+dawnll.example.com {
+    reverse_proxy 127.0.0.1:7646
+}
+```
+
+Then enter `https://dawnll.example.com` in the app. The adapter does not ship a
+TLS terminator, VPN client, or SSH client for the phone.
+
+Full setup, environment variables, troubleshooting, and local staging:
+[`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md).
+
+## Build from source
 
 ```sh
 bun install --frozen-lockfile
-bun run check          # types, lint, Jest and RNTL
-bun run adapter:test   # Bun contract tests
-bun run e2e            # Playwright against isolated staging
+cd apps/stillness && bun install --frozen-lockfile && cd ../..
+
+cargo test --workspace
+cargo fmt --all -- --check
+bun run typecheck
+bun run lint
+bun run test
+
+cd apps/stillness && bun run build
+cd ../..
+bash scripts/build-android-release.sh   # JDK + Android SDK
+bash scripts/build-tauri-linux.sh       # GTK 3 + WebKitGTK 4.1
 ```
 
-Bun 1.4.4 only. The web target is a verification surface, not a second product. Live site: <https://ddawnlll.github.io/jcode-mobile/> · Source: [`website/`](website/).
+The Android release script builds, zipaligns, signs, verifies, and writes a
+`.sha256` beside the APK. The Linux script accepts a user-space `TAURI_SYSROOT`
+when the host has no system GTK/WebKit development packages.
 
-## Availability and proof
+## What is verified
 
-Android 0.3.0 ships the Stillness 12 Tauri client. The APK is debug-signed for sideloading and
-was validated on an API 36 x86_64 emulator against a real staging adapter: launch, pairing,
-credential persistence in Android Keystore, and reconnect after force-stop. There is no Play Store
-listing and no signed iPhone artifact. The 0.2.2 iOS artifact remains a Release Simulator `.app`
-zip, not an IPA. Physical-device validation and a human screen-reader pass are not run. Full matrix:
-[`docs/VERIFICATION.md`](docs/VERIFICATION.md).
+| Check | Result |
+| --- | --- |
+| Adapter v2 Rust tests | PASS, 30 tests |
+| Rust formatting | PASS |
+| Stillness typecheck and production bundle | PASS |
+| Repository and Stillness lint | PASS, 0 errors and 0 warnings |
+| Root TypeScript typecheck | PASS |
+| Legacy Jest/RNTL suite | PASS, 14 suites / 139 tests |
+| Real isolated JCode daemon + SDK handshake | PASS |
+| Real-stack Playwright | PASS, 4 passed / 3 project-guarded skips |
+| Website build and browser matrix | PASS, 25 unit tests; 76 passed / 3 skipped |
+| Command Code generation | PASS, real `deepseek/deepseek-v4-flash` answer |
+| Android APK | PASS, static verification and emulator runtime of a same-source build |
+| Native Linux Tauri | PASS, release build and Xvfb launch |
+| Secret Service keyring | PASS, round trip plus pairing and relaunch |
+| Physical Android device | NOT_RUN |
+| iOS | NOT_APPLICABLE on this Linux host |
+
+The current evidence is [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and
+[`docs/evidence/v0.3.0/README.md`](docs/evidence/v0.3.0/README.md).
+
+## Limits
+
+- The Android APK is debug-signed and sideload-only. There is no Play Store
+  release, release keystore, auto-update channel, or signed iOS build.
+- The release APK is ARM-only. The emulator check used a same-source x86_64
+  debug build.
+- JCode's curated API exposes aggregate edit statistics, not a verified per-file
+  diff. The Changes screen says so.
+- Upstream cancellation is session-scoped. The adapter verifies the expected
+  turn before stopping and reports `atomic_turn_scope: false`.
+- Attachments and provider credentials are not implemented in the mobile
+  composer.
+- A human screen-reader pass and physical-device validation remain `NOT_RUN`.
+
+## Documentation
+
+| Read | Why |
+| --- | --- |
+| [Getting started](docs/GETTING_STARTED.md) | Adapter, TLS, pairing, Android, Linux, troubleshooting |
+| [API](docs/API.md) | `/health`, `/v2/pair`, `/v2/ws`, envelopes, capabilities, events, errors |
+| [Adapter contract](docs/ADAPTER_CONTRACT.md) | Source evidence, operation states, security boundaries |
+| [Development](docs/DEVELOPMENT.md) | Repository layout, commands, tests, release builds |
+| [Verification](docs/VERIFICATION.md) | PASS, PARTIAL, NOT_RUN, and BLOCKED with evidence |
+| [Build state](docs/BUILD_STATE.md) | Versions, artifacts, checksums, resumption point |
+| [Release notes](docs/V0_3_0_RELEASE_NOTES.md) | 0.3.0 scope and known limits |
 
 ---
 
 <p align="center">
-  <sub><strong>JCODE MOBILE</strong> / Work in orbit.</sub><br />
+  <sub><strong>JCODE MOBILE</strong> / Stillness 12 / Work in orbit.</sub><br />
   <sub>An independent companion for <a href="https://github.com/1jehuang/jcode">JCode</a>. Not an official JCode release.</sub><br />
   <sub>JCode, Bricolage Grotesque, Hanken Grotesk, IBM Plex Mono, and Lucide keep their own licenses. See <a href="THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</sub>
 </p>
