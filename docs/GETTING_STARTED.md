@@ -262,6 +262,29 @@ previous code. Generate a new one by restarting the adapter, or set
 `JCODE_ADAPTER_PAIRING_CODE` for a controlled run. Repeated failures are
 rate-limited per peer IP.
 
+### The terminal shows "Connect host" and a six-digit code
+
+That is JCode's built-in mobile gateway, not Adapter v2. Stillness 0.3.0 calls
+`/v2/pair` and expects the adapter's ten-minute code, normally formatted
+`XXXX-XXXX-XXXX`.
+
+Use the TLS origin without the gateway port:
+
+```text
+https://dawnll.example.com
+```
+
+Do not enter `https://dawnll.example.com:7643`. The built-in gateway on port
+7643 is plain HTTP, so an `https://` fetch to that port fails before the app
+can show an authentication error. Restart Adapter v2 to generate a fresh
+adapter code:
+
+```sh
+systemctl --user restart jcode-mobile-adapter-v2
+journalctl --user -u jcode-mobile-adapter-v2 -n 20 --no-pager |
+  grep "Pairing code"
+```
+
 ### The session list is empty
 
 The adapter is connected but the harness has no sessions, or it is looking at a
