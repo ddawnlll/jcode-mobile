@@ -25,6 +25,8 @@ jobs:
           bun-version: 1.4.4
           cache: true
       - run: bun install --frozen-lockfile
+      - name: Install Stillness dependencies
+        run: cd apps/stillness && bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run test
