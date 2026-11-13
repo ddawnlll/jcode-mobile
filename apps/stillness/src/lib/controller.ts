@@ -700,7 +700,9 @@ export class Controller {
     const restoredTurn = snapshot.active_turn ?? null;
     const clearLive =
       !snapshot.stale && !restoredTurn &&
-      (includesLive || (!this.state.live.turnId && !this.state.live.assistants.length));
+      (includesLive ||
+        Boolean(this.state.live.finishedTurnId) ||
+        (!this.state.live.turnId && !this.state.live.assistants.length));
     const nextLive = restoredTurn
       ? {
           ...(this.state.live.turnId === restoredTurn.turn_id ? this.state.live : emptyLive()),
@@ -1026,6 +1028,8 @@ export class Controller {
       status,
       phase: '',
       permission: null,
+      startedAtMs: null,
+      assistants: this.state.live.assistants.map((block) => ({ ...block, done: true })),
     });
     this.scheduleSnapshot(320);
   }

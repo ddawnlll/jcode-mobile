@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -24,11 +23,16 @@ use crate::backend::{
 pub struct JcodeLive {
     socket_path: std::path::PathBuf,
     shared: Mutex<Option<JcodeClient>>,
-    /// The bridge attaches one session to a native connection. A second
-    /// `AttachSession` for the session that is already current waits for a
-    /// reply that never arrives, so commands must remember which sessions this
-    /// connection has attached instead of re-attaching on every send.
-    attached: Mutex<HashSet<String>>,
+    /// The bridge attaches one session to a native connection. A connection
+    /// has at most one current session, so this tracks the single session the
+    /// shared client is attached to rather than a set of "known" sessions.
+    /// Any command must attach (replacing the current session) before issuing
+    /// it against a different session.
+    current_session: Mutex<Option<String>>,
+    /// Serialises attach + command against each other so a command issued for
+    /// session B cannot interleave between another thread's attach and op for
+    /// session A on the shared connection.
+    command_lock: Mutex<()>,
     info: Mutex<BackendInfo>,
     started_at_ms: i64,
 }
@@ -46,7 +50,8 @@ impl JcodeLive {
         Arc::new(Self {
             socket_path,
             shared: Mutex::new(None),
-            attached: Mutex::new(HashSet::new()),
+            current_session: Mutex::new(None),
+            command_lock: Mutex::new(()),
             info: Mutex::new(BackendInfo {
                 server: String::new(),
                 jcode_version: String::new(),
@@ -81,7 +86,7 @@ impl JcodeLive {
         loop {
             let options = ConnectOptions {
                 socket_path: Some(self.socket_path.clone()),
-                client_name: "jcode-mobile-adapter-v2/0.3.0".into(),
+                client_name: "jcode-mobile-adapter-v2/0.3.1".into(),
                 request_timeout: Some(Duration::from_secs(30)),
                 ensure_runtime: false,
                 supports_user_response: false,
@@ -96,7 +101,7 @@ impl JcodeLive {
                         healthy: true,
                     };
                     *self.info.lock().expect("jcode info") = info.clone();
-                    self.attached.lock().expect("jcode attached").clear();
+                    *self.current_session.lock().expect("jcode current session") = None;
                     *self.shared.lock().expect("jcode client") = Some(client.clone());
                     backoff = Duration::from_secs(1);
                     info!(
@@ -177,24 +182,23 @@ impl JcodeLive {
             .ok_or_else(|| CoreError::BackendUnavailable("JCode harness is not connected".into()))
     }
 
-    fn attach_for_command(&self, client: &JcodeClient, session_id: &str) -> CoreResult<()> {
-        let mut attached = self.attached.lock().expect("jcode attached");
-        if attached.contains(session_id) {
-            return Ok(());
+    fn attach_for_command<'a>(
+        &'a self,
+        client: &'a JcodeClient,
+        session_id: &'a str,
+    ) -> CoreResult<std::sync::MutexGuard<'a, ()>> {
+        let guard = self.command_lock.lock().expect("jcode command lock");
+        let mut current = self.current_session.lock().expect("jcode current session");
+        if current.as_deref() == Some(session_id) {
+            return Ok(guard);
         }
         client
             .attach_session(session_id)
             .map(|_| {
-                attached.insert(session_id.to_string());
+                *current = Some(session_id.to_string());
             })
-            .map_err(map_sdk_error)
-    }
-
-    fn mark_attached(&self, session_id: &str) {
-        self.attached
-            .lock()
-            .expect("jcode attached")
-            .insert(session_id.to_string());
+            .map_err(map_sdk_error)?;
+        Ok(guard)
     }
 }
 
@@ -271,22 +275,39 @@ impl Backend for JcodeLive {
     }
 
     fn create_session(&self, working_dir: Option<&str>) -> CoreResult<BackendSession> {
-        let client = self.client()?;
-        let session = client
+        // The pinned bridge implements `create_session` as a bare `subscribe`
+        // on the calling connection. On an already-attached connection the
+        // daemon answers with the *current* session's state instead of
+        // creating a new one, so creating through the shared link returns (and
+        // renames) the existing session. Create on a short-lived connection
+        // whose first frame is the create/attach, which is unambiguous.
+        let fresh = JcodeClient::connect(ConnectOptions {
+            socket_path: Some(self.socket_path.clone()),
+            client_name: "jcode-mobile-adapter-v2/create".into(),
+            request_timeout: Some(Duration::from_secs(30)),
+            ensure_runtime: false,
+            supports_user_response: false,
+        })
+        .map_err(map_sdk_error)?;
+        let session = fresh
             .create_session_with_options(CreateSessionOptions {
                 working_dir: working_dir.map(str::to_owned),
                 system_prompt: None,
             })
             .map(session_info_to_backend)
             .map_err(map_sdk_error)?;
-        // CreateSession attaches the new session to this connection.
-        self.mark_attached(&session.session_id);
+        // The short-lived connection is no longer needed; attach the shared
+        // link to the new session so follow-up commands land on it, matching
+        // the old behaviour of attaching the created session.
+        let shared = self.client()?;
+        let session_id = session.session_id.clone();
+        let _guard = self.attach_for_command(&shared, &session_id)?;
         Ok(session)
     }
 
     fn attach_session(&self, session_id: &str) -> CoreResult<BackendSession> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
             .list_sessions()
             .map_err(map_sdk_error)?
@@ -298,15 +319,22 @@ impl Backend for JcodeLive {
 
     fn history(&self, session_id: &str, tail: Option<u32>) -> CoreResult<Vec<HistoryMessageView>> {
         let client = self.client()?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
-            .peek_session(session_id, Some(tail.unwrap_or(200)))
-            .map(history_views)
+            .get_history(session_id)
+            .map(|messages| {
+                // `get_history` returns the full transcript; the tail limit is
+                // applied here rather than on the wire.
+                let limit = tail.unwrap_or(200) as usize;
+                let start = messages.len().saturating_sub(limit);
+                history_views(messages[start..].to_vec())
+            })
             .map_err(map_sdk_error)
     }
 
     fn runtime(&self, session_id: &str) -> CoreResult<BackendRuntime> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
             .get_runtime_info(session_id)
             .map(runtime_to_backend)
@@ -315,19 +343,19 @@ impl Backend for JcodeLive {
 
     fn list_models(&self, session_id: &str) -> CoreResult<(Vec<String>, Option<String>)> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client.list_models(session_id).map_err(map_sdk_error)
     }
 
     fn set_model(&self, session_id: &str, model: &str) -> CoreResult<()> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client.set_model(session_id, model).map_err(map_sdk_error)
     }
 
     fn set_reasoning_effort(&self, session_id: &str, effort: &str) -> CoreResult<()> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
             .set_reasoning_effort(session_id, effort)
             .map_err(map_sdk_error)
@@ -335,7 +363,7 @@ impl Backend for JcodeLive {
 
     fn set_context_cap(&self, session_id: &str, max_tokens: Option<u64>) -> CoreResult<()> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
             .set_context_cap(session_id, max_tokens.map(|value| value as usize))
             .map(|_| ())
@@ -351,7 +379,7 @@ impl Backend for JcodeLive {
 
     fn plan(&self, session_id: &str) -> CoreResult<Option<Value>> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         let snapshot = client.todo_state(session_id).map_err(map_sdk_error)?;
         serde_json::to_value(snapshot)
             .map(Some)
@@ -362,7 +390,7 @@ impl Backend for JcodeLive {
         let client = self.client()?;
         // The harness requires the connection to be attached before SendMessage.
         // Attach is a no-op when this session is already current.
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
             .notify(ApiRequest::SendMessage {
                 session_id: session_id.to_string(),
@@ -376,7 +404,7 @@ impl Backend for JcodeLive {
 
     fn cancel(&self, session_id: &str) -> CoreResult<()> {
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client.cancel(session_id).map_err(map_sdk_error)
     }
 
@@ -397,7 +425,7 @@ impl Backend for JcodeLive {
             }
         };
         let client = self.client()?;
-        self.attach_for_command(&client, session_id)?;
+        let _guard = self.attach_for_command(&client, session_id)?;
         client
             .respond_to_permission(session_id, request_id, decision)
             .map_err(map_sdk_error)

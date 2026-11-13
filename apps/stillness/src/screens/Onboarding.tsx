@@ -81,6 +81,16 @@ export function PairScreen({ state }: { state: AppState }) {
     }
   };
 
+  // The on-screen keyboard covers the lower half of the form on small
+  // screens. When a field is focused, keep both the field and the submit
+  // action reachable by scrolling the field to a comfortable position.
+  const focusField = (event: React.FocusEvent<HTMLInputElement>) => {
+    const element = event.currentTarget;
+    window.setTimeout(() => {
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 120);
+  };
+
   return (
     <div className="onboarding" data-testid="pair-screen">
       <header className="onboard-bar">
@@ -110,6 +120,7 @@ export function PairScreen({ state }: { state: AppState }) {
                 value={server}
                 onChange={(event) => setServer(event.target.value)}
                 inputMode="url"
+                onFocus={focusField}
                 autoComplete="off"
                 spellCheck={false}
                 placeholder="https://server.example.com"
@@ -126,6 +137,7 @@ export function PairScreen({ state }: { state: AppState }) {
                 value={code}
                 onChange={(event) => setCode(event.target.value)}
                 autoComplete="one-time-code"
+                onFocus={focusField}
                 spellCheck={false}
                 placeholder="ABCD-EFGH-JKLM"
                 required
@@ -141,6 +153,7 @@ export function PairScreen({ state }: { state: AppState }) {
                 value={device}
                 onChange={(event) => setDevice(event.target.value)}
                 maxLength={48}
+                onFocus={focusField}
                 autoComplete="off"
                 required
               />

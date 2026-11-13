@@ -13,6 +13,7 @@ use adapter_core::{
 };
 use adapter_protocol::{
     CreateSessionResponse, Envelope, Kind, OperationState, OperationStatePayload,
+    SessionSnapshotPayload,
 };
 use adapter_server::dispatch::handle_request;
 use adapter_server::handle_backend_event;
@@ -24,6 +25,7 @@ struct FakeBackend {
     sends: Mutex<Vec<(String, String)>>,
     fail_send: AtomicBool,
     next_id: AtomicU64,
+    history: Mutex<Vec<adapter_protocol::HistoryMessageView>>,
 }
 
 impl Default for FakeBackend {
@@ -33,6 +35,7 @@ impl Default for FakeBackend {
             sends: Mutex::new(Vec::new()),
             fail_send: AtomicBool::new(false),
             next_id: AtomicU64::new(1),
+            history: Mutex::new(Vec::new()),
         }
     }
 }
@@ -91,7 +94,7 @@ impl Backend for FakeBackend {
         _session_id: &str,
         _tail: Option<u32>,
     ) -> CoreResult<Vec<adapter_protocol::HistoryMessageView>> {
-        Ok(Vec::new())
+        Ok(self.history.lock().unwrap().clone())
     }
 
     fn runtime(&self, _session_id: &str) -> CoreResult<BackendRuntime> {
@@ -448,4 +451,164 @@ fn project_listing_is_adapter_owned() {
         .filter_map(|project| project.get("project_id").and_then(Value::as_str))
         .collect();
     assert!(ids.iter().all(|id| !id.is_empty()));
+}
+
+#[tokio::test]
+async fn create_session_is_idempotent_per_client_request_id_but_not_across() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+
+    let first: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({
+                "client_request_id": "create-a",
+                "project_id": null,
+                "working_dir": null,
+                "title": "run one"
+            }),
+        )
+        .await,
+    );
+    let retry: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({
+                "client_request_id": "create-a",
+                "project_id": null,
+                "working_dir": null,
+                "title": "run one"
+            }),
+        )
+        .await,
+    );
+    assert!(first.created);
+    assert!(!retry.created, "a retry with the same key must not create");
+    assert_eq!(first.session.session_id, retry.session.session_id);
+
+    let second: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({
+                "client_request_id": "create-b",
+                "project_id": null,
+                "working_dir": null,
+                "title": "run two"
+            }),
+        )
+        .await,
+    );
+    assert_ne!(
+        first.session.session_id, second.session.session_id,
+        "a distinct client_request_id must never return the earlier session"
+    );
+    assert_eq!(second.session.title.as_deref(), Some("run two"));
+}
+
+#[tokio::test]
+async fn snapshot_after_finished_tool_turn_includes_tool_rows_and_promotes_pending() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({
+                "client_request_id": "create-tool",
+                "project_id": null,
+                "working_dir": null,
+                "title": "tool turn"
+            }),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id.clone();
+
+    let body = "remember this exact instruction";
+    let _: OperationStatePayload = response_payload(
+        &call(
+            &h,
+            "operations.reserve",
+            json!({
+                "operation_id": "op-tool",
+                "session_id": session_id,
+                "kind": "send",
+                "body": body,
+                "expected_turn_id": null
+            }),
+        )
+        .await,
+    );
+    let _: OperationStatePayload =
+        response_payload(&call(&h, "operations.dispatch", json!({"operation_id": "op-tool"})).await);
+    handle_backend_event(
+        Arc::clone(&h.state),
+        BackendEvent::Accepted {
+            session_id: session_id.clone(),
+        },
+    )
+    .await;
+
+    // The daemon's authoritative transcript after the turn: user, tool result,
+    // assistant. Tool rows must survive the snapshot path.
+    *h.backend.history.lock().unwrap() = vec![
+        adapter_protocol::HistoryMessageView {
+            index: 0,
+            role: "user".into(),
+            content: body.into(),
+            tool_call_id: None,
+            tool_name: None,
+            tool_input: None,
+            response_stats: None,
+        },
+        adapter_protocol::HistoryMessageView {
+            index: 1,
+            role: "tool".into(),
+            content: "tool output".into(),
+            tool_call_id: Some("call_1".into()),
+            tool_name: Some("bash".into()),
+            tool_input: Some(json!({"command": "ls"})),
+            response_stats: None,
+        },
+        adapter_protocol::HistoryMessageView {
+            index: 2,
+            role: "assistant".into(),
+            content: "DONE".into(),
+            tool_call_id: None,
+            tool_name: None,
+            tool_input: None,
+            response_stats: None,
+        },
+    ];
+
+    let snapshot: SessionSnapshotPayload = response_payload(
+        &call(
+            &h,
+            "sessions.subscribe",
+            json!({
+                "session_id": session_id,
+                "tail": 160,
+                "after_seq": null
+            }),
+        )
+        .await,
+    );
+
+    let roles: Vec<&str> = snapshot
+        .messages
+        .iter()
+        .map(|message| message.role.as_str())
+        .collect();
+    assert_eq!(roles, vec!["user", "tool", "assistant"]);
+
+    let operation = h.state.store.operation("op-tool").unwrap().unwrap();
+    assert_eq!(
+        operation.state,
+        OperationState::ObservedInHistory,
+        "the authoritative snapshot carrying the user message must promote the send operation"
+    );
 }

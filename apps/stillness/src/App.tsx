@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { controller, type AppState } from './lib/controller';
 import { sessionTitle } from './lib/format';
 import { Torus } from './components/Torus';
-import { ConnectionBanner, Drawer, Toast } from './components/ui';
+import { Drawer, Toast } from './components/ui';
 import {
   IconActivity,
   IconList,
@@ -120,7 +120,7 @@ function Rail({ state }: { state: AppState }) {
         <IconServer size={16} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <strong>{state.server?.name ?? 'JCode server'}</strong>
-          <div>{state.connection.status} · v{state.server?.adapter_version ?? '0.3.0'}</div>
+          <div>{state.connection.status} · v{state.server?.adapter_version ?? '0.3.1'}</div>
         </div>
         <span className={`status-mark ${state.jcodeConnected ? '' : 'is-active'}`} />
       </div>
@@ -133,7 +133,6 @@ function Shell({ state }: { state: AppState }) {
     <div className={`app-shell screen-${state.screen}`}>
       <Rail state={state} />
       <div className="app-main">
-        <ConnectionBanner state={state} />
         <ScreenRouter state={state} />
       </div>
       <Drawer state={state} />

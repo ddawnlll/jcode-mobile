@@ -621,7 +621,12 @@ export function SessionScreen({ state }: { state: AppState }) {
                       <div className="work-lines">
                         <div className="work-state">
                           {startedLabel(state.live)}
-                          <span className="thinking-dots">…</span> <Elapsed since={state.live.startedAtMs} />
+                          {state.live.turnId ? (
+                            <>
+                              <span className="thinking-dots">…</span>{' '}
+                              <Elapsed since={state.live.startedAtMs} />
+                            </>
+                          ) : null}
                         </div>
                         <div className="work-detail">
                           {state.live.tools.length > 0
