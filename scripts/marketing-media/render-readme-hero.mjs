@@ -2,7 +2,7 @@
 /**
  * Render the README hero from the committed HTML composition.
  *
- * The composition is typography, rules, and the real v0.3.0 home and session
+ * The composition is typography, rules, and the real v0.3.1 home and session
  * captures. It does not draw app UI.
  *
  * Usage:

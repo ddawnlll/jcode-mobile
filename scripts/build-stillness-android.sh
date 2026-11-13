@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and sign the Stillness 12 v0.3.0 Android release APK.
+# Build and sign the Stillness 12 v0.3.1 Android release APK.
 #
 # This is the Tauri 2 shell under apps/stillness, not the older Expo client.
 # The release APK is debug-signed for sideloading unless ANDROID_KEYSTORE and

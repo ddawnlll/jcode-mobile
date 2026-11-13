@@ -15,7 +15,7 @@ export const FIXTURE_HTML = `<!doctype html>
   <main>
     <h1 id="top">Fixture mobile</h1>
     <p>Static tooling fixture. No product copy lives here.</p>
-    <a id="download-apk" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk">Download 0.3.0 APK</a>
+    <a id="download-apk" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk">Download 0.3.1 APK</a>
     <img src="assets/pixel.png" alt="">
     <a href="#top">Back to top</a>
   </main>

@@ -572,17 +572,17 @@
     send: {
       label: "01 / Send",
       caption: "Staged, reserved, dispatching, accepted. Four states, one explicit path.",
-      provenance: "Real capture / v0.3.0"
+      provenance: "Real capture / v0.3.1"
     },
     away: {
       label: "02 / Step away",
       caption: "Session scope, epoch, and sequence keep a slow answer from overwriting newer work.",
-      provenance: "Real capture / v0.3.0"
+      provenance: "Real capture / v0.3.1"
     },
     return: {
       label: "03 / Return",
       caption: "Models, context, and preferences stay source-backed after the return.",
-      provenance: "Real capture / v0.3.0"
+      provenance: "Real capture / v0.3.1"
     }
   };
 

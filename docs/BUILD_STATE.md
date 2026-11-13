@@ -1,18 +1,18 @@
 # Build state
 
-Updated: 2026-11-12
+Updated: 2026-11-13
 
 ## Current line
 
 | Item | Value |
 | --- | --- |
 | Branch | `main` |
-| Release | `v0.3.0` |
-| App version | 0.3.0 |
+| Release | `v0.3.1` |
+| App version | 0.3.1 |
 | Adapter | Rust Adapter v2, protocol v2 |
 | Client | Stillness 12, Tauri 2 |
 | Android package | `dev.jcode.stillness` |
-| Android versionCode | 3000 |
+| Android versionCode | 3001 |
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
 | JCode harness API | v1.11 |
 | Runtime | Bun 1.4.4, Rust stable |
@@ -28,7 +28,7 @@ Updated: 2026-11-12
 | Stillness web | `apps/stillness` | React 19, Vite 7 |
 | Tauri shell | `apps/stillness/src-tauri` | Desktop and Android |
 | Android project | `apps/stillness/src-tauri/gen/android` | Committed, patched Tauri CLI path |
-| Legacy Expo app | `src/` | 0.2.x client, not the 0.3.0 artifact |
+| Legacy Expo app | `src/` | 0.2.x client, not the 0.3.1 artifact |
 | Legacy adapter | `integration/jcode-adapter` | 0.2.x Bun adapter |
 
 ## Checks
@@ -55,11 +55,11 @@ Updated: 2026-11-12
 
 | Artifact | Bytes | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.3.0-android-release.apk` | 11,020,965 | `4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2` |
+| `artifacts/jcode-mobile-0.3.1-android-release.apk` | 11,016,925 | `03a6d808524461e12dca1370540eede2e040e179e9f116cec980effb180da562` |
 
-The 0.3.0 APK is a Tauri 2 build for `arm64-v8a` and `armeabi-v7a`,
+The 0.3.1 APK is a Tauri 2 build for `arm64-v8a` and `armeabi-v7a`,
 debug-signed for sideloading. It is attached to the
-[`v0.3.0` release](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.0)
+[`v0.3.1` release](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.1)
 with its `.sha256` file. Artifacts are not committed.
 
 Historical artifacts:
@@ -72,7 +72,7 @@ Historical artifacts:
   [`V0_2_2_VERIFICATION.md`](V0_2_2_VERIFICATION.md) and the v0.2.1 notes.
 
 The 0.2.2 iOS artifact is a Simulator `.app`, not a signed IPA. There is no
-signed iOS artifact in 0.3.0.
+signed iOS artifact in 0.3.1.
 
 ## Android build
 
@@ -127,12 +127,12 @@ GitHub release.
 
 ## Resumption point
 
-1. The current release is `v0.3.0` on `main`.
+1. The current release is `v0.3.1` on `main`.
 2. The release APK and checksum are attached to the GitHub release and verified
    by download.
 3. The evidence matrix is [`VERIFICATION.md`](VERIFICATION.md).
 4. The full command log and captures are in
-   [`evidence/v0.3.0/README.md`](evidence/v0.3.0/README.md).
+   [`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md).
 5. Physical Android, iOS, and a human screen-reader pass remain open.
 6. Staging runs use `.staging/` and must never touch the production daemon.
 

@@ -3,7 +3,7 @@
 The JCode Mobile adapter is one authenticated HTTP and WebSocket service. It
 uses the JCode SDK and harness API, and exposes a versioned mobile protocol to
 the Stillness 12 client. This document describes the implementation in
-`crates/adapter-*` at version 0.3.0.
+`crates/adapter-*` at version 0.3.1.
 
 The protocol crate is the source of truth for payload types:
 [`crates/adapter-protocol/src/lib.rs`](../crates/adapter-protocol/src/lib.rs).
@@ -25,7 +25,7 @@ payload-level detail lives here and in that Rust module.
 {
   "ok": true,
   "server_id": "srv_...",
-  "adapter_version": "0.3.0",
+  "adapter_version": "0.3.1",
   "protocol_version": 2,
   "jcode_connected": true,
   "jcode_server": "jcode-harness-api-bridge/0.1.0"
@@ -57,7 +57,7 @@ Content-Type: application/json
   "server": {
     "server_id": "srv_...",
     "name": "JCode Mobile",
-    "adapter_version": "0.3.0",
+    "adapter_version": "0.3.1",
     "protocol_version": 2,
     "min_protocol_version": 2,
     "jcode_version": "jcode-harness-api-bridge/0.1.0",
@@ -145,7 +145,7 @@ and `operation_id` where applicable.
 ```json
 {
   "client_name": "Stillness 12",
-  "client_version": "0.3.0",
+  "client_version": "0.3.1",
   "min_version": 2,
   "max_version": 2,
   "supports": ["sessions.list", "operations.dispatch"]

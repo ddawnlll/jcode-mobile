@@ -132,3 +132,22 @@ Status is DONE only with evidence in `docs/evidence/v0.3.0/README.md`.
 | 9.9 | iOS build | NOT_APPLICABLE | requires macOS and Xcode |
 | 9.10 | Repository-wide lint | DONE | Repository and Stillness lint pass with 0 errors and 0 warnings; generated/vendored paths ignored explicitly |
 | 9.11 | Performance measurements | PARTIAL | Adapter RSS/CPU and native RSS measured; cold-start and frame timing NOT_RUN |
+
+## Phase 10 — v0.3.1 audit fixes and release
+
+Status is DONE only with evidence in `docs/evidence/v0.3.1/README.md`.
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 10.1 | Android ARM audit of published 0.3.0 | DONE | 9 bugs documented in `docs/evidence/v0.3.1/BUGS.md` |
+| 10.2 | Authoritative history via attach + get_history | DONE | Snapshot shows tool rows and the latest assistant message; regression test `snapshot_after_finished_tool_turn_includes_tool_rows_and_promotes_pending` passes |
+| 10.3 | Session identity for create | DONE | New session yields a distinct id; create idempotency regression test passes; verified on-device with `Audit run three` |
+| 10.4 | Pending-operation promotion and composer re-enable | DONE | Consecutive sends both reach `observed_in_history`; composer re-enabled; `SessionScreen` no longer marks finished turns `streaming` |
+| 10.5 | Android packaging: loopback cleartext carve-out | DONE | Fresh pair over loopback HTTP verified on-device against an isolated adapter |
+| 10.6 | Status truth: no false harness-unavailable banner; single banner; reconciled finish state | DONE | Zero `.connection-banner` nodes when healthy; observed block timer stops at turn_done |
+| 10.7 | Isolated-daemon marketing capture pipeline | DONE | `marketing-media/capture-stillness-screens.mjs` reports `errors: []`; `marketing:test` passes 76/76 |
+| 10.8 | Release artifact | DONE | `artifacts/jcode-mobile-0.3.1-android-release.apk`, `versionCode 3001`, `versionName 0.3.1`, sha256 `03a6d808…`; release notes in `docs/V0_3_1_RELEASE_NOTES.md` |
+
+Known open items carried into 0.3.1: physical Android device validation NOT_RUN,
+a human screen-reader pass NOT_RUN, LAN plain-http pairing intentionally not
+supported, interactive tool input/approval NOT_IMPLEMENTED.

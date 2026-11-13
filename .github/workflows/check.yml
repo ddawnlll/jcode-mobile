@@ -2,13 +2,13 @@ name: check
 
 # The JavaScript job covers the repository and the retained Expo client.
 # The manual Android jobs build that legacy Expo client only. The current
-# 0.3.0 Stillness APK is built by scripts/build-android-release.sh and is not
+# 0.3.1 Stillness APK is built by scripts/build-android-release.sh and is not
 # produced by this workflow.
 on:
   workflow_dispatch:
     inputs:
       release:
-        description: Build the legacy Expo 0.2.2 APK (not the 0.3.0 Stillness APK)
+        description: Build the legacy Expo 0.2.2 APK (not the 0.3.1 Stillness APK)
         type: boolean
         default: false
   push:

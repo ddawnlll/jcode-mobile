@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Render the 1200 x 630 social card from the committed 0.3.0 composition.
+ * Render the 1200 x 630 social card from the committed 0.3.1 composition.
  *
  * Usage:
  *   node scripts/marketing-media/render-social-card.mjs

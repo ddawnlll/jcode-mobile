@@ -2,7 +2,7 @@
 
 [package]
 name = "stillness"
-version = "0.3.0"
+version = "0.3.1"
 description = "Stillness 12 desktop shell for JCode Mobile"
 authors = ["JCode Mobile"]
 edition = "2021"

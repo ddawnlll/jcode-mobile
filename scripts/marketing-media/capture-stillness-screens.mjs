@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Capture the public v0.3.0 product images from a real Stillness build.
+ * Capture the public v0.3.1 product images from a real Stillness build.
  *
  * The script expects an isolated Adapter v2 with a disposable data directory
  * and a fixed pairing code. It creates one real session on that isolated
@@ -69,12 +69,12 @@ await page.evaluate(() => {
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.getByTestId('welcome-screen').waitFor({ timeout: 45_000 });
 await page.waitForTimeout(700);
-await shot('welcome-v030');
+await shot('welcome-v031');
 
 await page.getByTestId('start-pairing').click();
 await page.getByTestId('pair-screen').waitFor();
 await page.waitForTimeout(400);
-await shot('pair-v030');
+await shot('pair-v031');
 
 await page.getByTestId('pair-server').fill(APP_URL.replace(/\/$/, ''));
 await page.getByTestId('pair-code').fill(PAIR_CODE);
@@ -82,7 +82,7 @@ await page.getByTestId('pair-device').fill('JCode Mobile');
 await page.getByTestId('pair-submit').click();
 await page.getByTestId('ready-screen').waitFor({ timeout: 60_000 });
 await page.waitForTimeout(400);
-await shot('pair-verified-v030');
+await shot('pair-verified-v031');
 await page.getByRole('button', { name: /Enter JCode/ }).click();
 await page.getByTestId('home-screen').waitFor({ timeout: 45_000 });
 
@@ -122,12 +122,12 @@ await page.locator('.transcript-scroll').evaluate((element) => {
   element.scrollTop = element.scrollHeight;
 });
 await page.waitForTimeout(500);
-await shot('session-v030');
+await shot('session-v031');
 
 await page.getByTestId('model-button').click();
 await page.getByTestId('model-sheet').waitFor();
 await page.waitForTimeout(400);
-await shot('models-v030');
+await shot('models-v031');
 await page.getByTestId('model-sheet').getByRole('button', { name: 'Close' }).click();
 
 // Capture the desktop shell while this live turn is still in the transcript.
@@ -139,7 +139,7 @@ await page.locator('.transcript-scroll').evaluate((element) => {
   element.scrollTop = element.scrollHeight;
 });
 await page.waitForTimeout(400);
-await shot('desktop-v030');
+await shot('desktop-v031');
 await page.setViewportSize({ width: 430, height: 900 });
 await page.waitForTimeout(500);
 
@@ -149,13 +149,13 @@ await openDrawer();
 await page.locator('.drawer').getByRole('button', { name: 'Home' }).click();
 await page.getByTestId('home-screen').waitFor();
 await page.waitForTimeout(600);
-await shot('home-v030');
+await shot('home-v031');
 
 await openDrawer();
 await page.locator('.drawer').getByRole('button', { name: 'Settings' }).click();
 await page.getByTestId('settings-screen').waitFor();
 await page.waitForTimeout(400);
-await shot('settings-v030');
+await shot('settings-v031');
 
 await phone.storageState({ path: AUTH_FILE });
 

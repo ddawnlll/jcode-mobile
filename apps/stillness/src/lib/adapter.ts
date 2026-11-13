@@ -83,11 +83,21 @@ export async function pairDevice(
   code: string,
   deviceName: string,
 ): Promise<PairRedeemResponse> {
-  const response = await fetch(`${normalizeServerUrl(baseUrl)}/v2/pair`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ code: code.trim(), device_name: deviceName.trim() }),
-  });
+  const normalized = normalizeServerUrl(baseUrl);
+  let response: Response;
+  try {
+    response = await fetch(`${normalized}/v2/pair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code.trim(), device_name: deviceName.trim() }),
+    });
+  } catch {
+    // fetch() rejects with a browser-native exception ("Failed to fetch");
+    // replace it with an actionable, honest message.
+    throw new Error(
+      `Could not reach the adapter at ${normalized}. Check the address, that the adapter is running, and that this network allows the connection.`,
+    );
+  }
   const payload = (await response.json().catch(() => ({}))) as Partial<PairRedeemResponse & ErrorPayload>;
   if (!response.ok) {
     throw new AdapterRequestError({
@@ -159,7 +169,7 @@ export class AdapterClient {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       return this.request<ServerHelloPayload>('client.hello', {
         client_name: 'stillness-web',
-        client_version: '0.3.0',
+        client_version: '0.3.1',
         min_version: PROTOCOL_VERSION,
         max_version: PROTOCOL_VERSION,
         supports: [WS_SUBPROTOCOL],
@@ -172,7 +182,7 @@ export class AdapterClient {
       'client.hello',
       {
         client_name: 'stillness-web',
-        client_version: '0.3.0',
+        client_version: '0.3.1',
         min_version: PROTOCOL_VERSION,
         max_version: PROTOCOL_VERSION,
         supports: [WS_SUBPROTOCOL],

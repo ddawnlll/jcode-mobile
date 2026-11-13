@@ -1,4 +1,4 @@
-# Adapter v2 deployment (0.3.0)
+# Adapter v2 deployment (0.3.1)
 
 Live host: `12735.example.com`, public origin `https://dawnll.duckdns.org`.
 Caddy proxies the origin to `127.0.0.1:7644`; the adapter serves both the
@@ -46,7 +46,7 @@ journalctl --user -u jcode-mobile-adapter-v2.service -n 40 --no-pager |
 ```
 
 Restart the adapter to issue a new code. Codes are single use. Adapter v2
-cannot import 0.2.2 device tokens, so the 0.3.0 client pairs once.
+cannot import 0.2.2 device tokens, so the 0.3.1 client pairs once.
 
 ## Legacy 0.2.2 unit
 
@@ -69,7 +69,7 @@ systemctl --user disable --now jcode-mobile-adapter-v2.service \
 
 ## Verified at cutover
 
-- `GET /health` on loopback and through Caddy returns `adapter_version: 0.3.0`,
+- `GET /health` on loopback and through Caddy returns `adapter_version: 0.3.1`,
   `protocol_version: 2`, `jcode_connected: true`.
 - `GET /` returns the Stillness 12 build (`JCode Mobile`).
 - Playwright pairing through `https://dawnll.duckdns.org` succeeded against the

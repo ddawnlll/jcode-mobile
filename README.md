@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/media/marketing/readme-hero.png" alt="JCode Mobile 0.3.0 on a phone: the home screen and a live session beside it" width="100%" />
+  <img src="docs/media/marketing/readme-hero.png" alt="JCode Mobile 0.3.1 on a phone: the home screen and a live session beside it" width="100%" />
 </p>
 
-<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.3.0</code></sub></p>
+<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.3.1</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.0"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
+  <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.1"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml/badge.svg" alt="CI status" /></a>
   <a href="docs/API.md"><img src="https://img.shields.io/badge/API-Adapter_v2-2F6F52?style=flat-square" alt="Adapter v2 API" /></a>
   <br />
@@ -22,8 +22,8 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ANDROID / 0.3.0 / 10.5 MiB</code></sub><br /><br />
-      <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk"><strong>Download the APK</strong></a><br />
+      <sub><code>ANDROID / 0.3.1 / 10.5 MiB</code></sub><br /><br />
+      <a href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk"><strong>Download the APK</strong></a><br />
       <sub>Debug-signed sideload. No Play Store listing.</sub>
     </td>
     <td width="33%" align="center" valign="top">
@@ -39,12 +39,12 @@
   </tr>
 </table>
 
-> **0.3.0 is a development preview.** It replaces the Expo client with the
+> **0.3.1 is a development preview.** It replaces the Expo client with the
 > Stillness 12 Tauri client and the Rust Adapter v2. The Android APK is
 > debug-signed for sideloading. The native Linux shell builds from source.
 > There is no iOS artifact or Play Store listing.
 
-## What 0.3.0 is
+## What 0.3.1 is
 
 JCode Mobile is two processes:
 
@@ -54,6 +54,15 @@ JCode Mobile is two processes:
 2. **Stillness 12** is the Tauri 2 client. It paints a paired, cached, or
    reconnecting state without inventing work, and it restores the exact server
    and session you left.
+
+0.3.1 is the reliability release for 0.3.0. An Android ARM audit on a real
+emulator against the pinned JCode daemon reproduced and fixed nine defects,
+including three that destroyed agent state — the authoritative snapshot lost
+every tool card, a second new session re-attached and renamed the existing
+session, and the composer locked forever after one completed turn. Pairing the
+release build to a loopback adapter, the loopback-HTTP release policy, and the
+composer and delivery-state reconciliation are all corrected and verified on
+the emulator. No UI redesign ships in this release.
 
 The phone never runs the agent. Prompts, tools, files, and long turns stay on
 the server. Navigation, backgrounding, socket close, and app kill never send
@@ -69,7 +78,7 @@ Cancel. Only the explicit **Stop** control targets the current turn.
 ## One pairing
 
 <p align="center">
-  <img src="docs/media/marketing/pair-v030.png" alt="JCode Mobile pairing screen with server address, pairing code, and device name" width="260" />
+  <img src="docs/media/marketing/pair-v031.png" alt="JCode Mobile pairing screen with server address, pairing code, and device name" width="260" />
 </p>
 
 Start the adapter. Its terminal prints a single-use pairing code for this run.
@@ -82,11 +91,11 @@ Service, never in SQLite, logs, or the URL.
 <table>
   <tr>
     <td width="50%" align="center" valign="top">
-      <img src="docs/media/marketing/home-v030.png" alt="JCode Mobile home screen with a live session and the jcode-mobile project" width="260" /><br />
-      <sub><strong>HOME</strong><br />Continue the session. See the project.</sub>
+      <img src="docs/media/marketing/home-v031.png" alt="JCode Mobile home screen with Harness online and the sessions list" width="260" /><br />
+      <sub><strong>HOME</strong><br />Harness online. Continue the session.</sub>
     </td>
     <td width="50%" align="center" valign="top">
-      <img src="docs/media/marketing/session-v030.png" alt="JCode Mobile session with a real answer, reasoning, model, and composer" width="260" /><br />
+      <img src="docs/media/marketing/session-v031.png" alt="JCode Mobile session with a real answer, the model route, and the composer" width="260" /><br />
       <sub><strong>SESSION</strong><br />Read the answer. Keep the thread.</sub>
     </td>
   </tr>
@@ -100,7 +109,7 @@ sends are scoped to the server and session.
 ## Command Code, in the route list
 
 <p align="center">
-  <img src="docs/media/marketing/models-v030.png" alt="JCode Mobile model sheet with Command Code routes and the selected deepseek model" width="260" />
+  <img src="docs/media/marketing/models-v031.png" alt="JCode Mobile model sheet with Command Code routes and the Command Code native provider" width="260" />
 </p>
 
 The pinned JCode fork exposes Command Code as a native provider. The adapter
@@ -110,7 +119,7 @@ entitlement from a catalog, invent a provider key, or proxy a credential.
 ## The desktop shell
 
 <p align="center">
-  <img src="docs/media/marketing/desktop-v030.png" alt="JCode Mobile Stillness 12 desktop shell with sidebar, conversation, and inspector" width="100%" />
+  <img src="docs/media/marketing/desktop-v031.png" alt="JCode Mobile Stillness 12 desktop shell with sidebar, conversation, and inspector" width="100%" />
 </p>
 
 The same build runs as a three-pane Tauri window on Linux. The sidebar, central
@@ -120,18 +129,18 @@ what the server reported: plan, context, activity, runtime, and provider.
 ## Install the Android APK
 
 ```text
-jcode-mobile-0.3.0-android-release.apk
-11,020,965 bytes
-SHA-256 4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2
+jcode-mobile-0.3.1-android-release.apk
+11,016,925 bytes
+SHA-256 03a6d808524461e12dca1370540eede2e040e179e9f116cec980effb180da562
 package dev.jcode.stillness
-versionCode 3000, versionName 0.3.0
+versionCode 3001, versionName 0.3.1
 minSdk 24, targetSdk 37, compileSdk 37
 arm64-v8a + armeabi-v7a
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r jcode-mobile-0.3.0-android-release.apk
+adb install -r jcode-mobile-0.3.1-android-release.apk
 ```
 
 The package identifier is new. A clean install is expected. App data from the
@@ -195,31 +204,33 @@ when the host has no system GTK/WebKit development packages.
 
 | Check | Result |
 | --- | --- |
-| Adapter v2 Rust tests | PASS, 30 tests |
-| Rust formatting | PASS |
 | Stillness typecheck and production bundle | PASS |
 | Repository and Stillness lint | PASS, 0 errors and 0 warnings |
-| Root TypeScript typecheck | PASS |
-| Legacy Jest/RNTL suite | PASS, 14 suites / 139 tests |
+| Root typecheck, lint, Jest/RNTL | PASS, 14 suites / 139 tests |
+| Adapter v2 Rust tests | PASS, 32 tests |
+| Rust formatting | PASS |
 | Real isolated JCode daemon + SDK handshake | PASS |
-| Real-stack Playwright | PASS, 4 passed / 3 project-guarded skips |
-| Website build and browser matrix | PASS, 25 unit tests; 76 passed / 3 skipped |
-| Command Code generation | PASS, real `deepseek/deepseek-v4-flash` answer |
-| Android APK | PASS, static verification and emulator runtime of a same-source build |
+| Real Android release APK on ARM emulator | PASS |
+| Credential restore across force-stop/relaunch | PASS |
+| Explicit Stop targets one turn | PASS |
+| Adapter restart and reconnect | PASS |
+| Command Code-routed generation | PASS, real `gpt-6.1-sol` answer |
+| Website build and browser matrix | PASS, 25 unit tests; Playwright matrix |
 | Native Linux Tauri | PASS, release build and Xvfb launch |
 | Secret Service keyring | PASS, round trip plus pairing and relaunch |
 | Physical Android device | NOT_RUN |
 | iOS | NOT_APPLICABLE on this Linux host |
 
 The current evidence is [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and
-[`docs/evidence/v0.3.0/README.md`](docs/evidence/v0.3.0/README.md).
+[`docs/evidence/v0.3.1/README.md`](docs/evidence/v0.3.1/README.md).
 
 ## Limits
 
 - The Android APK is debug-signed and sideload-only. There is no Play Store
   release, release keystore, auto-update channel, or signed iOS build.
-- The release APK is ARM-only. The emulator check used a same-source x86_64
-  debug build.
+- The release APK is ARM-only. The Android runtime checks used the
+  arm64-v8a emulator on macOS.
+- Physical-device validation and a human screen-reader pass remain `NOT_RUN`.
 - JCode's curated API exposes aggregate edit statistics, not a verified per-file
   diff. The Changes screen says so.
 - Upstream cancellation is session-scoped. The adapter verifies the expected
@@ -238,7 +249,7 @@ The current evidence is [`docs/VERIFICATION.md`](docs/VERIFICATION.md) and
 | [Development](docs/DEVELOPMENT.md) | Repository layout, commands, tests, release builds |
 | [Verification](docs/VERIFICATION.md) | PASS, PARTIAL, NOT_RUN, and BLOCKED with evidence |
 | [Build state](docs/BUILD_STATE.md) | Versions, artifacts, checksums, resumption point |
-| [Release notes](docs/V0_3_0_RELEASE_NOTES.md) | 0.3.0 scope and known limits |
+| [Release notes](docs/V0_3_1_RELEASE_NOTES.md) | 0.3.1 scope and known limits |
 
 ---
 

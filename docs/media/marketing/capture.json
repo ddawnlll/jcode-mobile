@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-11-12T09:22:11.517Z",
+  "captured_at": "2026-11-13T13:16:06.112Z",
   "app_url": "http://127.0.0.1:7652/",
   "session_title": "Release notes, from the train",
   "prompt": "In three plain sentences, explain why server-side execution matters when the phone disconnects. Do not use tools.",
@@ -11,6 +11,6 @@
     "width": 1280,
     "height": 900
   },
-  "auth_file": ".staging/marketing/playwright-auth.json",
+  "auth_file": ".staging/audit-v030/marketing-auth3.json",
   "errors": []
 }

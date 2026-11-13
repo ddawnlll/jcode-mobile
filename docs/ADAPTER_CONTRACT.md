@@ -1,12 +1,12 @@
 # Adapter v2 contract and source evidence
 
-This document records the implementation boundary for JCode Mobile 0.3.0. The
+This document records the implementation boundary for JCode Mobile 0.3.1. The
 wire reference is [`API.md`](API.md). The payload types are in
 `crates/adapter-protocol/src/lib.rs`; the adapter is one process with one SQLite
 journal.
 
 The older TypeScript adapter in `integration/jcode-adapter` is retained for the
-Expo 0.2.x line. It is not the 0.3.0 transport and is not used by the Stillness
+Expo 0.2.x line. It is not the 0.3.1 transport and is not used by the Stillness
 12 client.
 
 ## Pinned JCode source

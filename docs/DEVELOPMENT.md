@@ -1,6 +1,6 @@
 # Development
 
-JCode Mobile 0.3.0 is a Rust adapter plus a Tauri 2 client. The phone is a
+JCode Mobile 0.3.1 is a Rust adapter plus a Tauri 2 client. The phone is a
 client. The daemon owns execution.
 
 Read [`GETTING_STARTED.md`](GETTING_STARTED.md) to run it. Read
@@ -41,7 +41,7 @@ The current release was built on Debian 13 with OpenJDK 21, Android SDK 37, NDK
 | Tooling | Bun 1.4.4, Cargo, Playwright, Jest/RNTL for the legacy app |
 
 The root Expo/React Native app under `src/` is the 0.2.x client. It remains for
-history and legacy tests. The 0.3.0 product is `crates/adapter-*` plus
+history and legacy tests. The 0.3.1 product is `crates/adapter-*` plus
 `apps/stillness`.
 
 ## Repository layout
@@ -146,10 +146,10 @@ The Android wrapper is `scripts/build-android-release.sh`, which delegates to
 `scripts/build-stillness-android.sh`. It detects JDK 21/17 and the SDK, installs
 missing Rust Android targets, builds the web bundle, runs
 `tauri android build`, zipaligns, signs, verifies, and writes
-`artifacts/jcode-mobile-0.3.0-android-release.apk.sha256`.
+`artifacts/jcode-mobile-0.3.1-android-release.apk.sha256`.
 
 The legacy Expo build is `scripts/build-expo-android-release.sh`. It is not the
-0.3.0 artifact.
+0.3.1 artifact.
 
 ## Host setup
 
@@ -224,7 +224,7 @@ the Playwright run. Report anything not run as `NOT_RUN`.
 
 ```sh
 bash scripts/build-android-release.sh
-adb install -r artifacts/jcode-mobile-0.3.0-android-release.apk
+adb install -r artifacts/jcode-mobile-0.3.1-android-release.apk
 adb shell am start -n dev.jcode.stillness/.MainActivity
 ```
 
@@ -264,7 +264,7 @@ second design system. The UI is light-first, with reduced motion supported as a
 first-class setting.
 
 The legacy Expo design tokens under `src/design/` apply only to the 0.2.x app.
-They are not the 0.3.0 Stillness theme.
+They are not the 0.3.1 Stillness theme.
 
 ## Release checklist
 
@@ -282,7 +282,7 @@ They are not the 0.3.0 Stillness theme.
 11. `bash scripts/build-tauri-linux.sh`
 12. Update [`VERIFICATION.md`](VERIFICATION.md),
     [`BUILD_STATE.md`](BUILD_STATE.md), and
-    [`evidence/v0.3.0/README.md`](evidence/v0.3.0/README.md).
+    [`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md).
 
 ## Documentation map
 
@@ -294,7 +294,7 @@ They are not the 0.3.0 Stillness theme.
 | [`VERIFICATION.md`](VERIFICATION.md) | PASS, PARTIAL, NOT_RUN, BLOCKED |
 | [`BUILD_STATE.md`](BUILD_STATE.md) | Versions, artifacts, checksums |
 | [`V0_3_0_ADAPTER_V2_STILLNESS_V12.md`](V0_3_0_ADAPTER_V2_STILLNESS_V12.md) | Original design contract |
-| [`evidence/v0.3.0/README.md`](evidence/v0.3.0/README.md) | Observed evidence |
+| [`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md) | Observed evidence |
 
 ## Independent project
 

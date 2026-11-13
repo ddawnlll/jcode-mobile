@@ -20,7 +20,7 @@ This document describes the root-owned tooling around it:
 
 ## Verified
 
-On 2026-11-12, against the 0.3.0 site source:
+On 2026-11-13, against the 0.3.1 site source:
 
 - `bun install --frozen-lockfile`: 1063 packages, no changes.
 - `bun run check`: typecheck, lint, and the Jest suite pass (139 tests).
@@ -34,7 +34,7 @@ On 2026-11-12, against the 0.3.0 site source:
 - The Playwright matrix covers 320, 390, 768, and 1440 px, the no-JavaScript
   fallback, and the static server contract.
 - Visually reviewed desktop 1440 and mobile 390/320: no horizontal overflow,
-  the pinned stage holds, and the scene images are the real v0.3.0 captures.
+  the pinned stage holds, and the scene images are the real v0.3.1 captures.
 
 Deployment is manual through `.github/workflows/marketing.yml`; the live URL is
 https://ddawnlll.github.io/jcode-mobile/.
@@ -88,7 +88,7 @@ Every build writes `build-manifest.json` beside the copied files:
   "schemaVersion": 1,
   "generator": "scripts/marketing/build.mjs",
   "entry": "index.html",
-  "productVersion": "0.3.0",
+  "productVersion": "0.3.1",
   "basePath": ".",
   "fileCount": 24,
   "totalBytes": 2700648,
@@ -164,10 +164,10 @@ MARKETING_ALLOWED_EXTERNAL_PREFIXES="https://example.com/product" \
 The exact primary CTA target is:
 
 ```text
-https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk
+https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk
 ```
 
-`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.3.0`
+`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.3.1`
 version, and `referrerpolicy="no-referrer"`.
 
 ## Commands
@@ -232,7 +232,7 @@ Assertions include:
 
 - no horizontal document/body overflow and a single visible `h1`
 - visible heading hierarchy with no skipped levels
-- exact v0.3.0 APK CTA and visible version text
+- exact v0.3.1 APK CTA and visible version text
 - every internal anchor and local image resolves
 - custom fonts load and all runtime requests stay inside `/jcode-mobile/`
 - scene tabs are keyboard operable (`ArrowRight`, `Home`, `End`, `Enter`),

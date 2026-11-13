@@ -543,8 +543,14 @@ async fn snapshot_after_finished_tool_turn_includes_tool_rows_and_promotes_pendi
         )
         .await,
     );
-    let _: OperationStatePayload =
-        response_payload(&call(&h, "operations.dispatch", json!({"operation_id": "op-tool"})).await);
+    let _: OperationStatePayload = response_payload(
+        &call(
+            &h,
+            "operations.dispatch",
+            json!({"operation_id": "op-tool"}),
+        )
+        .await,
+    );
     handle_backend_event(
         Arc::clone(&h.state),
         BackendEvent::Accepted {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Install the JCode Mobile Adapter v2 (0.3.0) as per-user systemd services.
+# Install the JCode Mobile Adapter v2 (0.3.1) as per-user systemd services.
 #
 # The 0.2.2 TypeScript adapter runs from the system unit
 # `jcode-mobile-adapter.service`, which needs root to stop or disable. This
-# script installs the 0.3.0 pair under the user manager instead, so no step
+# script installs the 0.3.1 pair under the user manager instead, so no step
 # here requires sudo. Linger is enabled for this account, so the services
 # start at boot and survive logout.
 #
@@ -61,7 +61,7 @@ EOF
 
 cat > "$UNIT_DIR/jcode-mobile-adapter-v2.service" <<EOF
 [Unit]
-Description=JCode Mobile Adapter v2 (0.3.0)
+Description=JCode Mobile Adapter v2 (0.3.1)
 After=network-online.target jcode-mobile-api-bridge.service
 Wants=network-online.target jcode-mobile-api-bridge.service
 

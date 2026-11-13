@@ -1,6 +1,6 @@
 # Getting started
 
-JCode Mobile 0.3.0 is the Stillness 12 Tauri client paired with the Rust
+JCode Mobile 0.3.1 is the Stillness 12 Tauri client paired with the Rust
 Adapter v2. The phone is the surface. The adapter and the JCode daemon do the
 work on your server.
 
@@ -112,19 +112,19 @@ the phone.
 
 Download the current artifact:
 
-[**jcode-mobile-0.3.0-android-release.apk**](https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.0/jcode-mobile-0.3.0-android-release.apk)
+[**jcode-mobile-0.3.1-android-release.apk**](https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk)
 
 ```text
-11,020,965 bytes
-SHA-256 4a79ba0aeaf026949ecbdb57591fc7e18dd87fb47d10c67ff49bf03be63060d2
+11,016,925 bytes
+SHA-256 03a6d808524461e12dca1370540eede2e040e179e9f116cec980effb180da562
 package dev.jcode.stillness
 minSdk 24
 arm64-v8a + armeabi-v7a
 ```
 
 ```sh
-sha256sum jcode-mobile-0.3.0-android-release.apk
-adb install -r jcode-mobile-0.3.0-android-release.apk
+sha256sum jcode-mobile-0.3.1-android-release.apk
+adb install -r jcode-mobile-0.3.1-android-release.apk
 ```
 
 The APK is debug-signed for sideloading. It is not a Play Store build. The
@@ -264,7 +264,7 @@ rate-limited per peer IP.
 
 ### The terminal shows "Connect host" and a six-digit code
 
-That is JCode's built-in mobile gateway, not Adapter v2. Stillness 0.3.0 calls
+That is JCode's built-in mobile gateway, not Adapter v2. Stillness 0.3.1 calls
 `/v2/pair` and expects the adapter's ten-minute code, normally formatted
 `XXXX-XXXX-XXXX`.
 
