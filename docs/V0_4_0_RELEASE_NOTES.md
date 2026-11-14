@@ -65,13 +65,13 @@ Android package: `dev.jcode.stillness`, versionCode 4000
 
 | Check | Result |
 | --- | --- |
-| `cargo test --workspace` | PASS, see `docs/evidence/v0.4.0/` |
+| `cargo test --workspace` | PASS, 72 tests: 28 core, 10 protocol, 17 server lib, 17 integration |
 | `cargo fmt --check`, `cargo clippy -D warnings` | PASS |
 | Stillness `tsc --noEmit && vite build` | PASS |
 | UX helper checks (`scripts/check-stillness-ux.mjs`) | PASS 7/7 |
-| Browser e2e against real daemon + Adapter v3 | PASS 4, skipped 3 by design |
+| Browser e2e against real daemon + Adapter v3 | PASS, 4 passed / 3 skipped; 5 passed / 3 skipped with the perf spec. The skips are desktop duplicates plus the desktop delivery case |
 | Adapter v3 real-stack smoke (real agent turn) | PASS |
-| Android Kotlin compile | PASS on this host (JDK 24, SDK 36) |
+| Android Kotlin compile | PASS on this host (JDK 24, SDK 37, NDK 27.1.12297006) |
 | Android release APK | see `docs/BUILD_STATE.md` |
 | Android emulator install/launch | see `docs/BUILD_STATE.md` |
 | Physical Android device | NOT_RUN (no device attached) |
