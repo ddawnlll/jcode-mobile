@@ -151,3 +151,31 @@ Status is DONE only with evidence in `docs/evidence/v0.3.1/README.md`.
 Known open items carried into 0.3.1: physical Android device validation NOT_RUN,
 a human screen-reader pass NOT_RUN, LAN plain-http pairing intentionally not
 supported, interactive tool input/approval NOT_IMPLEMENTED.
+
+## Phase 11 — v0.4.0 Elegance (Adapter v3, native Android, gestures)
+
+Status is DONE only with evidence in `docs/evidence/v0.4.0/`.
+Release tracker: #53. Branch: `feat/adapter-v3`.
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 11.1 | Adapter v3 protocol and negotiation (#54) | DONE | v3 + v2 accepted, negotiated version per connection, outbound frames normalized, handshake at v2, 10 conformance tests, real v2/v3 handshake smoke PASS |
+| 11.2 | Durable journal, replay, idempotency (#55) | DONE | transactional seq, retention floor + gap flag, ack cursor, restart replay test, 10k bounded test, reconnect smoke with 0 duplicates and no re-execution |
+| 11.3 | Bridge supervision and health (#56) | DONE | supervisor retained; last contact/error, reconnect count, active turns, connection/frame counters |
+| 11.4 | Cache-first startup and delta sync (#57) | DONE (web) | cached paint with socket blocked 60 ms, shell-to-paint 56 ms, delta merge + tombstones, stale fallback; Android measurement in 11.13 |
+| 11.5 | Diagnostics and fault injection (#58) | DONE | `diagnostics.snapshot` real counters + p50/p95; `JCODE_ADAPTER_FAULTS` with tests |
+| 11.6 | Android background companion (#59) | IN PROGRESS | WorkManager + setting implemented on `feat/android-native`; emulator/Doze evidence pending |
+| 11.7 | FCM registration and push (#60) | PARTIAL | registration/preferences/dedupe/FCM v1 sender + tests; real delivery NOT_RUN (no Firebase credentials) |
+| 11.8 | Notifications, channels, deep links (#61) | IN PROGRESS | Kotlin channels and deep-link forwarding implemented on `feat/android-native`; permission/notification evidence pending |
+| 11.9 | Sharesheet, pickers, downloads, clipboard (#62,#64,#65,#68) | IN PROGRESS | Kotlin implementations on `feat/android-native`; emulator interaction evidence pending |
+| 11.10 | Biometric lock, lifecycle, insets, back (#63,#66) | IN PROGRESS | Keystore/biometric, edge-to-edge and back bridge implemented; device evidence pending |
+| 11.11 | Shortcuts, widget, Quick Settings (#67) | IN PROGRESS | implemented; verification pending |
+| 11.12 | Gestures and motion (#69,#70) | DONE (Chromium) | 12 browser checks PASS, screenshots `evidence/v0.4.0/ui/`; native frame pacing NOT_RUN |
+| 11.13 | Conversation, navigation and model UX (#71,#72,#48,#77,#50,#51,#52,#44,#36) | DONE (Chromium) | timeline ordering, copy, switcher, model disambiguation, slider, permission panel, title stability; 7 node checks + e2e PASS |
+| 11.14 | Correctness (#28,#29,#37) | DONE | stop rejects contradictory ids; create retry idempotent; exact route/effort tests |
+| 11.15 | Session actions (archive/restore/favorite/delete) | DONE (adapter) / UI wiring in progress | authoritative archive/restore/favorite with tests; delete refused honestly |
+| 11.16 | Image attachments (#49) | DONE (adapter+client API) | validation, persistence, SDK image send, conflict tests; UI picker evidence pending |
+| 11.17 | Android E2E matrix (#73) | NOT_RUN / partial | emulator booted with the app; formal matrix, chaos and process-death runs pending |
+| 11.18 | Migration, release APK, rollback (#74) | IN PROGRESS | docs written; APK build and install pending |
+| 11.19 | Battery, accessibility, privacy audit (#75) | PARTIAL | contrast and target sizes measured; screen reader, battery, frame pacing NOT_RUN |
+| 11.20 | CI builds the current Tauri app (#73/#74) | DONE (workflow) | Rust job + Stillness Android APK job added; CI run itself NOT_RUN until pushed |
