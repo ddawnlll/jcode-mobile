@@ -26,6 +26,8 @@ import { BrowserScreen } from './screens/Browser';
 import { ActivityScreen, PlanScreen, SessionScreen } from './screens/Session';
 import { QuickSwitcher } from './components/QuickSwitcher';
 import { UndoToast } from './components/UndoToast';
+import { LockGate } from './components/LockGate';
+import { useNativeShell } from './components/useNativeShell';
 import { useSessionPrefs, visibleSessions } from './lib/sessionPrefs';
 
 function ScreenRouter({ state }: { state: AppState }) {
@@ -66,7 +68,8 @@ function ScreenRouter({ state }: { state: AppState }) {
 
 function Rail({ state }: { state: AppState }) {
   const prefs = useSessionPrefs(state.credential?.serverId ?? null);
-  const railSessions = visibleSessions(state.sessions, prefs).slice(0, 12);
+  const online = state.connection.status === 'connected';
+  const railSessions = visibleSessions(state.sessions, prefs, online).slice(0, 12);
   const nav: Array<{ screen: 'home' | 'sessions' | 'projects' | 'settings'; label: string; icon: React.ReactNode }> = [
     { screen: 'home', label: 'Home', icon: <Torus size={18} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },
@@ -169,6 +172,7 @@ function Splash() {
 
 export default function App() {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  useNativeShell(state.phase !== 'loading');
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -206,16 +210,27 @@ export default function App() {
     };
   }, []);
 
-  if (state.phase === 'loading') return <Splash />;
-  if (state.phase === 'unpaired') {
-    return (
+  let content: React.ReactNode;
+  if (state.phase === 'loading') {
+    content = <Splash />;
+  } else if (state.phase === 'unpaired') {
+    content = (
       <>
         {state.screen === 'pair' ? <PairScreen state={state} /> : <WelcomeScreen state={state} />}
         <Toast message={state.toast} />
       </>
     );
+  } else if (state.phase === 'ready') {
+    content = <ReadyScreen state={state} />;
+  } else if (state.phase === 'pairing') {
+    content = <PairingScreen state={state} />;
+  } else {
+    content = <Shell state={state} />;
   }
-  if (state.phase === 'ready') return <ReadyScreen state={state} />;
-  if (state.phase === 'pairing') return <PairingScreen state={state} />;
-  return <Shell state={state} />;
+  return (
+    <>
+      {content}
+      <LockGate />
+    </>
+  );
 }

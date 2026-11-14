@@ -28,6 +28,7 @@ export function Drawer({ state }: { state: AppState }) {
   const previousFocus = useRef<HTMLElement | null>(null);
   const [dragging, setDragging] = useState(false);
   const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
   const open = state.drawerOpen;
   const visible = open || dragging;
 
@@ -177,7 +178,7 @@ export function Drawer({ state }: { state: AppState }) {
     }
   };
 
-  const recent = visibleSessions(state.sessions, prefs).slice(0, 6);
+  const recent = visibleSessions(state.sessions, prefs, online).slice(0, 6);
   const nav: Array<{ screen: Screen; label: string; icon: React.ReactNode }> = [
     { screen: 'home', label: 'Home', icon: <Torus size={20} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },

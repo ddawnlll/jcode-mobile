@@ -7,6 +7,7 @@
  * for reduced motion.
  */
 import { useEffect, useRef, useState } from 'react';
+import { haptic as nativeHaptic } from '../lib/native';
 
 export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
@@ -158,12 +159,26 @@ export function prefersCoarsePointer(): boolean {
 
 export type HapticKind = 'select' | 'snap' | 'open' | 'warn';
 
+const NATIVE_HAPTIC: Record<HapticKind, 'light' | 'medium' | 'heavy'> = {
+  select: 'light',
+  snap: 'medium',
+  open: 'light',
+  warn: 'heavy',
+};
+
 /**
  * Tactile confirmation for snap events. Native shells map this to their
- * haptics engine; browsers without a vibration API (including iOS) no-op.
+ * haptics engine, which also honors the Settings toggle; browsers without a
+ * vibration API (including iOS) no-op.
  */
 export function haptic(kind: HapticKind = 'select'): void {
   try {
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      void nativeHaptic(NATIVE_HAPTIC[kind]).catch(() => {
+        // The native shell reports an unsupported haptics engine; no fallback.
+      });
+      return;
+    }
     if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
     const pattern: Record<HapticKind, number | number[]> = {
       select: 8,

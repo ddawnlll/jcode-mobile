@@ -4,8 +4,10 @@ import {
   IconArrowUp,
   IconCheck,
   IconChevron,
+  IconClose,
   IconCommand,
   IconEdit,
+  IconImage,
   IconMore,
   IconRefresh,
   IconShield,
@@ -34,6 +36,14 @@ import { ModelPicker } from '../components/ModelPicker';
 import { ReasoningSlider } from '../components/ReasoningSlider';
 import { openSwitcher } from '../components/QuickSwitcher';
 import { useScrollMemory, savedScrollOffset } from '../components/motion';
+import { pickImages, isNativeBridgeError } from '../lib/native';
+import {
+  attachmentErrorMessage,
+  attachmentFromFile,
+  attachmentFromUri,
+} from '../lib/attachments';
+import { MAX_DRAFT_ATTACHMENTS } from '../lib/attachmentRules';
+import { takePendingShare, usePendingShareRevision } from '../lib/pendingShare';
 
 function startedLabel(live: LiveState): string {
   if (live.needsReconcile) return 'Reconciling with server';
@@ -127,11 +137,23 @@ function PermissionPanel({ state }: { state: AppState }) {
 
 function Composer({ state }: { state: AppState }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [reading, setReading] = useState(0);
+  const [picking, setPicking] = useState(false);
   const hasTurn = Boolean(state.live.turnId);
+  const supportsImages = controller.hasImageAttachmentSupport();
+  const attachments = state.attachments;
+  const attachmentBlocked = attachments.length > 0 && !supportsImages;
   const pendingBlocks = Boolean(
     state.pending && ['staged', 'reserved', 'dispatching', 'accepted', 'unknown'].includes(state.pending.state),
   );
-  const canSend = state.composerText.trim().length > 0 && !hasTurn && !pendingBlocks;
+  const canSend =
+    state.composerText.trim().length > 0 &&
+    !hasTurn &&
+    !pendingBlocks &&
+    reading === 0 &&
+    !picking &&
+    !attachmentBlocked;
   const resize = () => {
     const element = textarea.current;
     if (!element) return;
@@ -144,6 +166,97 @@ function Composer({ state }: { state: AppState }) {
     void controller.send();
     if (textarea.current) textarea.current.style.height = 'auto';
   };
+
+  const attachFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const targetSession = controller.getSnapshot().activeSessionId;
+    const remaining = Math.max(
+      0,
+      MAX_DRAFT_ATTACHMENTS - controller.getSnapshot().attachments.length,
+    );
+    if (remaining === 0) {
+      controller.setToast(`Up to ${MAX_DRAFT_ATTACHMENTS} images can be attached.`);
+      return;
+    }
+    const selected = Array.from(files).slice(0, remaining);
+    if (files.length > remaining) {
+      controller.setToast(`Only ${remaining} more image${remaining === 1 ? '' : 's'} can be attached.`);
+    }
+    setReading((value) => value + selected.length);
+    for (const file of selected) {
+      try {
+        const attachment = await attachmentFromFile(file);
+        // The read is async. A session switch clears the draft, so never add
+        // these bytes to a different session than the one that was open.
+        if (controller.getSnapshot().activeSessionId !== targetSession) return;
+        controller.addAttachment(attachment);
+      } catch (error) {
+        controller.setToast(attachmentErrorMessage(error));
+      } finally {
+        setReading((value) => Math.max(0, value - 1));
+      }
+    }
+  };
+
+  const pickNativeImages = async () => {
+    setPicking(true);
+    try {
+      const targetSession = controller.getSnapshot().activeSessionId;
+      const remaining = Math.max(
+        0,
+        MAX_DRAFT_ATTACHMENTS - controller.getSnapshot().attachments.length,
+      );
+      if (remaining === 0) {
+        controller.setToast(`Up to ${MAX_DRAFT_ATTACHMENTS} images can be attached.`);
+        return;
+      }
+      const picked = await pickImages(remaining);
+      if (picked.status === 'cancelled') return;
+      if (picked.status !== 'picked') {
+        controller.setToast(picked.error ?? 'The image picker is unavailable.');
+        return;
+      }
+      setReading((value) => value + picked.uris.length);
+      for (const uri of picked.uris) {
+        try {
+          const attachment = await attachmentFromUri(uri);
+          if (controller.getSnapshot().activeSessionId !== targetSession) return;
+          controller.addAttachment(attachment);
+        } catch (error) {
+          controller.setToast(attachmentErrorMessage(error));
+        } finally {
+          setReading((value) => Math.max(0, value - 1));
+        }
+      }
+    } catch (error) {
+      if (isNativeBridgeError(error) && error.code === 'unsupported_platform') {
+        fileInput.current?.click();
+      } else {
+        controller.setToast(attachmentErrorMessage(error));
+      }
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const addImage = () => {
+    if (!supportsImages) {
+      controller.setToast(
+        'Image attachments need a v3 adapter. This connection does not advertise attachments.images.',
+      );
+      return;
+    }
+    if (reading > 0 || picking) return;
+    if (controller.getSnapshot().attachments.length >= MAX_DRAFT_ATTACHMENTS) {
+      controller.setToast(`Up to ${MAX_DRAFT_ATTACHMENTS} images can be attached.`);
+      return;
+    }
+    const nativeShell =
+      typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+    if (nativeShell) void pickNativeImages();
+    else fileInput.current?.click();
+  };
+
   return (
     <div className="composer-outer">
       <div className="composer">
@@ -171,15 +284,77 @@ function Composer({ state }: { state: AppState }) {
           }}
           aria-label="Message JCode"
         />
+        {attachments.length > 0 || reading > 0 ? (
+          <div className="attachment-strip" data-testid="attachment-strip">
+            {attachments.map((attachment) => {
+              const preview =
+                attachment.previewUrl ??
+                (attachment.dataBase64
+                  ? `data:${attachment.mediaType};base64,${attachment.dataBase64}`
+                  : null);
+              return (
+                <div className="attachment-thumb" key={attachment.id}>
+                  {preview ? (
+                    <img src={preview} alt={attachment.name || 'Attached image'} />
+                  ) : (
+                    <span className="attachment-placeholder" aria-hidden="true">
+                      <IconImage size={18} />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="attachment-remove"
+                    aria-label={`Remove ${attachment.name || 'image'}`}
+                    onClick={() => controller.removeAttachment(attachment.id)}
+                  >
+                    <IconClose size={14} />
+                  </button>
+                </div>
+              );
+            })}
+            {reading > 0 ? (
+              <div className="attachment-reading" role="status">
+                <Torus size={20} animated />
+                <span>Reading image…</span>
+              </div>
+            ) : null}
+            <span className="attachment-count">
+              {attachments.length}/{MAX_DRAFT_ATTACHMENTS}
+            </span>
+          </div>
+        ) : null}
+        {attachmentBlocked ? (
+          <p className="attachment-blocked" role="alert">
+            This connection does not support image attachments. Remove them to send.
+          </p>
+        ) : null}
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          hidden
+          onChange={(event) => {
+            void attachFiles(event.target.files);
+            event.target.value = '';
+          }}
+        />
         <div className="composer-tools">
           <div className="composer-left">
             <button
-              className="tool-button"
-              aria-label="Attachments are not supported by this adapter"
-              title="Attachments require an adapter capability that is not implemented"
-              disabled
+              type="button"
+              className="tool-button add-image"
+              aria-label="Add image"
+              title={
+                supportsImages
+                  ? 'Add an image'
+                  : 'Image attachments need a v3 adapter'
+              }
+              onClick={addImage}
+              disabled={reading > 0 || picking}
+              data-testid="add-image"
             >
-              <IconMore />
+              <IconImage />
             </button>
             <button
               className="model-button"
@@ -221,7 +396,13 @@ function Composer({ state }: { state: AppState }) {
         </div>
       </div>
       <div className="under-composer" data-testid="delivery-state">
-        {state.pending ? operationLabel(state.pending.state) : 'Navigation never stops a running turn.'}
+        {reading > 0
+          ? 'Reading image…'
+          : attachmentBlocked
+            ? 'This connection does not support image attachments. Remove them to send.'
+            : state.pending
+              ? operationLabel(state.pending.state)
+              : 'Navigation never stops a running turn.'}
       </div>
     </div>
   );
@@ -366,6 +547,8 @@ export function SessionScreen({ state }: { state: AppState }) {
     snapshot: state.snapshot,
     sessions: state.sessions,
   });
+  const shareRevision = usePendingShareRevision();
+  const serverId = state.credential?.serverId ?? null;
 
   useEffect(() => {
     setAutoFollow(true);
@@ -379,6 +562,32 @@ export function SessionScreen({ state }: { state: AppState }) {
     });
     return () => cancelAnimationFrame(raf);
   }, [sessionKey, scrollRef, scrollStorageKey]);
+
+  useEffect(() => {
+    if (!state.activeSessionId || state.screen !== 'session') return;
+    const pending = takePendingShare(serverId);
+    if (!pending) return;
+    if (pending.text) {
+      const current = controller.getSnapshot().composerText;
+      controller.setComposerText(
+        current.trim() ? `${current}\n\n${pending.text}` : pending.text,
+      );
+    }
+    const supportsImages = controller.hasImageAttachmentSupport();
+    let added = 0;
+    for (const attachment of supportsImages ? pending.attachments : []) {
+      if (controller.addAttachment(attachment)) added += 1;
+    }
+    const notes: string[] = [];
+    if (pending.text || added) notes.push('Shared content added to this session.');
+    if (pending.attachments.length && !supportsImages) {
+      notes.push('Shared images were not added. Image attachments need a v3 adapter.');
+    } else if (pending.attachments.length > added) {
+      notes.push('Some shared images could not be attached.');
+    }
+    if (!notes.length) notes.push('The shared content could not be added.');
+    controller.setToast(notes.join(' '));
+  }, [serverId, shareRevision, state.activeSessionId, state.screen]);
 
   const messageCount = state.snapshot?.messages.length ?? 0;
   const liveText = state.live.assistants.map((block) => block.text).join('');
