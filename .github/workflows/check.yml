@@ -1,9 +1,9 @@
 name: check
 
-# The JavaScript job covers the repository and the retained Expo client.
-# The manual Android jobs build that legacy Expo client only. The current
-# 0.3.1 Stillness APK is built by scripts/build-android-release.sh and is not
-# produced by this workflow.
+# The JavaScript job covers the repository and the retained Expo client. The
+# Rust job builds and tests Adapter v3. The Stillness Android job builds the
+# current Tauri 2 application that actually ships. The manual Android jobs at
+# the end build the legacy Expo client only.
 on:
   workflow_dispatch:
     inputs:
@@ -30,8 +30,74 @@ jobs:
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run test
+      - name: Build Stillness web bundle
+        run: cd apps/stillness && bun run build
       - name: Adapter contract tests
         run: bun run adapter:test
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace
+
+  stillness-android:
+    # Builds the real 0.4.0 Tauri Stillness APK. This is the release gate; the
+    # legacy Expo jobs below are retained for the 0.2.x client only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+          cache: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;27.2.12479018
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/stillness/src-tauri
+      - name: Install Stillness dependencies
+        run: cd apps/stillness && bun install --frozen-lockfile
+      - name: Build signed Stillness APK
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+        run: bash scripts/build-stillness-android.sh
+      - name: Verify APK identity
+        run: |
+          set -euo pipefail
+          APK="$(ls -1 artifacts/jcode-mobile-*-android-release.apk | head -n 1)"
+          test -f "$APK"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$APK" | head -n 4
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stillness-android-release
+          path: |
+            artifacts/jcode-mobile-*-android-release.apk
+            artifacts/jcode-mobile-*-android-release.apk.sha256
+          if-no-files-found: error
 
   android-build:
     # Manual legacy Expo debug build; skipped for the legacy release APK.

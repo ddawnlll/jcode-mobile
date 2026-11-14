@@ -151,3 +151,56 @@ Status is DONE only with evidence in `docs/evidence/v0.3.1/README.md`.
 Known open items carried into 0.3.1: physical Android device validation NOT_RUN,
 a human screen-reader pass NOT_RUN, LAN plain-http pairing intentionally not
 supported, interactive tool input/approval NOT_IMPLEMENTED.
+
+## Phase 11 — v0.4.0 Elegance (Adapter v3, native Android, gestures)
+
+Status is DONE only with evidence in `docs/evidence/v0.4.0/`.
+Release tracker: #53. Branch: `feat/adapter-v3`.
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 11.1 | Adapter v3 protocol and negotiation (#54) | DONE | v3 + v2 accepted, negotiated version per connection, outbound frames normalized, handshake at v2, 10 conformance tests, real v2/v3 handshake smoke PASS |
+| 11.2 | Durable journal, replay, idempotency (#55) | DONE | transactional seq, retention floor + gap flag, ack cursor, restart replay test, 10k bounded test, reconnect smoke with 0 duplicates and no re-execution |
+| 11.3 | Bridge supervision and health (#56) | DONE | supervisor retained; last contact/error, reconnect count, active turns, connection/frame counters |
+| 11.4 | Cache-first startup and delta sync (#57) | DONE (web) | cached paint with socket blocked 60 ms, shell-to-paint 56 ms, delta merge + tombstones, stale fallback; Android measurement in 11.13 |
+| 11.5 | Diagnostics and fault injection (#58) | DONE | `diagnostics.snapshot` real counters + p50/p95; `JCODE_ADAPTER_FAULTS` with tests |
+| 11.6 | Android background companion (#59) | DONE | WorkManager periodic job scheduled with `batteryNotLow`, `GET /health` probe returned 200, on/off setting persisted |
+| 11.7 | FCM registration and push (#60) | PARTIAL | registration/preferences/dedupe/FCM v1 sender + tests; real delivery NOT_RUN (no Firebase credentials) |
+| 11.8 | Notifications, channels, deep links (#61) | DONE | Three channels, system permission prompt, grouped post, preview redaction, permission-denied path, deep link consumed on API 36 |
+| 11.9 | Sharesheet, pickers, downloads, clipboard (#62,#64,#65,#68) | PARTIAL | Inbound/outbound share, photo picker, image decode, downloads, open-with, clipboard redaction and haptics PASS on API 36; camera capture and camera QR blocked on the AVD |
+| 11.10 | Biometric lock, lifecycle, insets, back (#63,#66) | DONE | Device-credential fallback unlock, Keystore vault round trip, insets, IME, predictive back and rotation preserved the WebView on API 36 |
+| 11.11 | Shortcuts, widget, Quick Settings (#67) | PARTIAL | Dynamic shortcuts and the Quick Settings tile PASS; widget provider registered, launcher placement NOT_RUN |
+| 11.12 | Gestures and motion (#69,#70) | DONE (Chromium) | 14 browser checks PASS (`evidence/v0.4.0/ui/verify.json`), screenshots `evidence/v0.4.0/ui/`; native frame pacing NOT_RUN |
+| 11.13 | Conversation, navigation and model UX (#71,#72,#48,#77,#50,#51,#52,#44,#36) | DONE (Chromium) | timeline ordering, copy, switcher, model disambiguation, slider, permission panel, title stability; 7 node checks + e2e PASS |
+| 11.14 | Correctness (#28,#29,#37) | DONE | stop rejects contradictory ids; create retry idempotent; exact route/effort tests |
+| 11.15 | Session actions (archive/restore/favorite/delete) | DONE (adapter) / UI wiring in progress | authoritative archive/restore/favorite with tests; delete refused honestly |
+| 11.16 | Image attachments (#49) | DONE | validation, persistence, SDK image send, conflict tests; photo picker opens and `native_read_image_base64` returns `ok`/`too_large`/`unsupported_type` on API 36 |
+| 11.17 | Android E2E matrix (#73) | PARTIAL | Emulator matrix run for notifications, share, pickers, biometric, downloads, clipboard, layout, back, settings, restart restore and one real turn; process death, airplane mode and chaos runs pending |
+| 11.18 | Migration, release APK, rollback (#74) | DONE | `docs/V0_4_0_MIGRATION.md`; APK 12,693,953 bytes, versionCode 4000, SHA-256 `db6fadf9…d86ca531`; installed, paired, restart-restored and ran one real turn on API 36 |
+| 11.19 | Battery, accessibility, privacy audit (#75) | PARTIAL | contrast and target sizes measured; screen reader, battery, frame pacing NOT_RUN |
+| 11.20 | CI builds the current Tauri app (#73/#74) | DONE (workflow) | Rust job + Stillness Android APK job added; CI run itself NOT_RUN until pushed |
+
+### 0.4.0 release checklist (2026-11-14)
+
+Documentation and artifact items are done. Anything without an observation is
+left `NOT_RUN`; no item is promoted because another item passed.
+
+| # | Item | Status | Evidence |
+| --- | --- | --- | --- |
+| 11.21 | README rewritten for 0.4.0 | DONE | Adapter v3, Stillness gestures and motion, native Android, artifact identity, verified/not-verified split |
+| 11.22 | Build state rewritten for 0.4.0 | DONE | `docs/BUILD_STATE.md`: branch, 18 commits, components, checks, APK bytes/SHA/versionCode, gaps |
+| 11.23 | Evidence index | DONE | `docs/evidence/v0.4.0/README.md`: every artifact and screenshot mapped to a claim, plus PASS/PARTIAL/NOT_RUN matrix |
+| 11.24 | Adapter v3 test evidence | DONE | 72 Rust tests (28 core, 10 protocol, 17 server lib, 17 integration); `cargo fmt` and `clippy -D warnings` clean |
+| 11.25 | Real-daemon adapter smoke | DONE | `docs/evidence/v0.4.0/adapter-v3-smoke.txt`: real turn `OK`, journal seq 7, replay 0 duplicates, one accepted operation |
+| 11.26 | Browser e2e evidence | DONE | `stillness-e2e.txt` 4 passed / 3 skipped; `stillness-e2e-perf.txt` 5 passed / 3 skipped with timings |
+| 11.27 | UI interaction evidence | DONE | `ui/verify.json` 14/14 PASS, 14 captures in `ui/` |
+| 11.28 | Release APK built and verified | DONE | 12,693,953 bytes, versionCode 4000, minSdk 24, target/compile 37, v2+v3 signed, zipalign ok, SHA-256 matches `.sha256` |
+| 11.29 | Release APK on API 36 emulator | DONE | Install, launch, pair (`DEVICE TOKEN ACCEPTED`, Adapter 0.4.0, harness connected), restart restored the exact session with history, one real turn accepted and answered on device (prompt truncated to `Repl`, agent asked about a REPL) |
+| 11.30 | Website and marketing source versions | DONE | Current-release text moved to 0.4.0 in `website/index.html`, `docs/MARKETING.md`, `e2e/marketing/urls.ts`, `layout.spec.ts`, `a11y.spec.ts`; not rebuilt or redeployed |
+| 11.31 | Physical Samsung A34 | NOT_RUN | No device attached |
+| 11.32 | Real FCM delivery | NOT_RUN | No Firebase credentials; registration is `not_configured` |
+| 11.33 | TalkBack / VoiceOver walkthrough | NOT_RUN | No human screen-reader session |
+| 11.34 | Battery measurement (mAh, wake locks) | NOT_RUN | Not measured |
+| 11.35 | Frame pacing / 120 Hz | NOT_RUN | Not measured |
+| 11.36 | CI workflow execution | NOT_RUN | Workflow committed; not pushed or run |
+| 11.37 | Release tag and GitHub release | NOT_RUN | `v0.4.0` tag/release not created; the website CTA depends on the released APK asset |

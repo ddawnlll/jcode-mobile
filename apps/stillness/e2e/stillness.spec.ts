@@ -114,7 +114,10 @@ test('send reports acceptance honestly and stop is the only cancellation', async
   // normalized provider label rather than one exact spelling.
   await page.getByTestId('model-button').click();
   await expect(page.getByTestId('model-sheet')).toBeVisible();
-  await expect(page.getByTestId('command-code-section')).toContainText('deepseek/deepseek-v4-flash');
+  await expect(page.getByTestId('command-code-section')).toBeVisible();
+  // The staging daemon's provider route varies by environment. Assert the
+  // normalized Command Code identity, not one model id from a past run.
+  await expect(page.getByTestId('command-code-section')).toContainText(/commandcode|command code/i);
   await page.getByTestId('model-sheet').getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('model-sheet')).toBeHidden();
 
@@ -141,7 +144,7 @@ test('send reports acceptance honestly and stop is the only cancellation', async
     { timeout: 30_000 },
   );
   await expect(page.getByTestId('pending-message')).toHaveCount(0, { timeout: 30_000 });
-  await page.screenshot({ path: 'docs/evidence/v0.3.1/stillness-mobile-accepted.png' });
+  await page.screenshot({ path: 'docs/evidence/v0.4.0/stillness-mobile-accepted.png' });
   // The pending card clears only after an authoritative snapshot shows the
   // message in history. That is when a second delivery becomes safe.
   await composer.fill('Write a 300 word description of a quiet library. Do not use any tools.');

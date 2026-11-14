@@ -1,16 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { controller, type AppState } from '../lib/controller';
-import { IconChevron, IconPlus, IconSearch } from '../components/Icons';
+import { IconChevron, IconPlus } from '../components/Icons';
 import { Torus } from '../components/Torus';
 import { ConnectionBanner, EmptyState, ScreenHeader, SessionRow, SavedTag, useDocumentTitle } from '../components/ui';
 import { sessionTitle, isRunning } from '../lib/format';
 import { credentialStorageKind } from '../lib/credentials';
+import {
+  sessionIsArchived,
+  useSessionPrefs,
+  visibleSessions,
+} from '../lib/sessionPrefs';
+import { restoreArchived } from '../lib/sessionShelf';
+import { usePullToRefresh } from '../components/gestures';
+import { useScrollMemory } from '../components/motion';
+import { NativeSettings } from '../components/NativeSettings';
+import { hasPendingShare } from '../lib/pendingShare';
 
 export function HomeScreen({ state }: { state: AppState }) {
   const [paused, setPaused] = useState(false);
   useDocumentTitle('Home');
-  const running = state.sessions.filter((session) => isRunning(session.status));
-  const recent = state.sessions.slice(0, 5);
+  const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
+  const visible = visibleSessions(state.sessions, prefs, online);
+  const running = visible.filter((session) => isRunning(session.status));
+  const recent = visible.slice(0, 5);
   const projects = state.projects.slice(0, 5);
   return (
     <div className="screen" data-testid="home-screen">
@@ -19,14 +32,9 @@ export function HomeScreen({ state }: { state: AppState }) {
         subtitle={<span>{state.server?.healthy ? 'Harness online' : 'Harness unavailable'}</span>}
         menu
         right={
-          <>
-            <button className="icon-btn" aria-label="Sessions" onClick={() => controller.go('sessions')}>
-              <IconSearch />
-            </button>
-            <button className="icon-btn" aria-label="Create session" onClick={() => controller.go('new-session')} data-testid="new-session-button">
-              <IconPlus />
-            </button>
-          </>
+          <button className="icon-btn" aria-label="Create session" onClick={() => controller.go('new-session')} data-testid="new-session-button">
+            <IconPlus />
+          </button>
         }
       />
       <ConnectionBanner state={state} />
@@ -119,10 +127,40 @@ export function HomeScreen({ state }: { state: AppState }) {
 export function SessionsScreen({ state }: { state: AppState }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'running' | 'finished'>('all');
+  const [showArchived, setShowArchived] = useState(false);
+  const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
+  const scrollKey = `sessions:${state.credential?.serverId ?? 'none'}`;
+  const scroll = useScrollMemory<HTMLElement>(scrollKey);
+  const archivedSessions = state.sessions.filter((session) =>
+    sessionIsArchived(session, prefs, online),
+  );
+  const archivedCount = archivedSessions.length;
+
+  const refresh = async (): Promise<boolean> => {
+    if (state.connection.status !== 'connected') {
+      controller.setToast('The adapter is offline. Nothing was refreshed.');
+      return false;
+    }
+    await controller.refreshSessions();
+    const next = controller.getSnapshot();
+    const ok = !next.sessionsError && next.connection.status === 'connected';
+    controller.setToast(ok ? 'Sessions refreshed.' : 'Sessions could not be refreshed.');
+    return ok;
+  };
+  const pull = usePullToRefresh({
+    containerRef: scroll.ref,
+    onRefresh: refresh,
+    // Offline pulls are allowed so the gesture can report honestly that
+    // nothing was refreshed; it never fakes completion.
+    disabled: false,
+  });
+
   useDocumentTitle('Sessions');
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return state.sessions.filter((session) => {
+    const base = visibleSessions(state.sessions, prefs, online);
+    return base.filter((session) => {
       if (filter === 'running' && !isRunning(session.status)) return false;
       if (filter === 'finished' && isRunning(session.status)) return false;
       if (!needle) return true;
@@ -131,12 +169,12 @@ export function SessionsScreen({ state }: { state: AppState }) {
         (session.working_dir ?? '').toLowerCase().includes(needle)
       );
     });
-  }, [filter, query, state.sessions]);
+  }, [filter, online, prefs, query, state.sessions]);
   return (
     <div className="screen" data-testid="sessions-screen">
       <ScreenHeader
         title="Sessions"
-        subtitle={`${state.sessions.length} on this server`}
+        subtitle={`${visibleSessions(state.sessions, prefs, online).length} on this server`}
         menu
         right={
           <button className="icon-btn" aria-label="New session" onClick={() => controller.go('new-session')}>
@@ -145,11 +183,41 @@ export function SessionsScreen({ state }: { state: AppState }) {
         }
       />
       <ConnectionBanner state={state} />
-      <main className="body-scroll">
+      <main
+        className="body-scroll"
+        ref={scroll.ref as React.RefObject<HTMLElement>}
+        onScroll={scroll.onScroll}
+        style={{ touchAction: 'pan-y' }}
+      >
+        <div
+          className={`ptr ${pull.refreshing ? 'is-refreshing' : ''}`}
+          style={{ height: `${pull.distance}px` }}
+          aria-live="polite"
+        >
+          <span className="ptr-label">
+            {pull.refreshing
+              ? 'Refreshing sessions…'
+              : pull.progress >= 1
+                ? 'Release to refresh'
+                : 'Pull to refresh'}
+          </span>
+        </div>
         <div className="view-content">
           <h1 className="page-heading">Sessions</h1>
           <p className="page-sub">Your threads live on the server.</p>
           <SavedTag state={state} />
+          <div className="list-tools">
+            <button className="tiny-action" onClick={() => void refresh()}>
+              Refresh
+            </button>
+            <button
+              className="tiny-action"
+              aria-pressed={showArchived}
+              onClick={() => setShowArchived((value) => !value)}
+            >
+              {showArchived ? 'Hide archived' : `Show archived${archivedCount ? ` (${archivedCount})` : ''}`}
+            </button>
+          </div>
           <label className="search-field">
             <span>Search sessions</span>
             <input
@@ -177,6 +245,26 @@ export function SessionsScreen({ state }: { state: AppState }) {
               <SessionRow key={session.session_id} session={session} active={session.session_id === state.activeSessionId} />
             ))}
           </div>
+          {showArchived && archivedCount > 0 ? (
+            <div className="archived-shelf">
+              <span className="small-heading">
+                {online ? 'ARCHIVED ON THIS SERVER' : 'ARCHIVED · SAVED ON THIS PHONE'}
+              </span>
+              {archivedSessions.map((session) => (
+                <div className="archived-row" key={session.session_id}>
+                  <span>{sessionTitle(session)}</span>
+                  <button
+                    className="tiny-action"
+                    onClick={() =>
+                      void restoreArchived(state.credential?.serverId, session.session_id)
+                    }
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {filtered.length === 0 ? (
             <p className="empty-note" data-testid="no-sessions">
               {state.sessions.length === 0
@@ -266,7 +354,13 @@ export function ProjectsScreen({ state }: { state: AppState }) {
 export function ProjectDetailScreen({ state }: { state: AppState }) {
   const project = state.projects.find((item) => item.project_id === state.activeProjectId) ?? null;
   useDocumentTitle(project?.label ?? 'Project');
-  const sessions = state.sessions.filter((session) => session.project_id === project?.project_id);
+  const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
+  const sessions = visibleSessions(
+    state.sessions.filter((session) => session.project_id === project?.project_id),
+    prefs,
+    online,
+  );
   if (!project) {
     return (
       <div className="screen">
@@ -423,6 +517,11 @@ export function NewSessionScreen({ state }: { state: AppState }) {
           <p className="quiet-eyebrow">A NEW THREAD</p>
           <h1 className="page-heading">Where to work?</h1>
           <p className="page-sub">Choose a project, or use the adapter’s default server folder.</p>
+          {hasPendingShare() ? (
+            <p className="form-help" data-testid="pending-share-note">
+              Shared text and images will be added to the session you create.
+            </p>
+          ) : null}
           <div className="choice-rows" role="group" aria-label="Session location">
             {state.projects.map((project) => (
               <button
@@ -565,6 +664,8 @@ export function SettingsScreen({ state }: { state: AppState }) {
             </div>
           </section>
 
+          <NativeSettings state={state} />
+
           <section className="pref-group">
             <h2 className="pref-title">Connection</h2>
             <div className="pref-row">
@@ -640,15 +741,15 @@ export function SettingsScreen({ state }: { state: AppState }) {
             <h2 className="pref-title">About</h2>
             <div className="pref-row">
               <div>
-                Adapter<small>Rust Adapter v2 · {state.server?.adapter_version ?? '0.3.1'}</small>
+                Adapter<small>Rust Adapter v3 · {state.server?.adapter_version ?? '0.4.0'}</small>
               </div>
               <span className="note-sub">{state.server?.server_id?.slice(0, 18) ?? '—'}</span>
             </div>
             <div className="pref-row">
               <div>
-                Stillness 12<small>JCode Mobile 0.3.1</small>
+                Stillness 12<small>JCode Mobile 0.4.0</small>
               </div>
-              <span className="note-sub">v0.3.1</span>
+              <span className="note-sub">v0.4.0</span>
             </div>
             <div className="pref-row">
               <div>

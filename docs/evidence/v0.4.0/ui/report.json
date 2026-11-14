@@ -1,0 +1,17 @@
+{
+  "url": "http://127.0.0.1:5199/",
+  "errors": [
+    "console: WebSocket connection to 'ws://127.0.0.1:7666/v2/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+    "console: WebSocket connection to 'ws://127.0.0.1:7666/v2/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+    "console: WebSocket connection to 'ws://127.0.0.1:7666/v2/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+    "console: WebSocket connection to 'ws://127.0.0.1:7666/v2/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED"
+  ],
+  "drawer": {
+    "className": "drawer  ",
+    "ariaHidden": "true"
+  },
+  "viewport": {
+    "width": 390,
+    "height": 844
+  }
+}

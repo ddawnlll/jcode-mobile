@@ -38,7 +38,7 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      testMatch: /stillness\.spec\.ts/,
+      testMatch: /(stillness|perf)\.spec\.ts/,
       dependencies: ['pairing'],
       use: {
         ...devices['iPhone 14'],

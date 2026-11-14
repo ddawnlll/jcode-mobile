@@ -4,6 +4,27 @@ export function sessionTitle(session: Pick<SessionSummary, 'title' | 'session_id
   return session?.title?.trim() || 'Untitled session';
 }
 
+/**
+ * One deterministic title source for the active session.
+ *
+ * The snapshot is the authoritative view of the session that is open. The
+ * inventory list is only a fallback while no snapshot exists. Both are never
+ * merged, so a background `sessions.list` refresh cannot flip the header
+ * between two titles that disagree.
+ */
+export function confirmedSessionTitle(input: {
+  activeSessionId: string | null;
+  snapshot: { session: Pick<SessionSummary, 'title' | 'session_id'> } | null;
+  sessions: SessionSummary[];
+}): string {
+  const snapshotSession = input.snapshot?.session;
+  if (snapshotSession && snapshotSession.session_id === input.activeSessionId) {
+    return sessionTitle(snapshotSession);
+  }
+  const inventory = input.sessions.find((session) => session.session_id === input.activeSessionId);
+  return sessionTitle(inventory);
+}
+
 export function shortId(value: string | null | undefined): string {
   if (!value) return 'unknown';
   return value.length > 14 ? `${value.slice(0, 7)}…${value.slice(-4)}` : value;

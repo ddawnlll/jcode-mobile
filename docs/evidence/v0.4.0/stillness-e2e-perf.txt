@@ -1,0 +1,17 @@
+building Stillness web bundle
+starting Rust Adapter v3 on 127.0.0.1:7658
+
+Running 8 tests using 1 worker
+
+  ✓  1 [pairing] › apps/stillness/e2e/pairing.spec.ts:11:2 › pairs through the real adapter and persists the exact server (700ms)
+JCODE_PERF {"online_first_screen_ms":27,"offline_cached_first_screen_ms":60,"shell_to_cached_paint_ms":56,"cold_requests":6,"cold_transfer_bytes":900318,"offline_saved_marker_visible":true,"note":"Playwright Chromium on the web target, not native Android"}
+  ✓  2 [mobile] › apps/stillness/e2e/perf.spec.ts:18:2 › cached UI paints before the network and reports startup cost (1.2s)
+  ✓  3 [mobile] › apps/stillness/e2e/stillness.spec.ts:15:2 › real session, draft, plan, activity, files, and preferences (9.8s)
+  -  4 [mobile] › apps/stillness/e2e/stillness.spec.ts:92:2 › desktop shell exposes the three-pane layout
+  ✓  5 [mobile] › apps/stillness/e2e/stillness.spec.ts:105:2 › send reports acceptance honestly and stop is the only cancellation (7.8s)
+  -  6 [desktop] › apps/stillness/e2e/stillness.spec.ts:15:2 › real session, draft, plan, activity, files, and preferences
+  ✓  7 [desktop] › apps/stillness/e2e/stillness.spec.ts:92:2 › desktop shell exposes the three-pane layout (508ms)
+  -  8 [desktop] › apps/stillness/e2e/stillness.spec.ts:105:2 › send reports acceptance honestly and stop is the only cancellation
+
+  3 skipped
+  5 passed (21.2s)

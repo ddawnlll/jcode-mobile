@@ -1,4 +1,5 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use adapter_core::{
@@ -6,11 +7,16 @@ use adapter_core::{
     RootScope, SessionTurnRegistry, Store, now_ms,
 };
 use adapter_protocol::{
-    ActivityItem, ContextView, ServerInfo, ServerStatusPayload, SessionSummary,
+    ActivityItem, ConnectionDiagnostics, ContextView, DiagnosticsSnapshot, FaultInjectionState,
+    JcodeDiagnostics, JournalDiagnostics, LatencyDiagnostics, OperationDiagnostics, ServerInfo,
+    ServerStatusPayload, SessionSummary,
 };
 use tokio::sync::{broadcast, mpsc};
 
+use crate::faults::FaultInjection;
 use crate::hub::Hub;
+use crate::metrics::LatencyTracker;
+use crate::push::{FcmConfig, PushService};
 
 pub const ADAPTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -30,6 +36,23 @@ pub struct AppState {
     pub revocation: broadcast::Sender<String>,
     pub pair_attempts: Mutex<HashMap<String, (u32, i64)>>,
     pub last_connection_message: RwLock<Option<String>>,
+    pub faults: Arc<FaultInjection>,
+    pub metrics: Metrics,
+    pub jcode_last_contact_ms: RwLock<Option<i64>>,
+    pub jcode_reconnects: AtomicU64,
+    pub jcode_last_error: RwLock<Option<String>>,
+    pub push: Arc<PushService>,
+}
+
+#[derive(Debug, Default)]
+pub struct Metrics {
+    pub active_connections: AtomicU64,
+    pub subscriptions: AtomicU64,
+    pub frames_in: AtomicU64,
+    pub frames_out: AtomicU64,
+    pub gaps_announced: AtomicU64,
+    pub dispatch_latency: LatencyTracker,
+    pub replay_latency: LatencyTracker,
 }
 
 impl AppState {
@@ -52,12 +75,19 @@ impl AppState {
         }
         let (revocation, _) = broadcast::channel(32);
         let event_queue = config.event_queue;
+        let faults = Arc::new(FaultInjection::from_env());
+        let push = PushService::new(Arc::clone(&store), FcmConfig::from_env());
         Ok(Arc::new(Self {
             config: Arc::new(config),
             auth: AuthService::new(Arc::clone(&store)),
+            hub: Arc::new(Hub::new(
+                epoch,
+                event_queue,
+                Arc::clone(&store),
+                Arc::clone(&faults),
+            )),
             store,
             backend,
-            hub: Arc::new(Hub::new(epoch, event_queue, 512)),
             turns: Arc::new(SessionTurnRegistry::default()),
             roots: Arc::new(roots),
             started_at_ms: now_ms(),
@@ -68,7 +98,87 @@ impl AppState {
             revocation,
             pair_attempts: Mutex::new(HashMap::new()),
             last_connection_message: RwLock::new(None),
+            faults,
+            metrics: Metrics::default(),
+            jcode_last_contact_ms: RwLock::new(None),
+            jcode_reconnects: AtomicU64::new(0),
+            jcode_last_error: RwLock::new(None),
+            push,
         }))
+    }
+
+    pub fn note_jcode_contact(&self) {
+        *self.jcode_last_contact_ms.write().expect("jcode contact") = Some(now_ms());
+    }
+
+    pub fn note_jcode_reconnect(&self, error: Option<String>) {
+        self.jcode_reconnects.fetch_add(1, Ordering::Relaxed);
+        *self.jcode_last_error.write().expect("jcode error") = error;
+    }
+
+    pub fn diagnostics(&self) -> DiagnosticsSnapshot {
+        let info = self.backend.info();
+        let journal = self.store.journal_stats().unwrap_or_default();
+        let devices = self.auth.devices().map(|list| list.len()).unwrap_or(0);
+        let (pending, unknown, accepted) = self.store.operation_counts().unwrap_or((0, 0, 0));
+        let (dispatch_p50, dispatch_p95) = self.metrics.dispatch_latency.percentiles();
+        let (replay_p50, replay_p95) = self.metrics.replay_latency.percentiles();
+        DiagnosticsSnapshot {
+            adapter_version: ADAPTER_VERSION.to_string(),
+            protocol_version: adapter_protocol::PROTOCOL_VERSION,
+            min_protocol_version: adapter_protocol::MIN_PROTOCOL_VERSION,
+            epoch: self.hub.epoch().to_string(),
+            started_at_ms: self.started_at_ms,
+            observed_at_ms: now_ms(),
+            capabilities: adapter_protocol::CAPABILITIES
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            jcode: JcodeDiagnostics {
+                healthy: info.healthy,
+                server: info.server,
+                jcode_version: info.jcode_version,
+                protocol_version: info.protocol_version,
+                capabilities: info.capabilities.len() as u32,
+                last_contact_ms: *self.jcode_last_contact_ms.read().expect("jcode contact"),
+                reconnects: self.jcode_reconnects.load(Ordering::Relaxed),
+                last_error: self.jcode_last_error.read().expect("jcode error").clone(),
+                active_turns: self.turns.active_count() as u32,
+            },
+            journal: JournalDiagnostics {
+                events: journal.events,
+                bytes: journal.bytes,
+                sessions: journal.sessions,
+                oldest_observed_at_ms: journal.oldest_observed_at_ms,
+                newest_observed_at_ms: journal.newest_observed_at_ms,
+                retention_per_session: self.store.journal_retention(),
+                append_failures: self.hub.append_failures(),
+            },
+            connections: ConnectionDiagnostics {
+                active: self.metrics.active_connections.load(Ordering::Relaxed),
+                devices: devices as u64,
+                subscriptions: self.metrics.subscriptions.load(Ordering::Relaxed),
+                frames_in: self.metrics.frames_in.load(Ordering::Relaxed),
+                frames_out: self.metrics.frames_out.load(Ordering::Relaxed),
+                gaps_announced: self.metrics.gaps_announced.load(Ordering::Relaxed),
+            },
+            operations: OperationDiagnostics {
+                pending,
+                unknown,
+                accepted,
+            },
+            latency: LatencyDiagnostics {
+                samples: self.metrics.dispatch_latency.len() as u64,
+                dispatch_p50_ms: dispatch_p50,
+                dispatch_p95_ms: dispatch_p95,
+                replay_p50_ms: replay_p50,
+                replay_p95_ms: replay_p95,
+            },
+            fault_injection: FaultInjectionState {
+                enabled: self.faults.enabled(),
+                rules: self.faults.rules(),
+            },
+        }
     }
 
     pub fn server_info(&self) -> ServerInfo {
@@ -119,7 +229,10 @@ impl AppState {
         if project_id.is_none() {
             project_id = self.infer_project(session.working_dir.as_deref())?;
         }
-        Ok(session.into_summary(title, project_id))
+        let favorite = self.store.session_favorite(&session.session_id)?;
+        let mut summary = session.into_summary(title, project_id);
+        summary.favorite = favorite;
+        Ok(summary)
     }
 
     fn infer_project(&self, working_dir: Option<&str>) -> CoreResult<Option<String>> {
@@ -343,6 +456,10 @@ pub struct ConnContext {
     pub device: adapter_protocol::DeviceInfo,
     pub subscribed: Arc<Mutex<std::collections::HashSet<String>>>,
     pub outbound: mpsc::Sender<Outbound>,
+    /// Negotiated wire version for this connection. Initialized to the minimum
+    /// the adapter speaks so a frame cannot be sent above a client's range
+    /// before `client.hello`.
+    pub protocol_version: Arc<AtomicU32>,
 }
 
 impl ConnContext {
@@ -357,11 +474,12 @@ impl ConnContext {
             .contains(session_id)
     }
 
-    pub fn subscribe(&self, session_id: &str) {
+    /// Returns true when this call added a new subscription.
+    pub fn subscribe(&self, session_id: &str) -> bool {
         self.subscribed
             .lock()
             .expect("subscribed")
-            .insert(session_id.to_string());
+            .insert(session_id.to_string())
     }
 
     pub fn unsubscribe(&self, session_id: &str) {
@@ -369,5 +487,13 @@ impl ConnContext {
             .lock()
             .expect("subscribed")
             .remove(session_id);
+    }
+
+    pub fn protocol_version(&self) -> u32 {
+        self.protocol_version.load(Ordering::Relaxed)
+    }
+
+    pub fn set_protocol_version(&self, version: u32) {
+        self.protocol_version.store(version, Ordering::Relaxed);
     }
 }

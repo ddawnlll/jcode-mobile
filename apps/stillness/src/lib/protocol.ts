@@ -1,5 +1,7 @@
-export const PROTOCOL_VERSION = 2;
-export const WS_SUBPROTOCOL = 'jcode.mobile.v2';
+export const PROTOCOL_VERSION = 3;
+export const MIN_PROTOCOL_VERSION = 2;
+export const WS_SUBPROTOCOL = 'jcode.mobile.v3';
+export const LEGACY_WS_SUBPROTOCOL = 'jcode.mobile.v2';
 
 export type Kind = 'request' | 'response' | 'event';
 
@@ -49,6 +51,9 @@ export interface ServerHelloPayload {
   server: ServerInfo;
   device: DeviceInfo;
   resumed: boolean;
+  negotiated_version?: number;
+  max_protocol_version?: number;
+  resumed_from_epoch?: string | null;
 }
 
 export interface PairRedeemResponse {
@@ -70,6 +75,8 @@ export interface SessionSummary {
   archived: boolean;
   parent_session_id: string | null;
   agent_label: string | null;
+  /// Adapter-owned favorite flag, not a daemon field.
+  favorite?: boolean;
 }
 
 export interface Project {
@@ -87,6 +94,7 @@ export interface SessionsListPayload {
   source: string;
   observed_at_ms: number;
   stale: boolean;
+  revision?: number;
 }
 
 export interface HistoryMessageView {
@@ -249,6 +257,101 @@ export interface ServerStatusPayload {
   jcode_connected: boolean;
   message: string | null;
   observed_at_ms: number;
+}
+
+// ---------------------------------------------------------------------------
+// Adapter v3 durable journal and delta sync
+// ---------------------------------------------------------------------------
+
+export interface JournalEventView {
+  seq: number;
+  turn_id: string | null;
+  operation_id: string | null;
+  event: SessionEvent;
+  observed_at_ms: number;
+}
+
+export interface EventsSubscribePayload {
+  session_id: string;
+  epoch: string;
+  events: JournalEventView[];
+  floor_seq: number;
+  latest_seq: number;
+  gap: boolean;
+  has_more: boolean;
+  resync_required: boolean;
+  snapshot: SessionSnapshot | null;
+}
+
+export interface EventsAckPayload {
+  session_id: string;
+  acked_seq: number;
+  floor_seq: number;
+  latest_seq: number;
+}
+
+export interface SessionsDeltaPayload {
+  revision: number;
+  full: boolean;
+  sessions: SessionSummary[];
+  removed: string[];
+  projects: Project[];
+  source: string;
+  observed_at_ms: number;
+  stale: boolean;
+}
+
+export interface AttachmentInput {
+  media_type: string;
+  data_base64: string;
+  name?: string | null;
+}
+
+export interface DiagnosticsSnapshot {
+  adapter_version: string;
+  protocol_version: number;
+  min_protocol_version: number;
+  epoch: string;
+  started_at_ms: number;
+  observed_at_ms: number;
+  capabilities: string[];
+  jcode: {
+    healthy: boolean;
+    server: string;
+    jcode_version: string;
+    protocol_version: number;
+    capabilities: number;
+    last_contact_ms: number | null;
+    reconnects: number;
+    last_error: string | null;
+    active_turns: number;
+  };
+  journal: {
+    events: number;
+    bytes: number;
+    sessions: number;
+    oldest_observed_at_ms: number | null;
+    newest_observed_at_ms: number | null;
+    retention_per_session: number;
+    append_failures: number;
+  };
+  connections: {
+    active: number;
+    devices: number;
+    subscriptions: number;
+    frames_in: number;
+    frames_out: number;
+    gaps_announced: number;
+  };
+  operations: { pending: number; unknown: number; accepted: number };
+  latency: {
+    samples: number;
+    dispatch_p50_ms: number | null;
+    dispatch_p95_ms: number | null;
+    replay_p50_ms: number | null;
+    replay_p95_ms: number | null;
+  };
+  fault_injection: { enabled: boolean; rules: string[] };
 }
 
 export interface DirEntry {

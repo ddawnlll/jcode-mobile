@@ -32,12 +32,15 @@ import {
 import type {
   ActivityItem,
   ActivitySnapshotPayload,
+  AttachmentInput,
   CancelTurnResponse,
   ContextView,
   CreateSessionResponse,
   DeviceInfo,
   DirEntry,
   DirListing,
+  EventsAckPayload,
+  EventsSubscribePayload,
   FilePreview,
   ModelsListPayload,
   OperationStatePayload,
@@ -47,6 +50,7 @@ import type {
   ServerHelloPayload,
   ServerInfo,
   SessionEventPayload,
+  SessionsDeltaPayload,
   SessionSnapshot,
   SessionSummary,
   SessionsListPayload,
@@ -111,6 +115,20 @@ export interface PendingMessage {
   createdAt: number;
 }
 
+export interface DraftAttachment {
+  id: string;
+  name: string;
+  mediaType: string;
+  dataBase64: string;
+  size: number;
+  /** Local object/data URL for preview only. Never sent to the adapter. */
+  previewUrl?: string;
+}
+
+const MAX_DRAFT_ATTACHMENTS = 4;
+const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const ALLOWED_ATTACHMENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
 export interface BrowserState {
   projectId: string;
   path: string;
@@ -163,6 +181,13 @@ export interface AppState {
   activeProjectId: string | null;
   browser: BrowserState | null;
   credentialsKnown: number;
+  /** Negotiated adapter wire version for display/diagnostics. */
+  protocolVersion: number | null;
+  /** Capabilities actually advertised by the connected adapter. */
+  capabilities: string[];
+  /** Durable session delta revision from the last authoritative sync. */
+  sessionRevision: number;
+  attachments: DraftAttachment[];
 }
 
 const PREFS_KEY = 'jcode.mobile.v3.preferences';
@@ -224,6 +249,8 @@ export class Controller {
   private unsubscribers: Array<() => void> = [];
   private snapshotInFlight = false;
   private refreshingSessions = false;
+  /** Stable client request ids so retrying a create cannot make a duplicate. */
+  private createRequestIds = new Map<string, string>();
 
   constructor() {
     const prefs = loadPreferences();
@@ -269,6 +296,10 @@ export class Controller {
       activeProjectId: null,
       browser: null,
       credentialsKnown: listCredentials().length,
+      protocolVersion: null,
+      capabilities: [],
+      sessionRevision: 0,
+      attachments: [],
     };
     window.setTimeout(() => this.restore(), 0);
   }
@@ -335,22 +366,40 @@ export class Controller {
       return;
     }
     const cached = loadSessionListCache(credential.serverId);
+    const lastSession = getLastSession(credential.serverId);
+    const cachedSnapshot = lastSession
+      ? loadSnapshotCache(credential.serverId, lastSession)
+      : null;
     this.setState(
       {
         credential,
-        phase: 'pairing',
-        screen: 'pairing',
+        // Cache first: an authorized phone must show its saved session before
+        // the network handshake completes, clearly marked as saved on this
+        // phone until an authoritative snapshot arrives.
+        phase: 'app',
+        screen: lastSession ? 'session' : 'home',
+        activeSessionId: lastSession,
+        snapshot: cachedSnapshot,
+        composerText: lastSession ? loadDraft(credential.serverId, lastSession) : '',
+        lastSeq: cachedSnapshot?.last_seq ?? 0,
+        epoch: cachedSnapshot?.epoch ?? null,
+        plan: cachedSnapshot?.plan ?? null,
+        context: cachedSnapshot?.context ?? null,
+        runtime: cachedSnapshot?.runtime ?? null,
         pairingStage: 'connecting',
-        pairingMessage: 'Restoring the saved server pairing.',
+        pairingMessage: 'Restoring the saved server pairing in the background.',
         connection: { status: 'connecting', message: null },
         sessions: cached?.sessions ?? [],
         projects: cached?.projects ?? [],
         sessionsSource: cached?.source ?? '',
+        sessionRevision: cached?.revision ?? 0,
         savedOnPhone: Boolean(cached),
       },
       true,
     );
-    await this.startClient(credential, false);
+    // Do not await: first paint is already visible and the handshake runs in
+    // parallel with the cached UI.
+    void this.startClient(credential, false);
   }
 
   private async startClient(credential: PairedCredential, brandNewPairing: boolean) {
@@ -386,6 +435,8 @@ export class Controller {
             connection: { status: 'connected', message: null },
             jcodeConnected: hello.server.healthy,
             credentialsKnown: listCredentials().length,
+            protocolVersion: client.negotiatedVersion,
+            capabilities: hello.server.capabilities,
           },
           true,
         );
@@ -393,8 +444,17 @@ export class Controller {
         const last = getLastSession(credential.serverId);
         const available = this.state.sessions.some((session) => session.session_id === last);
         if (last && available) {
-          await this.openSession(last);
-        } else {
+          if (this.state.activeSessionId === last) {
+            // The cached view is already on screen; only reconcile it.
+            await this.subscribeToSession(last, false);
+            void this.refreshModels(last);
+            void this.refreshPlan(last);
+            void this.refreshActivity(last);
+            void this.refreshContext(last);
+          } else {
+            await this.openSession(last);
+          }
+        } else if (this.state.screen !== 'session') {
           this.setState({ screen: 'home' }, true);
         }
       }
@@ -445,6 +505,7 @@ export class Controller {
       server: hello.server,
       device: hello.device,
       jcodeConnected: hello.server.healthy,
+      capabilities: hello.server.capabilities,
     });
   }
 
@@ -504,23 +565,64 @@ export class Controller {
     if (!this.client || !this.state.credential || this.refreshingSessions) return;
     if (this.client.status !== 'connected') return;
     this.refreshingSessions = true;
+    const credential = this.state.credential;
     try {
-      const payload = await this.client.request<SessionsListPayload>('sessions.list', {}, 20_000);
-      const credential = this.state.credential;
+      const cached = loadSessionListCache(credential.serverId);
+      const sinceRevision = this.state.sessionRevision || cached?.revision || 0;
+      let sessions: SessionSummary[];
+      let projects: Project[];
+      let source: string;
+      let revision: number;
+      let stale = false;
+      try {
+        const delta = await this.client.request<SessionsDeltaPayload>(
+          'sessions.delta',
+          { since_revision: sinceRevision, include_projects: true },
+          20_000,
+        );
+        if (delta.full) {
+          sessions = delta.sessions;
+          projects = delta.projects;
+        } else {
+          sessions = mergeSessionDelta(this.state.sessions, delta);
+          projects = this.state.projects;
+        }
+        // The adapter's index may lag the daemon when the daemon is
+        // unreachable. Surfacing that as saved-on-this-phone is honest.
+        stale = delta.stale;
+        source = delta.source;
+        revision = delta.revision;
+      } catch {
+        // A v2 adapter has no delta request. Fall back to the full listing.
+        const payload = await this.client.request<SessionsListPayload>(
+          'sessions.list',
+          {},
+          20_000,
+        );
+        sessions = payload.sessions;
+        projects = payload.projects;
+        source = payload.source;
+        revision = payload.revision ?? 0;
+        stale = payload.stale;
+      }
       saveSessionListCache(credential.serverId, {
-        sessions: payload.sessions,
-        projects: payload.projects,
-        observed_at_ms: payload.observed_at_ms,
-        source: payload.source,
+        sessions,
+        projects,
+        observed_at_ms: Date.now(),
+        source,
+        revision,
       });
       const active = this.state.activeSessionId;
       this.setState({
-        sessions: payload.sessions,
-        projects: payload.projects,
-        sessionsSource: payload.source,
+        sessions,
+        projects,
+        sessionsSource: source,
         sessionsError: null,
-        savedOnPhone: false,
-        activeMissing: Boolean(active && !payload.sessions.some((session) => session.session_id === active)),
+        savedOnPhone: stale,
+        sessionRevision: revision,
+        activeMissing: Boolean(
+          active && !sessions.some((session) => session.session_id === active),
+        ),
       });
     } catch (error) {
       const cached = loadSessionListCache(this.state.credential.serverId);
@@ -640,6 +742,7 @@ export class Controller {
         models: null,
         activity: loadActivityCache(serverId, sessionId)?.items ?? [],
         reconciling: false,
+        attachments: [],
       },
       true,
     );
@@ -658,13 +761,70 @@ export class Controller {
   private async subscribeToSession(sessionId: string, forReconnect: boolean) {
     if (!this.client || this.client.status !== 'connected') return;
     if (!forReconnect) this.setState({ reconciling: true });
+    // A reconnect with a real cursor uses the durable journal first. It only
+    // falls back to a full snapshot when the cursor or epoch cannot be resumed.
+    if (forReconnect && this.state.lastSeq > 0) {
+      try {
+        const replay = await this.client.request<EventsSubscribePayload>(
+          'events.subscribe',
+          {
+            session_id: sessionId,
+            after_seq: this.state.lastSeq,
+            epoch: this.state.epoch,
+            limit: 512,
+            tail: 160,
+            include_snapshot: false,
+          },
+          20_000,
+          { sessionId },
+        );
+        if (this.state.activeSessionId !== sessionId) return;
+        if (replay.resync_required) {
+          if (replay.snapshot) {
+            this.applySnapshot(replay.snapshot);
+          } else {
+            await this.subscribeWithSnapshot(sessionId);
+          }
+          return;
+        }
+        for (const replayed of replay.events) {
+          this.applySessionEvent({
+            session_id: replay.session_id,
+            epoch: replay.epoch,
+            seq: replayed.seq,
+            payload: {
+              event: replayed.event,
+              turn_id: replayed.turn_id,
+              operation_id: replayed.operation_id,
+              observed_at_ms: replayed.observed_at_ms,
+            },
+          });
+        }
+        if (this.state.activeSessionId !== sessionId) return;
+        this.setState({ epoch: replay.epoch });
+        if (replay.has_more) {
+          await this.subscribeToSession(sessionId, true);
+          return;
+        }
+        this.setState({ reconciling: false });
+        void this.ackEvents(sessionId, replay.latest_seq);
+        return;
+      } catch {
+        // A v2 adapter does not implement events.subscribe; use the snapshot.
+      }
+    }
+    await this.subscribeWithSnapshot(sessionId);
+  }
+
+  private async subscribeWithSnapshot(sessionId: string) {
+    if (!this.client || this.client.status !== 'connected') return;
     try {
       const snapshot = await this.client.request<SessionSnapshot>(
         'sessions.subscribe',
         {
           session_id: sessionId,
           tail: 160,
-          after_seq: forReconnect ? this.state.lastSeq || null : null,
+          after_seq: this.state.lastSeq || null,
         },
         35_000,
         { sessionId },
@@ -679,6 +839,24 @@ export class Controller {
           error instanceof Error ? `Session could not be restored: ${error.message}` : 'Session could not be restored.',
         savedOnPhone: true,
       });
+    }
+  }
+
+  private async ackEvents(sessionId: string, seq: number) {
+    if (!this.client || this.client.status !== 'connected' || seq <= 0) return;
+    try {
+      const payload = await this.client.request<EventsAckPayload>(
+        'events.ack',
+        { session_id: sessionId, seq },
+        8_000,
+        { sessionId },
+      );
+      // The adapter may have compacted past this cursor while we were away.
+      if (payload.floor_seq > 0 && payload.acked_seq < payload.floor_seq - 1) {
+        this.scheduleSnapshot(120);
+      }
+    } catch {
+      // An ack is an optimization for retention, not delivery proof.
     }
   }
 
@@ -751,6 +929,15 @@ export class Controller {
   }
 
   private onSessionEvent(envelope: {
+    session_id?: string;
+    epoch?: string;
+    seq?: number;
+    payload?: SessionEventPayload;
+  }) {
+    this.applySessionEvent(envelope);
+  }
+
+  private applySessionEvent(envelope: {
     session_id?: string;
     epoch?: string;
     seq?: number;
@@ -1142,6 +1329,11 @@ export class Controller {
       created_at_ms: pending.createdAt,
     });
     this.setState({ pending, composerText: '' }, true);
+    const images: AttachmentInput[] = this.state.attachments.map((attachment) => ({
+      media_type: attachment.mediaType,
+      data_base64: attachment.dataBase64,
+      name: attachment.name,
+    }));
     try {
       const reserved = await this.client.request<OperationStatePayload>(
         'operations.reserve',
@@ -1151,6 +1343,7 @@ export class Controller {
           kind: 'send',
           body: text,
           expected_turn_id: null,
+          images,
         },
         15_000,
         { sessionId, operationId },
@@ -1164,6 +1357,7 @@ export class Controller {
       );
       this.applyOperation(dispatched.operation);
       saveDraft(credential.serverId, sessionId, '');
+      this.setState({ attachments: [] }, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const unknown = !(error instanceof AdapterRequestError);
@@ -1181,6 +1375,9 @@ export class Controller {
         this.setState({
           pending: { ...pending, state: nextState, error: message },
         });
+        // Never invite a resend of bytes that may already have reached the
+        // agent. The pending operation remains the source of truth.
+        this.setState({ attachments: [] }, true);
         savePending(credential.serverId, sessionId, {
           operation_id: operationId,
           text,
@@ -1356,6 +1553,75 @@ export class Controller {
     }
   }
 
+  /** Shared archive/restore path. Resolves true only on an acknowledgement. */
+  private async sessionAction(type: string, sessionId: string): Promise<boolean> {
+    if (!this.client || this.client.status !== 'connected') {
+      this.setToast('The adapter is offline. This change was not sent.');
+      return false;
+    }
+    try {
+      const payload = await this.client.request<{ session: SessionSummary }>(
+        type,
+        { session_id: sessionId },
+        20_000,
+        { sessionId },
+      );
+      this.applySessionSummary(payload.session);
+      return true;
+    } catch (error) {
+      this.setToast(error instanceof Error ? error.message : 'The adapter rejected this change.');
+      return false;
+    }
+  }
+
+  async archiveSession(sessionId: string): Promise<boolean> {
+    return this.sessionAction('sessions.archive', sessionId);
+  }
+
+  async restoreSession(sessionId: string): Promise<boolean> {
+    return this.sessionAction('sessions.restore', sessionId);
+  }
+
+  /**
+   * The JCode daemon has no delete capability. The adapter refuses with a
+   * clear error; the UI must not pretend the session was removed.
+   */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    return this.sessionAction('sessions.delete', sessionId);
+  }
+
+  async toggleFavorite(sessionId: string): Promise<boolean> {
+    if (!this.client || this.client.status !== 'connected') return false;
+    const current = this.state.sessions.find((session) => session.session_id === sessionId);
+    const favorite = !(current?.favorite ?? false);
+    try {
+      const payload = await this.client.request<{ session: SessionSummary }>(
+        'sessions.favorite',
+        { session_id: sessionId, favorite },
+        20_000,
+        { sessionId },
+      );
+      this.applySessionSummary(payload.session);
+      return true;
+    } catch (error) {
+      this.setToast(error instanceof Error ? error.message : 'Favorite was rejected.');
+      return false;
+    }
+  }
+
+  private applySessionSummary(session: SessionSummary) {
+    const snapshot = this.state.snapshot;
+    this.setState({
+      sessions: this.state.sessions.map((existing) =>
+        existing.session_id === session.session_id ? session : existing,
+      ),
+      snapshot:
+        snapshot && snapshot.session.session_id === session.session_id
+          ? { ...snapshot, session }
+          : snapshot,
+    });
+  }
+
   async renameSession(title: string) {
     const sessionId = this.state.activeSessionId;
     if (!this.client || this.client.status !== 'connected' || !sessionId) return;
@@ -1381,10 +1647,15 @@ export class Controller {
 
   async createSession(projectId: string | null, title: string) {
     if (!this.client || this.client.status !== 'connected') return;
-    const clientRequestId =
-      typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `create_${Date.now().toString(36)}`;
+    const key = `${projectId ?? ''}|${title.trim()}`;
+    let clientRequestId = this.createRequestIds.get(key);
+    if (!clientRequestId) {
+      clientRequestId =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `create_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+      this.createRequestIds.set(key, clientRequestId);
+    }
     try {
       const payload = await this.client.request<CreateSessionResponse>(
         'sessions.create',
@@ -1399,11 +1670,54 @@ export class Controller {
       this.setState({
         sessions: [payload.session, ...this.state.sessions.filter((session) => session.session_id !== payload.session.session_id)],
       });
+      this.createRequestIds.delete(key);
       await this.openSession(payload.session.session_id);
       this.setToast(payload.created ? 'Session created.' : 'Session already existed; attached to it.');
     } catch (error) {
       this.setToast(error instanceof Error ? error.message : 'Session creation failed.');
     }
+  }
+
+  /**
+   * Attach a locally selected image to the next send. The bytes are validated
+   * here and again by the adapter; nothing is uploaded until Send.
+   */
+  addAttachment(input: Omit<DraftAttachment, 'id'>) {
+    const mediaType = input.mediaType.toLowerCase();
+    if (!ALLOWED_ATTACHMENT_TYPES.includes(mediaType)) {
+      this.setToast('Only PNG, JPEG, WebP or GIF images can be attached.');
+      return false;
+    }
+    if (input.size > MAX_ATTACHMENT_BYTES) {
+      this.setToast('Each image must be 4 MiB or smaller.');
+      return false;
+    }
+    if (this.state.attachments.length >= MAX_DRAFT_ATTACHMENTS) {
+      this.setToast(`Up to ${MAX_DRAFT_ATTACHMENTS} images can be attached.`);
+      return false;
+    }
+    const id =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `att_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+    this.setState({
+      attachments: [...this.state.attachments, { ...input, mediaType, id }],
+    });
+    return true;
+  }
+
+  removeAttachment(id: string) {
+    this.setState({
+      attachments: this.state.attachments.filter((attachment) => attachment.id !== id),
+    });
+  }
+
+  clearAttachments() {
+    this.setState({ attachments: [] });
+  }
+
+  hasImageAttachmentSupport(): boolean {
+    return this.state.capabilities.includes('attachments.images');
   }
 
   async createProject(label: string, path: string) {
@@ -1557,6 +1871,10 @@ export class Controller {
         connection: { status: 'offline', message: null },
         savedOnPhone: false,
         credentialsKnown: listCredentials().length,
+        protocolVersion: null,
+        capabilities: [],
+        sessionRevision: 0,
+        attachments: [],
       },
       true,
     );
@@ -1581,6 +1899,24 @@ export class Controller {
     this.setState({ reasoningVisibility: value }, true);
     this.savePreferences();
   }
+}
+
+/**
+ * Apply an incremental session delta to a cached list. A removal is only
+ * applied when the adapter explicitly reports it, so a temporarily missing
+ * session never silently disappears from the phone.
+ */
+export function mergeSessionDelta(
+  existing: SessionSummary[],
+  delta: SessionsDeltaPayload,
+): SessionSummary[] {
+  if (delta.full) return delta.sessions;
+  const byId = new Map(existing.map((session) => [session.session_id, session]));
+  for (const session of delta.sessions) byId.set(session.session_id, session);
+  for (const removed of delta.removed) byId.delete(removed);
+  return [...byId.values()].sort(
+    (a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0),
+  );
 }
 
 export const controller = new Controller();

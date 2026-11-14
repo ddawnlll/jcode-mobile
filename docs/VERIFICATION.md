@@ -2,8 +2,13 @@
 
 Updated: 2026-11-13
 
-This page records what actually ran for the current 0.3.1 code. Statuses are
-`PASS`, `FAIL`, `PARTIAL`, `NOT_RUN`, `BLOCKED`, or `NOT_APPLICABLE`.
+> This page covers **0.3.1**. It is kept as the historical record and is not the
+> 0.4.0 matrix. For 0.4.0 see
+> [`evidence/v0.4.0/README.md`](evidence/v0.4.0/README.md) and
+> [`BUILD_STATE.md`](BUILD_STATE.md).
+
+This page records what actually ran for the 0.3.1 code. Statuses are `PASS`,
+`FAIL`, `PARTIAL`, `NOT_RUN`, `BLOCKED`, or `NOT_APPLICABLE`.
 
 The full command log, screenshots, and build notes are in
 [`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md). Historical release

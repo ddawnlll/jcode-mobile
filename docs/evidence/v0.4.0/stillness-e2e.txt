@@ -1,0 +1,15 @@
+building Stillness web bundle
+starting Rust Adapter v3 on 127.0.0.1:7655
+
+Running 7 tests using 1 worker
+
+  ✓  1 [pairing] › apps/stillness/e2e/pairing.spec.ts:11:2 › pairs through the real adapter and persists the exact server (756ms)
+  ✓  2 [mobile] › apps/stillness/e2e/stillness.spec.ts:15:2 › real session, draft, plan, activity, files, and preferences (6.3s)
+  -  3 [mobile] › apps/stillness/e2e/stillness.spec.ts:92:2 › desktop shell exposes the three-pane layout
+  ✓  4 [mobile] › apps/stillness/e2e/stillness.spec.ts:105:2 › send reports acceptance honestly and stop is the only cancellation (6.1s)
+  -  5 [desktop] › apps/stillness/e2e/stillness.spec.ts:15:2 › real session, draft, plan, activity, files, and preferences
+  ✓  6 [desktop] › apps/stillness/e2e/stillness.spec.ts:92:2 › desktop shell exposes the three-pane layout (493ms)
+  -  7 [desktop] › apps/stillness/e2e/stillness.spec.ts:105:2 › send reports acceptance honestly and stop is the only cancellation
+
+  3 skipped
+  4 passed (15.0s)

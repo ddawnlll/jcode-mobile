@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "jcode-adapter-v2"
 path = "src/main.rs"
 
+[[bin]]
+name = "jcode-adapter-v3"
+path = "src/bin/jcode-adapter-v3.rs"
+
 [dependencies]
 adapter-core.workspace = true
 adapter-protocol.workspace = true
@@ -23,6 +27,7 @@ http.workspace = true
 jcode-sdk.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+reqwest.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true

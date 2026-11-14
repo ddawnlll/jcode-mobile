@@ -1,0 +1,58 @@
+[
+  {
+    "name": "edge swipe opens the drawer and it follows the finger",
+    "status": "PASS"
+  },
+  {
+    "name": "drawer closes on Escape without navigating",
+    "status": "PASS"
+  },
+  {
+    "name": "session row swipes left, only one row stays open",
+    "status": "PASS"
+  },
+  {
+    "name": "swipe right pins locally and the row reports it",
+    "status": "PASS"
+  },
+  {
+    "name": "long press opens the session context menu",
+    "status": "PASS"
+  },
+  {
+    "name": "quick switcher filters and excludes archived sessions",
+    "status": "PASS"
+  },
+  {
+    "name": "pull to refresh follows the finger and releases honestly offline",
+    "status": "PASS"
+  },
+  {
+    "name": "bottom sheet drags down and dismisses",
+    "status": "PASS"
+  },
+  {
+    "name": "history back closes the top sheet, not the session",
+    "status": "PASS"
+  },
+  {
+    "name": "model search and provider chips narrow the catalog",
+    "status": "PASS"
+  },
+  {
+    "name": "reasoning slider snaps with the keyboard and updates aria",
+    "status": "PASS"
+  },
+  {
+    "name": "every icon button has an accessible name",
+    "status": "PASS"
+  },
+  {
+    "name": "reduced motion is a crossfade, not a spring",
+    "status": "PASS"
+  },
+  {
+    "name": "drawer spring can be interrupted mid-close",
+    "status": "PASS"
+  }
+]

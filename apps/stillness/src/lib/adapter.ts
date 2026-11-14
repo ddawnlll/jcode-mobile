@@ -5,6 +5,8 @@ import {
   type PairRedeemResponse,
   type ServerHelloPayload,
   type ServerInfo,
+  LEGACY_WS_SUBPROTOCOL,
+  MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   WS_SUBPROTOCOL,
 } from './protocol';
@@ -134,6 +136,8 @@ export class AdapterClient {
   private openReject: ((reason: unknown) => void) | null = null;
   status: ConnectionStatus = 'offline';
   server: ServerInfo | null = null;
+  /** Wire version selected during the last successful hello. */
+  negotiatedVersion = PROTOCOL_VERSION;
 
   constructor(baseUrl: string, token: string) {
     this.baseUrl = normalizeServerUrl(baseUrl);
@@ -166,31 +170,34 @@ export class AdapterClient {
   }
 
   async connect(): Promise<ServerHelloPayload> {
+    const hello = {
+      client_name: 'stillness-tauri',
+      client_version: '0.4.0',
+      min_version: MIN_PROTOCOL_VERSION,
+      max_version: PROTOCOL_VERSION,
+      supports: [WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL],
+    };
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      return this.request<ServerHelloPayload>('client.hello', {
-        client_name: 'stillness-web',
-        client_version: '0.3.1',
-        min_version: PROTOCOL_VERSION,
-        max_version: PROTOCOL_VERSION,
-        supports: [WS_SUBPROTOCOL],
-      });
+      return this.request<ServerHelloPayload>('client.hello', hello, 15_000, {}, MIN_PROTOCOL_VERSION);
     }
     this.manuallyClosed = false;
     this.openSocket();
     await this.waitForOpen();
-    const hello = await this.request<ServerHelloPayload>(
+    const response = await this.request<ServerHelloPayload>(
       'client.hello',
-      {
-        client_name: 'stillness-web',
-        client_version: '0.3.1',
-        min_version: PROTOCOL_VERSION,
-        max_version: PROTOCOL_VERSION,
-        supports: [WS_SUBPROTOCOL],
-      },
+      hello,
       15_000,
+      {},
+      // The handshake itself is speakable by every version. Sending it at the
+      // adapter's minimum lets a v2-only server answer and negotiate v2.
+      MIN_PROTOCOL_VERSION,
     );
-    this.server = hello.server;
-    return hello;
+    // A v3 adapter reports the negotiated version explicitly. A v2 adapter
+    // predates that field, so its advertised protocol version is authoritative.
+    this.negotiatedVersion =
+      response.negotiated_version ?? response.server?.protocol_version ?? PROTOCOL_VERSION;
+    this.server = response.server;
+    return response;
   }
 
   private openSocket() {
@@ -204,7 +211,11 @@ export class AdapterClient {
     });
     let socket: WebSocket;
     try {
-      socket = new WebSocket(this.socketUrl(), [WS_SUBPROTOCOL, `token.${this.token}`]);
+      socket = new WebSocket(this.socketUrl(), [
+        WS_SUBPROTOCOL,
+        LEGACY_WS_SUBPROTOCOL,
+        `token.${this.token}`,
+      ]);
     } catch (error) {
       this.openReject?.(error);
       return;
@@ -296,13 +307,14 @@ export class AdapterClient {
     payload: Record<string, unknown>,
     timeoutMs = 30_000,
     scope: { sessionId?: string; operationId?: string } = {},
+    wireVersion?: number,
   ): Promise<T> {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error('Adapter is not connected.'));
     }
     const requestId = id('req');
     const envelope: Envelope = {
-      v: PROTOCOL_VERSION,
+      v: wireVersion ?? this.negotiatedVersion,
       kind: 'request',
       id: requestId,
       type,

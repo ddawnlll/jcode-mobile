@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-  <external-path name="my_images" path="." />
-  <cache-path name="my_cache_images" path="." />
+  <!-- Inbound sharesheet files copied into the cache. -->
+  <cache-path name="share_in" path="share-in/" />
+  <!-- Camera capture output. -->
+  <cache-path name="native_capture" path="native-capture/" />
+  <!-- App-private downloads on pre-Android 10 devices. -->
+  <files-path name="app_files" path="." />
+  <external-files-path name="external_files" path="." />
+  <external-cache-path name="external_cache" path="." />
 </paths>

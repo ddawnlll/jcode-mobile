@@ -24,6 +24,11 @@ import {
 } from './screens/Library';
 import { BrowserScreen } from './screens/Browser';
 import { ActivityScreen, PlanScreen, SessionScreen } from './screens/Session';
+import { QuickSwitcher } from './components/QuickSwitcher';
+import { UndoToast } from './components/UndoToast';
+import { LockGate } from './components/LockGate';
+import { useNativeShell } from './components/useNativeShell';
+import { useSessionPrefs, visibleSessions } from './lib/sessionPrefs';
 
 function ScreenRouter({ state }: { state: AppState }) {
   switch (state.screen) {
@@ -62,6 +67,9 @@ function ScreenRouter({ state }: { state: AppState }) {
 }
 
 function Rail({ state }: { state: AppState }) {
+  const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
+  const railSessions = visibleSessions(state.sessions, prefs, online).slice(0, 12);
   const nav: Array<{ screen: 'home' | 'sessions' | 'projects' | 'settings'; label: string; icon: React.ReactNode }> = [
     { screen: 'home', label: 'Home', icon: <Torus size={18} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },
@@ -104,7 +112,7 @@ function Rail({ state }: { state: AppState }) {
         <button className="tiny-action" onClick={() => controller.go('sessions')}>All</button>
       </div>
       <div className="rail-recent">
-        {state.sessions.slice(0, 12).map((session) => (
+        {railSessions.map((session) => (
           <button
             key={session.session_id}
             className={`rail-session ${state.activeSessionId === session.session_id ? 'is-active' : ''}`}
@@ -114,13 +122,13 @@ function Rail({ state }: { state: AppState }) {
             <small>{session.status}</small>
           </button>
         ))}
-        {state.sessions.length === 0 ? <p className="inspector-empty">No sessions yet.</p> : null}
+        {railSessions.length === 0 ? <p className="inspector-empty">No sessions yet.</p> : null}
       </div>
       <div className="rail-foot">
         <IconServer size={16} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <strong>{state.server?.name ?? 'JCode server'}</strong>
-          <div>{state.connection.status} · v{state.server?.adapter_version ?? '0.3.1'}</div>
+          <div>{state.connection.status} · v{state.server?.adapter_version ?? '0.4.0'}</div>
         </div>
         <span className={`status-mark ${state.jcodeConnected ? '' : 'is-active'}`} />
       </div>
@@ -133,10 +141,14 @@ function Shell({ state }: { state: AppState }) {
     <div className={`app-shell screen-${state.screen}`}>
       <Rail state={state} />
       <div className="app-main">
-        <ScreenRouter state={state} />
+        <div className="screen-stage" key={state.screen}>
+          <ScreenRouter state={state} />
+        </div>
       </div>
       <Drawer state={state} />
+      <QuickSwitcher state={state} />
       <Toast message={state.toast} />
+      <UndoToast />
     </div>
   );
 }
@@ -160,6 +172,7 @@ function Splash() {
 
 export default function App() {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  useNativeShell(state.phase !== 'loading');
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -197,16 +210,27 @@ export default function App() {
     };
   }, []);
 
-  if (state.phase === 'loading') return <Splash />;
-  if (state.phase === 'unpaired') {
-    return (
+  let content: React.ReactNode;
+  if (state.phase === 'loading') {
+    content = <Splash />;
+  } else if (state.phase === 'unpaired') {
+    content = (
       <>
         {state.screen === 'pair' ? <PairScreen state={state} /> : <WelcomeScreen state={state} />}
         <Toast message={state.toast} />
       </>
     );
+  } else if (state.phase === 'ready') {
+    content = <ReadyScreen state={state} />;
+  } else if (state.phase === 'pairing') {
+    content = <PairingScreen state={state} />;
+  } else {
+    content = <Shell state={state} />;
   }
-  if (state.phase === 'ready') return <ReadyScreen state={state} />;
-  if (state.phase === 'pairing') return <PairingScreen state={state} />;
-  return <Shell state={state} />;
+  return (
+    <>
+      {content}
+      <LockGate />
+    </>
+  );
 }

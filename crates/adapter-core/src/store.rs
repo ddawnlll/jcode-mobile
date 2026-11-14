@@ -8,9 +8,23 @@ use tracing::info;
 use crate::paths::{CoreError, CoreResult, ProjectRow, now_ms};
 
 pub struct Store {
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
     server_id: String,
     path: PathBuf,
+    pub(crate) journal_retention: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PushRegistrationRow {
+    pub device_id: String,
+    pub platform: String,
+    pub token: String,
+    pub enabled: bool,
+    pub turns: bool,
+    pub failures: bool,
+    pub approvals: bool,
+    pub app_version: Option<String>,
+    pub updated_at_ms: i64,
 }
 
 impl std::fmt::Debug for Store {
@@ -101,6 +115,86 @@ impl Store {
                 session_id TEXT PRIMARY KEY,
                 server_id TEXT NOT NULL,
                 project_id TEXT NOT NULL
+             );
+             -- Adapter v3 durable event journal. `seq` is allocated inside the
+             -- insert transaction so it survives an adapter restart. Retention
+             -- trims old rows per session; a replay from below the floor is
+             -- reported as a gap, never silently filled.
+             CREATE TABLE IF NOT EXISTS event_journal (
+                session_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                epoch TEXT NOT NULL,
+                turn_id TEXT,
+                operation_id TEXT,
+                event_json TEXT NOT NULL,
+                observed_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (session_id, seq)
+             );
+             CREATE INDEX IF NOT EXISTS idx_event_journal_session_seq
+                ON event_journal(session_id, seq);
+             CREATE INDEX IF NOT EXISTS idx_event_journal_observed
+                ON event_journal(observed_at_ms);
+             -- Per-device acknowledged cursor. It is diagnostic and retention
+             -- input, never a promise that an unacknowledged event was lost.
+             CREATE TABLE IF NOT EXISTS event_cursors (
+                device_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                acked_seq INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (device_id, session_id)
+             );
+             -- Durable session index used by `sessions.delta`. `revision` is a
+             -- server-wide monotonic counter; removed rows keep their last
+             -- revision so a client converges.
+             CREATE TABLE IF NOT EXISTS session_index (
+                session_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                summary_json TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                removed INTEGER NOT NULL DEFAULT 0,
+                updated_at_ms INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_session_index_revision
+                ON session_index(server_id, revision);
+             -- Validated inline images for one send operation. Kept separate
+             -- from `operations` so an existing v2 database needs no column
+             -- migration. Bytes are base64 exactly as validated by the server.
+             CREATE TABLE IF NOT EXISTS operation_attachments (
+                operation_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                attachments_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL
+             );
+             -- Push registration and per-device notification preferences.
+             -- The provider token is stored so delivery can work while the app
+             -- is closed; it is never returned in full by an API reply.
+             CREATE TABLE IF NOT EXISTS device_push (
+                device_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                token TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                turns INTEGER NOT NULL DEFAULT 1,
+                failures INTEGER NOT NULL DEFAULT 1,
+                approvals INTEGER NOT NULL DEFAULT 1,
+                app_version TEXT,
+                updated_at_ms INTEGER NOT NULL
+             );
+             -- One row per notification attempt that passed dedupe. The primary
+             -- key makes a concurrent duplicate a no-op.
+             CREATE TABLE IF NOT EXISTS session_favorites (
+                session_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                favorite INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS push_log (
+                device_id TEXT NOT NULL,
+                notification_key TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                sent_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (device_id, notification_key)
              );",
         )?;
         let server_id = match conn
@@ -122,10 +216,16 @@ impl Store {
             }
         };
         info!(path = %path.display(), server_id = %server_id, "adapter store ready");
+        let journal_retention = std::env::var("JCODE_ADAPTER_JOURNAL_RETENTION")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(4096)
+            .clamp(128, 65_536);
         Ok(std::sync::Arc::new(Self {
             conn: Mutex::new(conn),
             server_id,
             path,
+            journal_retention,
         }))
     }
 
@@ -386,6 +486,51 @@ impl Store {
             .optional()?)
     }
 
+    /// Attach validated image tuples to an operation. A retry with different
+    /// attachments for the same operation id is a conflict, not a silent
+    /// overwrite.
+    pub fn set_operation_attachments(
+        &self,
+        operation_id: &str,
+        attachments_json: &str,
+    ) -> CoreResult<()> {
+        let conn = self.conn.lock().expect("store lock");
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT attachments_json FROM operation_attachments
+                 WHERE operation_id = ?1 AND server_id = ?2",
+                params![operation_id, self.server_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            if existing != attachments_json {
+                return Err(CoreError::Conflict(
+                    "operation id was already used with different attachments".into(),
+                ));
+            }
+            return Ok(());
+        }
+        conn.execute(
+            "INSERT INTO operation_attachments(operation_id, server_id, attachments_json, created_at_ms)
+             VALUES(?1, ?2, ?3, ?4)",
+            params![operation_id, self.server_id, attachments_json, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    pub fn operation_attachments(&self, operation_id: &str) -> CoreResult<Option<String>> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn
+            .query_row(
+                "SELECT attachments_json FROM operation_attachments
+                 WHERE operation_id = ?1 AND server_id = ?2",
+                params![operation_id, self.server_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn operation(&self, operation_id: &str) -> CoreResult<Option<OperationView>> {
         let conn = self.conn.lock().expect("store lock");
         Ok(conn
@@ -506,6 +651,26 @@ impl Store {
             .optional()?)
     }
 
+    /// `(pending, unknown, accepted)` counts for diagnostics. Pending means the
+    /// adapter has not reached a terminal state yet.
+    pub fn operation_counts(&self) -> CoreResult<(u64, u64, u64)> {
+        let conn = self.conn.lock().expect("store lock");
+        let count = |sql: &str| -> CoreResult<u64> {
+            Ok(conn.query_row(sql, params![self.server_id], |row| row.get::<_, i64>(0))? as u64)
+        };
+        let pending = count(
+            "SELECT COUNT(*) FROM operations WHERE server_id = ?1
+             AND state IN ('staged','reserved','dispatching')",
+        )?;
+        let unknown =
+            count("SELECT COUNT(*) FROM operations WHERE server_id = ?1 AND state = 'unknown'")?;
+        let accepted = count(
+            "SELECT COUNT(*) FROM operations WHERE server_id = ?1
+             AND state IN ('accepted','observed_in_history')",
+        )?;
+        Ok((pending, unknown, accepted))
+    }
+
     // ------------------------------------------------------------------
     // Session idempotency and metadata
     // ------------------------------------------------------------------
@@ -578,6 +743,37 @@ impl Store {
                 |row| row.get(0),
             )
             .optional()?)
+    }
+
+    pub fn session_favorite(&self, session_id: &str) -> CoreResult<bool> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn
+            .query_row(
+                "SELECT favorite FROM session_favorites WHERE session_id = ?1 AND server_id = ?2",
+                params![session_id, self.server_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .map(|value| value != 0)
+            .unwrap_or(false))
+    }
+
+    pub fn set_session_favorite(&self, session_id: &str, favorite: bool) -> CoreResult<()> {
+        let conn = self.conn.lock().expect("store lock");
+        if favorite {
+            conn.execute(
+                "INSERT INTO session_favorites(session_id, server_id, favorite, updated_at_ms)
+                 VALUES(?1, ?2, 1, ?3)
+                 ON CONFLICT(session_id) DO UPDATE SET favorite = 1, updated_at_ms = excluded.updated_at_ms",
+                params![session_id, self.server_id, now_ms()],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM session_favorites WHERE session_id = ?1 AND server_id = ?2",
+                params![session_id, self.server_id],
+            )?;
+        }
+        Ok(())
     }
 
     pub fn set_session_project(&self, session_id: &str, project_id: &str) -> CoreResult<()> {
@@ -662,6 +858,170 @@ impl Store {
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    // ------------------------------------------------------------------
+    // Push registration and notification preferences
+    // ------------------------------------------------------------------
+
+    fn push_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PushRegistrationRow> {
+        Ok(PushRegistrationRow {
+            device_id: row.get("device_id")?,
+            platform: row.get("platform")?,
+            token: row.get("token")?,
+            enabled: row.get::<_, i64>("enabled")? != 0,
+            turns: row.get::<_, i64>("turns")? != 0,
+            failures: row.get::<_, i64>("failures")? != 0,
+            approvals: row.get::<_, i64>("approvals")? != 0,
+            app_version: row.get("app_version")?,
+            updated_at_ms: row.get("updated_at_ms")?,
+        })
+    }
+
+    pub fn upsert_push_registration(
+        &self,
+        device_id: &str,
+        platform: &str,
+        token: &str,
+        app_version: Option<&str>,
+        enabled: bool,
+    ) -> CoreResult<PushRegistrationRow> {
+        let conn = self.conn.lock().expect("store lock");
+        conn.execute(
+            "INSERT INTO device_push(device_id, server_id, platform, token, enabled,
+                turns, failures, approvals, app_version, updated_at_ms)
+             VALUES(?1, ?2, ?3, ?4, ?5, 1, 1, 1, ?6, ?7)
+             ON CONFLICT(device_id) DO UPDATE SET
+                platform = excluded.platform,
+                token = excluded.token,
+                enabled = excluded.enabled,
+                app_version = excluded.app_version,
+                updated_at_ms = excluded.updated_at_ms",
+            params![
+                device_id,
+                self.server_id,
+                platform,
+                token,
+                enabled as i64,
+                app_version,
+                now_ms()
+            ],
+        )?;
+        conn.query_row(
+            "SELECT * FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+            params![device_id, self.server_id],
+            Self::push_row,
+        )
+        .map_err(CoreError::from)
+    }
+
+    pub fn push_registration(&self, device_id: &str) -> CoreResult<Option<PushRegistrationRow>> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn
+            .query_row(
+                "SELECT * FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+                params![device_id, self.server_id],
+                Self::push_row,
+            )
+            .optional()?)
+    }
+
+    pub fn set_push_preferences(
+        &self,
+        device_id: &str,
+        enabled: bool,
+        turns: bool,
+        failures: bool,
+        approvals: bool,
+    ) -> CoreResult<PushRegistrationRow> {
+        let conn = self.conn.lock().expect("store lock");
+        let changed = conn.execute(
+            "UPDATE device_push SET enabled = ?1, turns = ?2, failures = ?3,
+                approvals = ?4, updated_at_ms = ?5
+             WHERE device_id = ?6 AND server_id = ?7",
+            params![
+                enabled as i64,
+                turns as i64,
+                failures as i64,
+                approvals as i64,
+                now_ms(),
+                device_id,
+                self.server_id
+            ],
+        )?;
+        if changed == 0 {
+            return Err(CoreError::NotFound("push registration".into()));
+        }
+        // The connection lock is already held; do not call the locked accessor.
+        conn.query_row(
+            "SELECT * FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+            params![device_id, self.server_id],
+            Self::push_row,
+        )
+        .map_err(CoreError::from)
+    }
+
+    pub fn delete_push_registration(&self, device_id: &str) -> CoreResult<bool> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn.execute(
+            "DELETE FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+            params![device_id, self.server_id],
+        )? > 0)
+    }
+
+    pub fn push_registration_count(&self) -> CoreResult<u32> {
+        let conn = self.conn.lock().expect("store lock");
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM device_push WHERE server_id = ?1",
+            params![self.server_id],
+            |row| row.get(0),
+        )?;
+        Ok(count.max(0) as u32)
+    }
+
+    /// Devices enabled for one notification kind. `kind` is mapped through a
+    /// whitelist, so it never becomes SQL.
+    pub fn push_targets(&self, kind: &str) -> CoreResult<Vec<PushRegistrationRow>> {
+        let column = match kind {
+            "turns" => "turns",
+            "failures" => "failures",
+            "approvals" => "approvals",
+            _ => return Err(CoreError::InvalidInput(format!("unknown push kind {kind}"))),
+        };
+        let conn = self.conn.lock().expect("store lock");
+        let sql = format!(
+            "SELECT * FROM device_push WHERE server_id = ?1 AND enabled = 1 AND {column} = 1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![self.server_id], Self::push_row)?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Claim one notification for one device. Returns false when the key was
+    /// already claimed, which is how concurrent turn events dedupe.
+    pub fn claim_push_notification(
+        &self,
+        notification_key: &str,
+        device_id: &str,
+        session_id: &str,
+        kind: &str,
+    ) -> CoreResult<bool> {
+        let conn = self.conn.lock().expect("store lock");
+        let inserted = conn.execute(
+            "INSERT OR IGNORE INTO push_log(device_id, notification_key, session_id, kind, sent_at_ms)
+             VALUES(?1, ?2, ?3, ?4, ?5)",
+            params![device_id, notification_key, session_id, kind, now_ms()],
+        )?;
+        Ok(inserted > 0)
+    }
+
+    pub fn compact_push_log(&self, max_age_ms: i64) -> CoreResult<usize> {
+        let cutoff = now_ms().saturating_sub(max_age_ms.max(0));
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn.execute(
+            "DELETE FROM push_log WHERE sent_at_ms < ?1",
+            params![cutoff],
+        )?)
     }
 
     pub fn delete_project(&self, project_id: &str) -> CoreResult<bool> {
