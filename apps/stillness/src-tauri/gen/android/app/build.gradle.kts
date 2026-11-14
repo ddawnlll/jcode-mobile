@@ -75,6 +75,12 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    // Bounded background reconciliation (15 minute minimum, Doze aware).
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+    // BiometricPrompt with the device-credential fallback.
+    implementation("androidx.biometric:biometric:1.1.0")
+    // QR decoding from a captured or picked image (no camera preview of our own).
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.4")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")

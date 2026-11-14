@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">"JCode Mobile"</string>
     <string name="main_activity_title">"JCode Mobile"</string>
+    <string name="tile_new_session">"New session"</string>
+    <string name="widget_new_session">"New session"</string>
+    <string name="widget_description">"Start a new JCode session"</string>
 </resources>

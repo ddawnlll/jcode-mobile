@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+mod native_android;
+
 const SERVICE: &str = "dev.jcode.stillness";
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -147,11 +149,55 @@ pub fn run() {
         .expect("Android credential store unavailable");
 
     tauri::Builder::default()
+        // The plugin only registers the Kotlin class on Android. Its commands are
+        // registered below as app commands so an in-tree plugin does not need a
+        // generated ACL permission set.
+        .plugin(native_android::plugin())
         .invoke_handler(tauri::generate_handler![
             credential_load_all,
             credential_set,
             credential_delete,
-            credential_kind
+            credential_kind,
+            native_android::native_platform_status,
+            native_android::native_capabilities,
+            native_android::native_settings_get,
+            native_android::native_settings_set,
+            native_android::native_notification_status,
+            native_android::native_request_notification_permission,
+            native_android::native_post_notification,
+            native_android::native_push_status,
+            native_android::native_push_register_local,
+            native_android::native_background_sync_status,
+            native_android::native_background_sync_set,
+            native_android::native_background_sync_run_now,
+            native_android::native_share_consume_pending,
+            native_android::native_share_outbound,
+            native_android::native_deep_link_consume_pending,
+            native_android::native_biometric_status,
+            native_android::native_biometric_enable,
+            native_android::native_biometric_unlock,
+            native_android::native_biometric_lock_now,
+            native_android::native_biometric_disable,
+            native_android::native_vault_put,
+            native_android::native_vault_get,
+            native_android::native_vault_delete,
+            native_android::native_pick_images,
+            native_android::native_pick_document,
+            native_android::native_capture_photo,
+            native_android::native_scan_qr,
+            native_android::native_decode_qr_image,
+            native_android::native_save_to_downloads,
+            native_android::native_open_with,
+            native_android::native_read_image_base64,
+            native_android::native_clipboard_read,
+            native_android::native_clipboard_write,
+            native_android::native_haptic,
+            native_android::native_insets_snapshot,
+            native_android::native_layout_status,
+            native_android::native_refresh_shortcuts,
+            native_android::native_text_selection_noop,
+            native_android::native_register_listener,
+            native_android::native_remove_listener
         ])
         .run(tauri::generate_context!())
         .expect("Stillness failed to start");
