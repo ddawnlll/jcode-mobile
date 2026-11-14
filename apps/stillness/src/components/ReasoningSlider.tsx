@@ -28,6 +28,10 @@ export function ReasoningSlider({ state }: { state: AppState }) {
 
   const commit = async (next: number) => {
     if (next < 0 || next >= EFFORTS.length) return;
+    if (state.connection.status !== 'connected') {
+      controller.setToast('The adapter is offline. Reasoning changes need a live connection.');
+      return;
+    }
     setPending(true);
     await controller.setReasoning(EFFORTS[next]);
     setPending(false);

@@ -6,7 +6,6 @@ import { ConnectionBanner, EmptyState, ScreenHeader, SessionRow, SavedTag, useDo
 import { sessionTitle, isRunning } from '../lib/format';
 import { credentialStorageKind } from '../lib/credentials';
 import {
-  sortSessions,
   useSessionPrefs,
   visibleSessions,
 } from '../lib/sessionPrefs';
@@ -154,7 +153,7 @@ export function SessionsScreen({ state }: { state: AppState }) {
   useDocumentTitle('Sessions');
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const base = showArchived ? sortSessions(state.sessions, prefs) : visibleSessions(state.sessions, prefs);
+    const base = visibleSessions(state.sessions, prefs);
     return base.filter((session) => {
       if (filter === 'running' && !isRunning(session.status)) return false;
       if (filter === 'finished' && isRunning(session.status)) return false;
@@ -164,7 +163,7 @@ export function SessionsScreen({ state }: { state: AppState }) {
         (session.working_dir ?? '').toLowerCase().includes(needle)
       );
     });
-  }, [filter, prefs, query, showArchived, state.sessions]);
+  }, [filter, prefs, query, state.sessions]);
   return (
     <div className="screen" data-testid="sessions-screen">
       <ScreenHeader

@@ -244,9 +244,14 @@ export function savedScrollOffset(key: string): number | null {
  */
 export function useScrollMemory<T extends HTMLElement>(key: string) {
   const ref = useRef<T | null>(null);
+  const skipSave = useRef(true);
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
+    skipSave.current = true;
+    const release = window.setTimeout(() => {
+      skipSave.current = false;
+    }, 140);
     const saved = scrollMemory.get(key);
     if (saved != null) {
       // Two frames so the first paint has laid out the restored transcript.
@@ -255,12 +260,16 @@ export function useScrollMemory<T extends HTMLElement>(key: string) {
           element.scrollTop = saved;
         });
       });
-      return () => cancelAnimationFrame(restore);
+      return () => {
+        cancelAnimationFrame(restore);
+        window.clearTimeout(release);
+      };
     }
-    return;
+    return () => window.clearTimeout(release);
   }, [key]);
 
   const onScroll = (event: React.UIEvent<T>) => {
+    if (skipSave.current) return;
     scrollMemory.set(key, event.currentTarget.scrollTop);
   };
   return { ref, onScroll };

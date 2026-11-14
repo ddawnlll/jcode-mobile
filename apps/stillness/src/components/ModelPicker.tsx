@@ -42,6 +42,10 @@ export function ModelPicker({ state }: { state: AppState }) {
   }, [pool]);
 
   const choose = async (model: string, providerName: string, key: string) => {
+    if (state.connection.status !== 'connected') {
+      controller.setToast('The adapter is offline. Model changes need a live connection.');
+      return;
+    }
     setPending(key);
     await controller.selectModel(model, providerName);
     setPending(null);
