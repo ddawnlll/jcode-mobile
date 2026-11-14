@@ -196,6 +196,23 @@ export interface PickedUris {
   error: string | null;
 }
 
+export type PickedImageStatus = 'ok' | 'too_large' | 'unsupported_type' | 'unreadable';
+
+/**
+ * A picked image read into base64 for `controller.addAttachment`.
+ *
+ * `size` is the decoded byte count; `base64` is null unless `status === 'ok'`.
+ * The native reader enforces a 4 MiB decoded limit and an `image/*` type gate.
+ */
+export interface PickedImageData {
+  status: PickedImageStatus;
+  mimeType: string | null;
+  name: string | null;
+  size: number | null;
+  base64: string | null;
+  error: string | null;
+}
+
 export type QrStatus = 'decoded' | 'cancelled' | 'unreadable' | 'unavailable';
 
 export interface QrScanResult {

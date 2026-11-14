@@ -188,6 +188,7 @@ pub fn run() {
             native_android::native_decode_qr_image,
             native_android::native_save_to_downloads,
             native_android::native_open_with,
+            native_android::native_read_image_base64,
             native_android::native_clipboard_read,
             native_android::native_clipboard_write,
             native_android::native_haptic,

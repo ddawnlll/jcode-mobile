@@ -417,6 +417,17 @@ class NativeBridgePlugin(private val host: Activity) : Plugin(host) {
     }
 
     @Command
+    fun readImageBase64(invoke: Invoke) = guarded(invoke) {
+        val uri = invoke.getArgs().getString("uri", null)
+            ?: return@guarded invoke.reject("uri is required", "invalid_uri")
+        if (uri.length > 4096) {
+            invoke.reject("uri is unreasonably long", "invalid_uri")
+            return@guarded
+        }
+        invoke.resolveObject(ImageReader.read(host, uri))
+    }
+
+    @Command
     fun saveToDownloads(invoke: Invoke) = guarded(invoke) {
         val args = invoke.getArgs()
         val fileName = args.getString("fileName", null)

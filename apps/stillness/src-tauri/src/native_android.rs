@@ -537,6 +537,20 @@ pub struct OpenWithRequest {
     pub mime_type: Option<String>,
 }
 
+/// One picked image read into base64 for the adapter attachment path.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PickedImageData {
+    /// `ok`, `too_large`, `unsupported_type`, or `unreadable`.
+    pub status: String,
+    pub mime_type: Option<String>,
+    pub name: Option<String>,
+    /// Decoded byte count when the read succeeded.
+    pub size: Option<u64>,
+    pub base64: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ClipboardWriteRequest {
@@ -600,6 +614,9 @@ forward_command!(
     native_save_to_downloads("saveToDownloads", SaveDownloadRequest) -> DownloadedFile
 );
 forward_command!(native_open_with("openWith", OpenWithRequest) -> OpenWithResult);
+forward_command!(
+    native_read_image_base64("readImageBase64", UriRequest) -> PickedImageData
+);
 forward_command!(native_clipboard_read("clipboardRead") -> ClipboardRead);
 forward_command!(
     native_clipboard_write("clipboardWrite", ClipboardWriteRequest) -> ClipboardWrite
@@ -740,6 +757,7 @@ mod tests {
             "decodeQrImage",
             "saveToDownloads",
             "openWith",
+            "readImageBase64",
             "clipboardRead",
             "clipboardWrite",
             "haptic",
@@ -813,6 +831,30 @@ mod tests {
         assert_eq!(value["qrCamera"], "blocked");
         assert_eq!(value["notifications"], "available");
         assert_eq!(value["widget"], "unknown");
+    }
+
+    #[test]
+    fn picked_image_data_decodes_platform_payload() {
+        let data: PickedImageData = serde_json::from_value(json!({
+            "status": "ok",
+            "mimeType": "image/png",
+            "name": "shot.png",
+            "size": 8,
+            "base64": "iVBORw0KGgo=",
+            "error": null
+        }))
+        .expect("image payload");
+        assert_eq!(data.status, "ok");
+        assert_eq!(data.size, Some(8));
+        assert_eq!(data.mime_type.as_deref(), Some("image/png"));
+
+        let too_large: PickedImageData = serde_json::from_value(json!({
+            "status": "too_large",
+            "error": "exceeds_4_mib"
+        }))
+        .expect("partial image payload");
+        assert!(too_large.base64.is_none());
+        assert_eq!(too_large.status, "too_large");
     }
 
     #[test]

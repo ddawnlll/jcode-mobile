@@ -18,6 +18,7 @@ import {
   type NotificationPosted,
   type NotificationStatus,
   type OpenWithResult,
+  type PickedImageData,
   type PickedUris,
   type PlatformStatus,
   type PostNotificationRequest,
@@ -226,6 +227,17 @@ export function pickDocument(): Promise<PickedUris> {
 
 export function capturePhoto(): Promise<PickedUris> {
   return call<PickedUris>('native_capture_photo');
+}
+
+/**
+ * Read a picked image into base64 for the adapter attachment path.
+ *
+ * Returns `status: 'ok'` only when the payload is an `image/*` under 4 MiB
+ * decoded. The caller forwards `{ name, mediaType: mimeType, size, dataBase64 }`
+ * to `controller.addAttachment`.
+ */
+export function readPickedImage(uri: string): Promise<PickedImageData> {
+  return call<PickedImageData>('native_read_image_base64', { args: { uri } });
 }
 
 export function scanQr(): Promise<QrScanResult> {
