@@ -223,6 +223,41 @@ retry of the same operation id with different attachments is a conflict. A
 retry that drops attachments is also a conflict, so an image message can never
 silently become text-only.
 
+## Push registration and delivery
+
+The adapter stores one push registration per paired device:
+
+| Request | Purpose |
+| --- | --- |
+| `push.register` | store provider token, platform and app version |
+| `push.preferences` | enable/disable all push, turns, failures, approvals |
+| `push.status` | provider, configured state, registration count, sent/failed/deduped/skipped |
+| `push.unregister` | remove this device's registration |
+
+Replies never return the full token, only its last six characters. Preferences
+are per device and per kind. Disabling push never stops a VPS turn.
+
+Delivery uses FCM HTTP v1 and requires operator configuration:
+
+```
+JCODE_FCM_PROJECT_ID=<firebase project>
+JCODE_FCM_ACCESS_TOKEN=<short-lived OAuth token, refreshed externally>
+```
+
+When either is missing, `configured` is false, every queued notification is
+counted as `skipped`, and `push.status` reports the reason. The adapter never
+reports a delivery it did not make. Notification payloads contain only
+`session_id`, `event_id`, `kind` and a `jcode://session/<id>` deep link. No
+prompt text, transcript, tool output, file content or model name is included.
+
+Dedupe is a per-device primary key `(device_id, notification_key)` where the key
+is `kind:session:event`. A concurrent duplicate turn event is ignored. The log
+is compacted after seven days.
+
+Real FCM delivery is **NOT_RUN** in this environment: no Firebase project or
+OAuth token is available. Registration, preferences, dedupe, payload privacy
+and the unconfigured path are covered by unit and integration tests.
+
 ## Security boundaries
 
 - Device bearer tokens are hashed at rest; the adapter stores no plaintext

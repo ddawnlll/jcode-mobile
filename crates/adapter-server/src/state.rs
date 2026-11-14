@@ -16,6 +16,7 @@ use tokio::sync::{broadcast, mpsc};
 use crate::faults::FaultInjection;
 use crate::hub::Hub;
 use crate::metrics::LatencyTracker;
+use crate::push::{FcmConfig, PushService};
 
 pub const ADAPTER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -40,6 +41,7 @@ pub struct AppState {
     pub jcode_last_contact_ms: RwLock<Option<i64>>,
     pub jcode_reconnects: AtomicU64,
     pub jcode_last_error: RwLock<Option<String>>,
+    pub push: Arc<PushService>,
 }
 
 #[derive(Debug, Default)]
@@ -74,6 +76,7 @@ impl AppState {
         let (revocation, _) = broadcast::channel(32);
         let event_queue = config.event_queue;
         let faults = Arc::new(FaultInjection::from_env());
+        let push = PushService::new(Arc::clone(&store), FcmConfig::from_env());
         Ok(Arc::new(Self {
             config: Arc::new(config),
             auth: AuthService::new(Arc::clone(&store)),
@@ -100,6 +103,7 @@ impl AppState {
             jcode_last_contact_ms: RwLock::new(None),
             jcode_reconnects: AtomicU64::new(0),
             jcode_last_error: RwLock::new(None),
+            push,
         }))
     }
 

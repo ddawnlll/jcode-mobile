@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build and sign the Stillness 12 v0.3.1 Android release APK.
+# Build and sign the Stillness Android release APK (currently 0.4.0).
 #
 # This is the Tauri 2 shell under apps/stillness, not the older Expo client.
 # The release APK is debug-signed for sideloading unless ANDROID_KEYSTORE and
@@ -16,6 +16,8 @@ if [ -z "${JAVA_HOME:-}" ]; then
   for candidate in \
     "/usr/lib/jvm/java-21-openjdk-amd64" \
     "/usr/lib/jvm/java-17-openjdk-amd64" \
+    "/Library/Java/JavaVirtualMachines/jdk-24.jdk/Contents/Home" \
+    "/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home" \
     "${HOME}/jdk17/jdk-17.0.21+9" \
     "${TOOLCHAIN}/jdk17/Contents/Home"; do
     if [ -x "${candidate}/bin/javac" ]; then

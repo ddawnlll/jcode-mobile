@@ -19,4 +19,4 @@ pub use config::AdapterConfig;
 pub use journal::{JournalRecord, JournalReplay, JournalStats, MAX_REPLAY_LIMIT};
 pub use live::{JcodeLive, classify_backend_error};
 pub use paths::{ProjectRow, RootScope};
-pub use store::Store;
+pub use store::{PushRegistrationRow, Store};

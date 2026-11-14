@@ -14,6 +14,19 @@ pub struct Store {
     pub(crate) journal_retention: u32,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PushRegistrationRow {
+    pub device_id: String,
+    pub platform: String,
+    pub token: String,
+    pub enabled: bool,
+    pub turns: bool,
+    pub failures: bool,
+    pub approvals: bool,
+    pub app_version: Option<String>,
+    pub updated_at_ms: i64,
+}
+
 impl std::fmt::Debug for Store {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Store").field("path", &self.path).finish()
@@ -151,6 +164,31 @@ impl Store {
                 server_id TEXT NOT NULL,
                 attachments_json TEXT NOT NULL,
                 created_at_ms INTEGER NOT NULL
+             );
+             -- Push registration and per-device notification preferences.
+             -- The provider token is stored so delivery can work while the app
+             -- is closed; it is never returned in full by an API reply.
+             CREATE TABLE IF NOT EXISTS device_push (
+                device_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                token TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                turns INTEGER NOT NULL DEFAULT 1,
+                failures INTEGER NOT NULL DEFAULT 1,
+                approvals INTEGER NOT NULL DEFAULT 1,
+                app_version TEXT,
+                updated_at_ms INTEGER NOT NULL
+             );
+             -- One row per notification attempt that passed dedupe. The primary
+             -- key makes a concurrent duplicate a no-op.
+             CREATE TABLE IF NOT EXISTS push_log (
+                device_id TEXT NOT NULL,
+                notification_key TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                sent_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (device_id, notification_key)
              );",
         )?;
         let server_id = match conn
@@ -783,6 +821,170 @@ impl Store {
             })
         })?;
         Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    // ------------------------------------------------------------------
+    // Push registration and notification preferences
+    // ------------------------------------------------------------------
+
+    fn push_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<PushRegistrationRow> {
+        Ok(PushRegistrationRow {
+            device_id: row.get("device_id")?,
+            platform: row.get("platform")?,
+            token: row.get("token")?,
+            enabled: row.get::<_, i64>("enabled")? != 0,
+            turns: row.get::<_, i64>("turns")? != 0,
+            failures: row.get::<_, i64>("failures")? != 0,
+            approvals: row.get::<_, i64>("approvals")? != 0,
+            app_version: row.get("app_version")?,
+            updated_at_ms: row.get("updated_at_ms")?,
+        })
+    }
+
+    pub fn upsert_push_registration(
+        &self,
+        device_id: &str,
+        platform: &str,
+        token: &str,
+        app_version: Option<&str>,
+        enabled: bool,
+    ) -> CoreResult<PushRegistrationRow> {
+        let conn = self.conn.lock().expect("store lock");
+        conn.execute(
+            "INSERT INTO device_push(device_id, server_id, platform, token, enabled,
+                turns, failures, approvals, app_version, updated_at_ms)
+             VALUES(?1, ?2, ?3, ?4, ?5, 1, 1, 1, ?6, ?7)
+             ON CONFLICT(device_id) DO UPDATE SET
+                platform = excluded.platform,
+                token = excluded.token,
+                enabled = excluded.enabled,
+                app_version = excluded.app_version,
+                updated_at_ms = excluded.updated_at_ms",
+            params![
+                device_id,
+                self.server_id,
+                platform,
+                token,
+                enabled as i64,
+                app_version,
+                now_ms()
+            ],
+        )?;
+        conn.query_row(
+            "SELECT * FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+            params![device_id, self.server_id],
+            Self::push_row,
+        )
+        .map_err(CoreError::from)
+    }
+
+    pub fn push_registration(&self, device_id: &str) -> CoreResult<Option<PushRegistrationRow>> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn
+            .query_row(
+                "SELECT * FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+                params![device_id, self.server_id],
+                Self::push_row,
+            )
+            .optional()?)
+    }
+
+    pub fn set_push_preferences(
+        &self,
+        device_id: &str,
+        enabled: bool,
+        turns: bool,
+        failures: bool,
+        approvals: bool,
+    ) -> CoreResult<PushRegistrationRow> {
+        let conn = self.conn.lock().expect("store lock");
+        let changed = conn.execute(
+            "UPDATE device_push SET enabled = ?1, turns = ?2, failures = ?3,
+                approvals = ?4, updated_at_ms = ?5
+             WHERE device_id = ?6 AND server_id = ?7",
+            params![
+                enabled as i64,
+                turns as i64,
+                failures as i64,
+                approvals as i64,
+                now_ms(),
+                device_id,
+                self.server_id
+            ],
+        )?;
+        if changed == 0 {
+            return Err(CoreError::NotFound("push registration".into()));
+        }
+        // The connection lock is already held; do not call the locked accessor.
+        conn.query_row(
+            "SELECT * FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+            params![device_id, self.server_id],
+            Self::push_row,
+        )
+        .map_err(CoreError::from)
+    }
+
+    pub fn delete_push_registration(&self, device_id: &str) -> CoreResult<bool> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn.execute(
+            "DELETE FROM device_push WHERE device_id = ?1 AND server_id = ?2",
+            params![device_id, self.server_id],
+        )? > 0)
+    }
+
+    pub fn push_registration_count(&self) -> CoreResult<u32> {
+        let conn = self.conn.lock().expect("store lock");
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM device_push WHERE server_id = ?1",
+            params![self.server_id],
+            |row| row.get(0),
+        )?;
+        Ok(count.max(0) as u32)
+    }
+
+    /// Devices enabled for one notification kind. `kind` is mapped through a
+    /// whitelist, so it never becomes SQL.
+    pub fn push_targets(&self, kind: &str) -> CoreResult<Vec<PushRegistrationRow>> {
+        let column = match kind {
+            "turns" => "turns",
+            "failures" => "failures",
+            "approvals" => "approvals",
+            _ => return Err(CoreError::InvalidInput(format!("unknown push kind {kind}"))),
+        };
+        let conn = self.conn.lock().expect("store lock");
+        let sql = format!(
+            "SELECT * FROM device_push WHERE server_id = ?1 AND enabled = 1 AND {column} = 1"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![self.server_id], Self::push_row)?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    }
+
+    /// Claim one notification for one device. Returns false when the key was
+    /// already claimed, which is how concurrent turn events dedupe.
+    pub fn claim_push_notification(
+        &self,
+        notification_key: &str,
+        device_id: &str,
+        session_id: &str,
+        kind: &str,
+    ) -> CoreResult<bool> {
+        let conn = self.conn.lock().expect("store lock");
+        let inserted = conn.execute(
+            "INSERT OR IGNORE INTO push_log(device_id, notification_key, session_id, kind, sent_at_ms)
+             VALUES(?1, ?2, ?3, ?4, ?5)",
+            params![device_id, notification_key, session_id, kind, now_ms()],
+        )?;
+        Ok(inserted > 0)
+    }
+
+    pub fn compact_push_log(&self, max_age_ms: i64) -> CoreResult<usize> {
+        let cutoff = now_ms().saturating_sub(max_age_ms.max(0));
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn.execute(
+            "DELETE FROM push_log WHERE sent_at_ms < ?1",
+            params![cutoff],
+        )?)
     }
 
     pub fn delete_project(&self, project_id: &str) -> CoreResult<bool> {

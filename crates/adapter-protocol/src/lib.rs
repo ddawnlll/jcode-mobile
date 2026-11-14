@@ -71,6 +71,8 @@ pub const CAPABILITIES: &[&str] = &[
     "sessions.delta",
     "diagnostics.snapshot",
     "attachments.images",
+    "push.register_v1",
+    "push.preferences",
 ];
 
 /// Bounded image attachment limits. A larger request is rejected before it can
@@ -914,6 +916,70 @@ pub struct DiagnosticsSnapshot {
     pub operations: OperationDiagnostics,
     pub latency: LatencyDiagnostics,
     pub fault_injection: FaultInjectionState,
+}
+
+// ---------------------------------------------------------------------------
+// Push registration (v3)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PushRegisterRequest {
+    /// `android` or `ios`. The adapter stores it but does not infer a transport.
+    pub platform: String,
+    /// Provider token (for example an FCM registration token). Never returned
+    /// in full by any reply.
+    pub token: String,
+    #[serde(default)]
+    pub app_version: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PushPreferencesRequest {
+    pub enabled: bool,
+    pub turns: bool,
+    pub failures: bool,
+    pub approvals: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PushRegistrationView {
+    pub device_id: String,
+    pub platform: String,
+    /// Last six characters only, for operator confirmation.
+    pub token_suffix: String,
+    pub enabled: bool,
+    pub turns: bool,
+    pub failures: bool,
+    pub approvals: bool,
+    pub app_version: Option<String>,
+    pub updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PushStatusPayload {
+    pub provider: String,
+    pub configured: bool,
+    pub registrations: u32,
+    pub sent: u64,
+    pub failed: u64,
+    pub deduped: u64,
+    pub skipped: u64,
+    pub last_error: Option<String>,
+    pub last_success_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PushRegisterPayload {
+    pub registered: bool,
+    pub provider: String,
+    pub configured: bool,
+    pub registration: Option<PushRegistrationView>,
 }
 
 // ---------------------------------------------------------------------------

@@ -1227,3 +1227,61 @@ async fn model_selection_rejects_a_mismatched_provider() {
     .await;
     assert_eq!(bad_effort.msg_type, "error");
 }
+
+#[tokio::test]
+async fn push_registration_is_scoped_and_never_echoes_the_token() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+
+    let empty: adapter_protocol::PushStatusPayload =
+        response_payload(&call(&h, "push.status", json!({})).await);
+    assert_eq!(empty.provider, "fcm_http_v1");
+    assert!(!empty.configured, "no FCM credentials in tests");
+    assert_eq!(empty.registrations, 0);
+
+    let registered: adapter_protocol::PushRegisterPayload = response_payload(
+        &call(
+            &h,
+            "push.register",
+            json!({
+                "platform": "android",
+                "token": "fcm_test_token_abcdef987654",
+                "app_version": "0.4.0",
+                "enabled": true
+            }),
+        )
+        .await,
+    );
+    assert!(registered.registered);
+    assert!(!registered.configured);
+    let view = registered.registration.expect("registration view");
+    assert_eq!(view.device_id, h.conn.device.device_id);
+    assert_eq!(view.token_suffix, "987654");
+    assert!(!serde_json::to_string(&view).unwrap().contains("abcdef"));
+    assert!(view.turns && view.failures && view.approvals);
+
+    let prefs: adapter_protocol::PushRegisterPayload = response_payload(
+        &call(
+            &h,
+            "push.preferences",
+            json!({"enabled": true, "turns": false, "failures": true, "approvals": false}),
+        )
+        .await,
+    );
+    let view = prefs.registration.unwrap();
+    assert!(!view.turns);
+    assert!(view.failures);
+    assert!(!view.approvals);
+
+    let status: adapter_protocol::PushStatusPayload =
+        response_payload(&call(&h, "push.status", json!({})).await);
+    assert_eq!(status.registrations, 1);
+    assert_eq!(status.sent, 0);
+
+    let removed: serde_json::Value =
+        response_payload(&call(&h, "push.unregister", json!({})).await);
+    assert_eq!(removed["removed"], true);
+    let status: adapter_protocol::PushStatusPayload =
+        response_payload(&call(&h, "push.status", json!({})).await);
+    assert_eq!(status.registrations, 0);
+}

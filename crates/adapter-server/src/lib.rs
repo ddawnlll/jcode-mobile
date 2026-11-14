@@ -5,6 +5,7 @@ pub mod events;
 pub mod faults;
 pub mod hub;
 pub mod metrics;
+pub mod push;
 pub mod state;
 pub mod ws;
 

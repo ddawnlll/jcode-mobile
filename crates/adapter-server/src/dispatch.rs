@@ -6,6 +6,7 @@ use base64::Engine as _;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
+use crate::push::PushKind;
 use crate::state::{AppState, ConnContext};
 use crate::ws::error_envelope;
 
@@ -311,6 +312,45 @@ pub async fn handle_request(
             &request,
             "diagnostics.snapshot",
             serde_json::to_value(state.diagnostics()).unwrap_or_default(),
+        ),
+        "push.register" => match decode::<PushRegisterRequest>(&request.payload) {
+            Ok(payload) => match state.push.register(&conn.device.device_id, &payload) {
+                Ok(payload) => ok(
+                    &state,
+                    &request,
+                    "push.register",
+                    serde_json::to_value(payload).unwrap_or_default(),
+                ),
+                Err(error) => error_response(&state, &request, error),
+            },
+            Err(error) => error_response(&state, &request, error),
+        },
+        "push.unregister" => match state.push.unregister(&conn.device.device_id) {
+            Ok(removed) => ok(
+                &state,
+                &request,
+                "push.unregister",
+                json!({"removed": removed}),
+            ),
+            Err(error) => error_response(&state, &request, error),
+        },
+        "push.preferences" => match decode::<PushPreferencesRequest>(&request.payload) {
+            Ok(payload) => match state.push.set_preferences(&conn.device.device_id, &payload) {
+                Ok(payload) => ok(
+                    &state,
+                    &request,
+                    "push.preferences",
+                    serde_json::to_value(payload).unwrap_or_default(),
+                ),
+                Err(error) => error_response(&state, &request, error),
+            },
+            Err(error) => error_response(&state, &request, error),
+        },
+        "push.status" => ok(
+            &state,
+            &request,
+            "push.status",
+            serde_json::to_value(state.push.status()).unwrap_or_default(),
         ),
 
         // ----------------------------------------------------------------
@@ -1809,6 +1849,29 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
     state
         .hub
         .publish(&session_id, turn_id.clone(), operation_id, event.clone());
+    match &event {
+        SessionEvent::TurnDone { .. } => {
+            state
+                .push
+                .notify(PushKind::Turns, &session_id, turn_id.as_deref());
+        }
+        SessionEvent::TurnStopped { reason, .. } if reason != "cancelled" => {
+            state
+                .push
+                .notify(PushKind::Failures, &session_id, turn_id.as_deref());
+        }
+        SessionEvent::PermissionRequest { request_id, .. } => {
+            state
+                .push
+                .notify(PushKind::Approvals, &session_id, Some(request_id));
+        }
+        SessionEvent::AdapterError { .. } => {
+            state
+                .push
+                .notify(PushKind::Failures, &session_id, turn_id.as_deref());
+        }
+        _ => {}
+    }
     if matches!(
         event,
         SessionEvent::TurnDone { .. } | SessionEvent::TurnStopped { .. }
