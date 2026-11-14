@@ -154,7 +154,7 @@ export function BottomSheet({
     if (!element) return;
     const focusable = Array.from(
       element.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]):not([tabindex="-1"]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       ),
     ).filter((item) => item.offsetParent !== null);
     if (!focusable.length) return;

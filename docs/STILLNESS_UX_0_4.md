@@ -113,8 +113,8 @@ hooks never intercept back when no layer is open.
 $ tsc --noEmit && vite build
 ✓ 137 modules transformed.
 dist/assets/index-CkJg4ysn.css   54.28 kB │ gzip:  10.95 kB
-dist/assets/index-f6uc_CJH.js   476.85 kB │ gzip: 155.85 kB
-✓ built in 528ms
+dist/assets/index-Dj2yId1B.js   477.14 kB │ gzip: 155.92 kB
+✓ built in 517ms
 ```
 
 Zero TypeScript errors. The only console warning is the repository-level

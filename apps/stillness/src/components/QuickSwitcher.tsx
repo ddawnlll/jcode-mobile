@@ -123,6 +123,10 @@ export function QuickSwitcher({ state }: { state: AppState }) {
             value={query}
             placeholder="Switch to a session…"
             aria-label="Search sessions to switch"
+            aria-controls="switcher-list"
+            aria-activedescendant={
+              results[selected] ? `switcher-${results[selected].session.session_id}` : undefined
+            }
             onChange={(event) => {
               setQuery(event.target.value);
               setSelected(0);
@@ -153,7 +157,7 @@ export function QuickSwitcher({ state }: { state: AppState }) {
             Offline. Showing sessions saved on this phone for this server.
           </div>
         ) : null}
-        <div className="switcher-list" role="listbox" aria-label="Sessions">
+        <div className="switcher-list" id="switcher-list" role="listbox" aria-label="Sessions">
           {results.length === 0 ? (
             <p className="switcher-empty">
               {state.sessions.length === 0
@@ -162,7 +166,7 @@ export function QuickSwitcher({ state }: { state: AppState }) {
             </p>
           ) : null}
           {pinnedResults.length ? (
-            <div className="switcher-group">
+            <div className="switcher-group" role="group" aria-label="Pinned on this phone">
               <span className="switcher-label">Pinned on this phone</span>
               {pinnedResults.map(({ session }) => {
                 rowIndex += 1;
@@ -181,7 +185,7 @@ export function QuickSwitcher({ state }: { state: AppState }) {
             </div>
           ) : null}
           {otherResults.length ? (
-            <div className="switcher-group">
+            <div className="switcher-group" role="group" aria-label="Other sessions">
               <span className="switcher-label">
                 {state.savedOnPhone ? 'Saved on this phone' : 'On this server'}
               </span>
@@ -229,6 +233,7 @@ function SwitcherRow({
   return (
     <button
       type="button"
+      id={`switcher-${session.session_id}`}
       role="option"
       aria-selected={selected}
       className={`switcher-item ${selected ? 'is-selected' : ''}`}
