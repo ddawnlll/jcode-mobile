@@ -1,149 +1,204 @@
 # Build state
 
-Updated: 2026-11-13
+Updated: 2026-11-14
 
 ## Current line
 
 | Item | Value |
 | --- | --- |
-| Branch | `main` |
-| Release | `v0.3.1` |
-| App version | 0.3.1 |
-| Adapter | Rust Adapter v2, protocol v2 |
+| Branch | `feat/adapter-v3` (release docs: `feat/release-docs`) |
+| Head | `c3627fe` merge `feat/android-native` into `feat/adapter-v3` |
+| Commits since `v0.3.1` | 18 |
+| Release | `v0.4.0`, prepared; tag and GitHub release not published |
+| App version | 0.4.0 |
+| Adapter | Rust Adapter v3, protocol 3, minimum 2 |
+| Binary names | `jcode-adapter-v3` (preferred), `jcode-adapter-v2` (rollback alias) |
 | Client | Stillness 12, Tauri 2 |
 | Android package | `dev.jcode.stillness` |
-| Android versionCode | 3001 |
+| Android versionCode | 4000 |
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
 | JCode harness API | v1.11 |
-| Runtime | Bun 1.4.4, Rust stable |
+| Runtime | Bun 1.4.4, Rust 1.96.0-nightly |
 | Repository | `https://github.com/ddawnlll/jcode-mobile` |
 
 ## Components
 
 | Component | Path | State |
 | --- | --- | --- |
-| Adapter protocol | `crates/adapter-protocol` | v2 envelopes, events, errors |
-| Adapter core | `crates/adapter-core` | SQLite WAL, auth, paths, SDK link |
-| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch |
-| Stillness web | `apps/stillness` | React 19, Vite 7 |
-| Tauri shell | `apps/stillness/src-tauri` | Desktop and Android |
+| Adapter protocol | `crates/adapter-protocol` | v3 envelopes, negotiation, 29 capabilities, 10 tests |
+| Adapter core | `crates/adapter-core` | journal, cursors, delta index, auth, paths, SDK link, 28 tests |
+| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch, diagnostics, push, 17 unit + 17 integration tests |
+| Stillness web | `apps/stillness` | React 19, Vite 7, gestures and motion |
+| Tauri shell | `apps/stillness/src-tauri` | Desktop and Android; `native_android.rs` contract |
 | Android project | `apps/stillness/src-tauri/gen/android` | Committed, patched Tauri CLI path |
-| Legacy Expo app | `src/` | 0.2.x client, not the 0.3.1 artifact |
+| Kotlin bridge | `.../java/dev/jcode/stillness/native/` | Notifications, push, background sync, share, deep links, biometrics, pickers, downloads, clipboard, layout, launchers |
+| Legacy Expo app | `src/` | 0.2.x client, not the 0.4.0 artifact |
 | Legacy adapter | `integration/jcode-adapter` | 0.2.x Bun adapter |
 
 ## Checks
 
-| Check | Result |
-| --- | --- |
-| `cargo test --workspace` | PASS, 30 tests |
-| `cargo fmt --all -- --check` | PASS |
-| `bun run typecheck` | PASS |
-| `bun run lint` | PASS, 0 errors, 0 warnings |
-| `bun run test` | PASS, 14 suites / 139 tests |
-| `cd apps/stillness && bun run build` | PASS |
-| `bash scripts/stillness-e2e.sh` | PASS, 4 passed / 3 skipped |
-| `bun run marketing:test` | PASS, 25 unit tests; 76 passed / 3 skipped |
-| Native Linux Tauri build | PASS, 5,071,384-byte release binary |
-| Native Linux launch | PASS under Xvfb |
-| Native Secret Service keyring | PASS |
-| Android release APK | PASS, static verification |
-| Android emulator runtime | PASS, same-source x86_64 debug build |
-| Physical Android | NOT_RUN |
-| iOS | NOT_APPLICABLE on Linux |
+Every result below comes from the 0.4.0 build and test run recorded in this
+repository, except where the row says `NOT_RUN` or "carried forward". "Carried
+forward" means it was not re-run for 0.4.0.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Adapter v3 Rust tests | `cargo test --workspace` | PASS, 72 tests: 28 core, 10 protocol, 17 server lib, 17 integration |
+| Rust formatting | `cargo fmt --all -- --check` | PASS |
+| Rust clippy | `cargo clippy --workspace --all-targets -- -D warnings` | PASS |
+| Root typecheck | `bun run typecheck` | NOT_RUN in the docs worktree (no `node_modules`); last recorded PASS for 0.3.1 |
+| Repository lint | `bun run lint` | NOT_RUN in the docs worktree; last recorded PASS for 0.3.1 |
+| Legacy Jest/RNTL | `bun run test` | NOT_RUN in the docs worktree; last recorded PASS for 0.3.1, 14 suites / 139 tests |
+| Stillness typecheck and bundle | `cd apps/stillness && bun run build` | PASS in the 0.4.0 run (`docs/V0_4_0_RELEASE_NOTES.md`); not re-run here |
+| UX helper checks | `node scripts/check-stillness-ux.mjs` | PASS, 7/7 (`docs/STILLNESS_UX_0_4.md`) |
+| Browser interaction checks | `node .staging/ui-0.4/verify.mjs` | PASS, 14/14 (`ui/verify.json`); staging script, not committed |
+| Browser e2e, real daemon + Adapter v3 | `cd apps/stillness && npx playwright test` via the staging harness | PASS, 4 passed / 3 skipped; 5 passed / 3 skipped with the perf spec |
+| Startup measurements | same run, `JCODE_PERF` line | PASS, web target only: 27 ms online, 60 ms cached, 56 ms shell to paint |
+| Adapter v3 real-stack smoke | `bash scripts/v3-smoke-up.sh` | PASS, real agent turn `OK`, seq 7, replay 0 duplicates, one accepted operation |
+| Android Kotlin compile | `./gradlew :app:compileUniversalDebugKotlin` | PASS, JDK 24, SDK 37, NDK 27.1.12297006 |
+| Android release APK | `bash scripts/build-android-release.sh` | PASS, 12,693,953 bytes, v2 + v3 signatures |
+| Android release APK static verification | `aapt2 dump badging`, `apksigner verify`, `zipalign -c` | PASS |
+| Android release APK on emulator | install, launch, pair, restart, one turn | PASS, API 36 arm64-v8a: versionCode 4000 installed and launched with no fatal crash, paired to staging Adapter v3, emulator restart restored the exact session with history, and one real turn was accepted and answered on device. The adb-typed prompt was truncated to `Repl` and the agent asked about a REPL, so this is a real accepted turn, not a completed task |
+| Android native interaction matrix | see `docs/ANDROID_NATIVE.md` | PASS on the emulator for notifications, sharesheet, biometric device-credential, downloads, clipboard/haptics, lifecycle/insets/back, settings |
+| Android image pickers | photo picker, image read | PARTIAL: decode works, camera capture blocked on the AVD |
+| FCM push | registration, preferences, dedupe, FCM v1 sender | PARTIAL: `not_configured`, no Firebase credentials, no delivery |
+| Home widget | provider and layout registered | PARTIAL: launcher placement `NOT_RUN` |
+| Native Linux Tauri build and launch | `bash scripts/build-tauri-linux.sh` | NOT_RUN for 0.4.0; last verified for 0.3.1 |
+| Secret Service keyring | carried forward | PASS for 0.3.1, not re-run |
+| Marketing site build and browser matrix | `bun run marketing:test` | NOT_RUN for 0.4.0; last verified for 0.3.1 |
+| Physical Android device (Samsung A34) | none attached | NOT_RUN |
+| Manual screen-reader pass | none | NOT_RUN |
+| Battery measurement (mAh, wake locks) | none | NOT_RUN |
+| Frame pacing / 120 Hz | none | NOT_RUN |
+| Native cold start and memory | none | NOT_RUN |
+| Process death and airplane mode | none | NOT_RUN |
+| iOS | requires macOS + Xcode signing | NOT_APPLICABLE for this artifact |
+
+CI: `.github/workflows/check.yml` runs the JavaScript job, the Rust job
+(`fmt`, `clippy -D warnings`, `test`), and the Stillness Android APK job
+(JDK 21, platform 36, build-tools 36.0.0, NDK 27.2.12479018). The workflow is
+committed; the run itself has not been pushed or executed.
 
 ## Release artifacts
 
 | Artifact | Bytes | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.3.1-android-release.apk` | 11,016,925 | `03a6d808524461e12dca1370540eede2e040e179e9f116cec980effb180da562` |
+| `artifacts/jcode-mobile-0.4.0-android-release.apk` | 12,693,953 (12.1 MiB) | `db6fadf9d305a958388859e50aa93490adc35907ba6e3cbe9f6e2f87d86ca531` |
 
-The 0.3.1 APK is a Tauri 2 build for `arm64-v8a` and `armeabi-v7a`,
-debug-signed for sideloading. It is attached to the
-[`v0.3.1` release](https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.1)
-with its `.sha256` file. Artifacts are not committed.
+```text
+package dev.jcode.stillness
+versionCode 4000, versionName 0.4.0
+minSdk 24, targetSdk 37, compileSdk 37
+native-code arm64-v8a, armeabi-v7a
+APK Signature Scheme v2 true, v3 true, Android Debug certificate
+zipalign 4-byte check: successful
+```
 
-Historical artifacts:
+The `.sha256` file beside the APK contains:
 
-- Expo 0.2.2 Android APK, 65,731,410 bytes, SHA-256
-  `f2ee7c4f0eae836c8361f956cd3ffe0403ddae389bac4c3a2fd59a17c001ddf9`.
-- Expo 0.2.2 iOS Simulator `.app` zip, 29 MiB, SHA-256
-  `33269e4e09d34d3da5d35653451172c4f49225edee0e22966d8343c84e8e3859`.
-- Older Android and iOS artifacts are recorded in
-  [`V0_2_2_VERIFICATION.md`](V0_2_2_VERIFICATION.md) and the v0.2.1 notes.
+```text
+db6fadf9d305a958388859e50aa93490adc35907ba6e3cbe9f6e2f87d86ca531  jcode-mobile-0.4.0-android-release.apk
+```
 
-The 0.2.2 iOS artifact is a Simulator `.app`, not a signed IPA. There is no
-signed iOS artifact in 0.3.1.
+`shasum -a 256` over the APK reproduces that digest. Artifacts are gitignored
+and are not committed. The 0.4.0 GitHub release and tag do not exist yet, so no
+release download URL is verified here. `website/index.html` targets
+`releases/download/v0.4.0/...` and must not be deployed until that asset exists;
+see `docs/MARKETING.md`.
+
+Historical artifacts remain in `artifacts/` and are recorded in
+[`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md) and the earlier
+verification pages. The 0.3.1 APK was 11,016,925 bytes with SHA-256
+`03a6d808524461e12dca1370540eede2e040e179e9f116cec980effb180da562`.
 
 ## Android build
 
 ```text
-JDK 21.0.13
-Android SDK 37
-Build tools 37.0.0
-NDK 27.1.12297006
-Gradle 9.6.1
+Host:        macOS 26.1, arm64
+JDK:         24.0.1
+Android SDK: 37
+Build tools: 37.0.0
+NDK:         27.1.12297006
+Gradle:      9.6.1
 compileSdk 37, minSdk 24, targetSdk 37
+ABIs:        arm64-v8a, armeabi-v7a
 ```
 
-Build:
+Build and verify:
 
 ```sh
 bash scripts/build-android-release.sh
+aapt2 dump badging artifacts/jcode-mobile-0.4.0-android-release.apk
+apksigner verify --print-certs -v artifacts/jcode-mobile-0.4.0-android-release.apk
+zipalign -c -v 4 artifacts/jcode-mobile-0.4.0-android-release.apk
+shasum -a 256 artifacts/jcode-mobile-0.4.0-android-release.apk
 ```
 
 The script detects JDK/SDK/NDK, installs the ARM Rust targets, builds the web
 bundle, runs `tauri android build --apk --target aarch64 armv7`, zipaligns,
 signs with the repository debug keystore, verifies v2/v3 signatures, and writes
-the checksum. The generated Android project is committed; build output,
-`local.properties`, `jniLibs`, and generated Wry Kotlin remain ignored.
+the checksum. `local.properties`, `jniLibs`, build output, and generated Wry
+Kotlin remain ignored.
+
+Kotlin-only compile check (no packaging):
+
+```sh
+cd apps/stillness/src-tauri/gen/android
+JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-24.jdk/Contents/Home \
+ANDROID_HOME=$HOME/.local/android-toolchain/sdk \
+  ./gradlew :app:compileUniversalDebugKotlin
+```
 
 ## Native Linux build
 
+Not re-run for 0.4.0. The 0.3.1 path is unchanged:
+
 ```sh
 bash scripts/build-tauri-linux.sh
-```
-
-Without system GTK 3/WebKitGTK 4.1 development packages:
-
-```sh
 TAURI_SYSROOT="$HOME/tauri-sysroot" bash scripts/build-tauri-linux.sh
 ```
 
-The 5,071,384-byte release binary is local-only and is not attached to the
+The 5,071,384-byte 0.3.1 release binary was local-only and is not attached to a
 GitHub release.
 
 ## Test environment
 
 | Item | Value |
 | --- | --- |
-| Host | Debian 13 (trixie), Linux 6.12, x86_64 |
-| RAM | 11.7 GiB |
-| Rust | 1.99.1 |
-| Bun | 1.4.4 |
-| JCode staging | Pinned fork commit, isolated home |
-| Playwright | Chromium 1.65 |
-| Android emulator | API 36, x86_64 |
-| Native Linux | Xvfb + user-space GTK/WebKit prefix |
+| Host | macOS 26.1, arm64, no sudo assumptions |
+| Rust | 1.96.0-nightly (2026-03-21) |
+| Bun | 1.4.4 (pinned by `.bun-version`) |
+| JDK | 24.0.1 |
+| Android SDK / build tools / NDK | 37 / 37.0.0 / 27.1.12297006 |
+| Android emulator | API 36, arm64-v8a, `dev.jcode.stillness` |
+| Browser | Playwright Chromium, web target only |
+| JCode staging | Pinned fork commit, isolated `JCODE_HOME` and socket |
+| Adapter under test | Adapter v3, ports 7655/7658/7660/7661 (staging only) |
+
+Staging runs use `.staging/` and never contact the production daemon or the live
+adapter on port 7644.
 
 ## Resumption point
 
-1. The current release is `v0.3.1` on `main`.
-2. The release APK and checksum are attached to the GitHub release and verified
-   by download.
-3. The evidence matrix is [`VERIFICATION.md`](VERIFICATION.md).
-4. The full command log and captures are in
-   [`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md).
-5. Physical Android, iOS, and a human screen-reader pass remain open.
-6. Staging runs use `.staging/` and must never touch the production daemon.
+1. 0.4.0 is prepared on `feat/adapter-v3`; the release tag, GitHub release,
+   and release download URL are still to be created.
+2. The APK and checksum exist locally under `artifacts/` and are verified.
+3. The evidence index is
+   [`evidence/v0.4.0/README.md`](evidence/v0.4.0/README.md).
+4. Physical Android, FCM delivery, a human screen-reader pass, battery
+   measurement, frame pacing, native cold start/memory, and process
+   death/airplane mode remain `NOT_RUN`.
+5. The CI workflow is committed but has not run.
 
 ## Known gaps
 
-- No release keystore or Play Store listing.
+- No release keystore or Play Store listing; the APK is debug-signed.
 - No x86_64 library in the release APK.
 - No physical Android validation.
+- No FCM delivery without operator credentials.
 - No iOS build on this host.
 - The adapter uses session-scoped upstream cancellation.
-- File-level diffs are not available.
-- Attachments are not implemented.
-- A persisted snapshot may omit the assistant side of a just-completed turn;
-  the live stream carries it.
+- File-level diffs are not available; only aggregate edit statistics.
+- Push registration exists, but authenticated background session
+  reconciliation does not.
+- Native Linux and marketing builds were not re-verified for 0.4.0.

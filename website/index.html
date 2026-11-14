@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111F20">
   <title>JCode Mobile · Leave the desk. Keep the thread.</title>
-  <meta name="description" content="A Tauri client for JCode on your own Linux server. Send work, leave the phone, and return to the same session, plan, and tool trail. Android 0.3.1 APK available for sideload.">
+  <meta name="description" content="A Tauri client for JCode on your own Linux server. Send work, leave the phone, and return to the same session, plan, and tool trail. Android 0.4.0 APK available for sideload.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/icon.png">
@@ -60,7 +60,7 @@
   <meta property="og:image:alt" content="JCode Mobile 0.3.1 social card with a real session and the words Leave the desk. Keep the thread.">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="JCode Mobile · Leave the desk. Keep the thread.">
-  <meta name="twitter:description" content="A Tauri client for JCode on your own Linux server. Android 0.3.1 APK available for sideload.">
+  <meta name="twitter:description" content="A Tauri client for JCode on your own Linux server. Android 0.4.0 APK available for sideload.">
   <meta name="twitter:image" content="assets/social-card.png">
   <script type="application/ld+json">
     {
@@ -70,11 +70,11 @@
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "Remote development client",
       "operatingSystem": "Android",
-      "softwareVersion": "0.3.1",
-      "downloadUrl": "https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk",
+      "softwareVersion": "0.4.0",
+      "downloadUrl": "https://github.com/ddawnlll/jcode-mobile/releases/download/v0.4.0/jcode-mobile-0.4.0-android-release.apk",
       "codeRepository": "https://github.com/ddawnlll/jcode-mobile",
       "softwareHelp": "https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md",
-      "releaseNotes": "https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.1"
+      "releaseNotes": "https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.4.0"
     }
   </script>
 </head>
@@ -116,7 +116,7 @@
         <div class="hero-copy">
           <div class="hero-kicker">
             <p class="mono eyebrow">A Tauri client for JCode on your own server</p>
-            <p class="mono hero-edition">Stillness 12 · Adapter v2 · 0.3.1</p>
+            <p class="mono hero-edition">Stillness 12 · Adapter v3 · 0.4.0</p>
           </div>
           <h1 class="hero-title" id="hero-title">
             <span class="hero-line">Leave the desk.</span>
@@ -124,18 +124,18 @@
           </h1>
           <p class="hero-lede">JCode keeps working on your Linux server. The phone is how you send an instruction, leave, and return to the exact session, plan, and tool trail.</p>
           <div class="hero-actions">
-            <a class="button button--primary" id="download-apk" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk" referrerpolicy="no-referrer">
+            <a class="button button--primary" id="download-apk" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.4.0/jcode-mobile-0.4.0-android-release.apk" referrerpolicy="no-referrer">
               <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
                 <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12v2h10v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
               </svg>
-              <span>Download Android 0.3.1</span>
+              <span>Download Android 0.4.0</span>
               <span class="button-meta mono">APK</span>
             </a>
             <a class="button button--text" href="#how">See the return path <span class="arrow" aria-hidden="true">↓</span></a>
           </div>
-          <p class="caveat"><span class="caveat-mark" aria-hidden="true">!</span> 10.5 MiB. Debug-signed APK for arm64-v8a and armeabi-v7a. No Play Store listing. iOS is not built on this Linux host.</p>
+          <p class="caveat"><span class="caveat-mark" aria-hidden="true">!</span> 12.1 MiB. Debug-signed APK for arm64-v8a and armeabi-v7a. No Play Store listing. iOS is not built on this Linux host.</p>
           <dl class="hero-facts">
-            <div><dt class="mono">Adapter</dt><dd>Rust v2</dd></div>
+            <div><dt class="mono">Adapter</dt><dd>Rust v3</dd></div>
             <div><dt class="mono">Provider</dt><dd>Command Code</dd></div>
             <div><dt class="mono">Client</dt><dd>Stillness 12</dd></div>
           </dl>
@@ -206,7 +206,7 @@
           <h2 id="premise-title">The work runs on your server. The phone is how you return.</h2>
         </div>
         <div class="premise-body">
-          <p class="lead">Adapter v2 is one Rust process beside JCode. It speaks to the curated SDK and harness API, keeps one SQLite journal, and exposes an authenticated mobile WebSocket. It does not run a second agent or proxy a provider key.</p>
+          <p class="lead">Adapter v3 is one Rust process beside JCode. It speaks to the curated SDK and harness API, keeps a durable SQLite event journal with cursor replay, and exposes an authenticated mobile WebSocket. It does not run a second agent or proxy a provider key.</p>
           <p>Navigation, backgrounding, socket close, and force-quit are not cancellation. The adapter keeps the operation journal. When you reopen, the client reconciles the same server and the same session, or shows an honest recovery state.</p>
         </div>
       </div>
@@ -235,7 +235,7 @@
         <span class="signal-link" aria-hidden="true"></span>
         <span class="signal-node">WSS + token</span>
         <span class="signal-link" aria-hidden="true"></span>
-        <span class="signal-node">Adapter v2</span>
+        <span class="signal-node">Adapter v3</span>
         <span class="signal-link" aria-hidden="true"></span>
         <span class="signal-node">JCode SDK</span>
         <span class="signal-link" aria-hidden="true"></span>
@@ -412,19 +412,19 @@
           <tbody>
             <tr>
               <td data-label="Artifact">Android APK</td>
-              <td data-label="Version" class="mono">0.3.1</td>
+              <td data-label="Version" class="mono">0.4.0</td>
               <td data-label="State"><span class="state-mark state-mark--available" aria-hidden="true"></span> Available</td>
-              <td data-label="Notes">10.5 MiB. Debug-signed, sideload only. arm64-v8a and armeabi-v7a.</td>
+              <td data-label="Notes">12.1 MiB. Debug-signed, sideload only. arm64-v8a and armeabi-v7a.</td>
             </tr>
             <tr>
               <td data-label="Artifact">Native Linux shell</td>
-              <td data-label="Version" class="mono">0.3.1</td>
+              <td data-label="Version" class="mono">0.4.0</td>
               <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Source build</td>
               <td data-label="Notes">Tauri 2 and Secret Service. Built and launched on Debian 13.</td>
             </tr>
             <tr>
               <td data-label="Artifact">Web preview</td>
-              <td data-label="Version" class="mono">0.3.1</td>
+              <td data-label="Version" class="mono">0.4.0</td>
               <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Verification</td>
               <td data-label="Notes">Browser token in localStorage. Not a product surface or keystore.</td>
             </tr>
@@ -439,7 +439,7 @@
       </div>
       <div class="wrap release-foot">
         <p class="mono">Not here yet</p>
-        <p>Signed iOS IPA / Play Store listing / push notifications / live public demo. The app needs a reachable server.</p>
+        <p>Signed iOS IPA / Play Store listing / FCM push delivery / live public demo. The app needs a reachable server.</p>
       </div>
     </section>
 
@@ -451,7 +451,7 @@
       <div class="wrap setup-grid">
         <div class="setup-intro">
           <h2 id="setup-title">Three moves. One server.</h2>
-          <p class="lead">The phone cannot start work on its own. You need a reachable JCode daemon on a Linux server, Adapter v2, and TLS for any remote connection.</p>
+          <p class="lead">The phone cannot start work on its own. You need a reachable JCode daemon on a Linux server, Adapter v3, and TLS for any remote connection.</p>
           <p class="mono setup-prereq">Prerequisite / JCode pinned fork + Rust + TLS</p>
           <figure class="setup-plate">
             <div class="specimen-sheet specimen-sheet--compact">
@@ -462,13 +462,13 @@
         </div>
         <ol class="setup-steps">
           <li>
-            <div class="step-head"><span class="mono step-num">01</span><h3>Build and run Adapter v2.</h3></div>
+            <div class="step-head"><span class="mono step-num">01</span><h3>Build and run Adapter v3.</h3></div>
             <p>One Rust binary speaks the mobile WebSocket and the JCode SDK. It does not run a second agent.</p>
-            <pre><code>cargo build --release -p adapter-server --bin jcode-adapter-v2
+            <pre><code>cargo build --release -p adapter-server --bin jcode-adapter-v3
 
 JCODE_ADAPTER_ALLOWED_ROOTS="$HOME/src" \
 JCODE_ADAPTER_BIND=127.0.0.1:7646 \
-./target/release/jcode-adapter-v2</code></pre>
+./target/release/jcode-adapter-v3</code></pre>
             <p class="step-note">Put a TLS reverse proxy in front of the adapter. Never expose plain ws:// to the internet.</p>
           </li>
           <li>
@@ -476,12 +476,12 @@ JCODE_ADAPTER_BIND=127.0.0.1:7646 \
             <p>The adapter prints a single-use code for this run. It expires after ten minutes and is exchanged once for a device token.</p>
             <pre><code>Pairing code (valid for 10 minutes, single use):
 ABCD-EFGH-JKLM</code></pre>
-            <p class="step-note">`jcode pair` is the 0.2.x path. Adapter v2 generates and hashes its own code.</p>
+            <p class="step-note">`jcode pair` is the 0.2.x path. Adapter v3 generates and hashes its own code.</p>
           </li>
           <li>
             <div class="step-head"><span class="mono step-num">03</span><h3>Install and pair the phone.</h3></div>
             <p>Install the Android APK, allow sideloading, then enter the TLS hostname and the code. The token goes into Android Keystore or Linux Secret Service.</p>
-            <pre><code>adb install -r jcode-mobile-0.3.1-android-release.apk</code></pre>
+            <pre><code>adb install -r jcode-mobile-0.4.0-android-release.apk</code></pre>
             <p class="step-note"><a class="inline-link" data-link="docs" href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md">Read the full setup and TLS notes</a></p>
           </li>
         </ol>
@@ -496,15 +496,15 @@ ABCD-EFGH-JKLM</code></pre>
           <p class="lead">Download the Android build, or read the setup path first. The server does the work. The phone is how you return.</p>
         </div>
         <div class="closing-action">
-          <a class="button button--primary button--primary-night" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk" referrerpolicy="no-referrer">
+          <a class="button button--primary button--primary-night" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.4.0/jcode-mobile-0.4.0-android-release.apk" referrerpolicy="no-referrer">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12v2h10v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
             </svg>
-            <span>Download Android 0.3.1</span>
+            <span>Download Android 0.4.0</span>
             <span class="button-meta mono">APK</span>
           </a>
           <p class="caveat caveat--night">Sideload only. Debug-signed. No Play Store listing. No signed iOS IPA.</p>
-          <p class="mono closing-meta">10.5 MiB / arm64-v8a + armeabi-v7a</p>
+          <p class="mono closing-meta">12.1 MiB / arm64-v8a + armeabi-v7a</p>
         </div>
       </div>
       <div class="wrap seam" aria-hidden="true">
@@ -529,10 +529,10 @@ ABCD-EFGH-JKLM</code></pre>
         <a href="https://github.com/1jehuang/jcode">JCode upstream</a>
         <a data-link="docs" href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md">Getting started</a>
         <a href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/API.md">API</a>
-        <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.3.1">Release v0.3.1</a>
+        <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.4.0">Release v0.4.0</a>
       </nav>
       <div class="footer-meta">
-        <p class="mono">Android 0.3.1 / Debug-signed / Sideload only</p>
+        <p class="mono">Android 0.4.0 / Debug-signed / Sideload only</p>
         <p class="mono">Source / main / 12 November 2026</p>
       </div>
     </div>

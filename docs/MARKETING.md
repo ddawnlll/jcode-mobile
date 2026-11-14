@@ -81,7 +81,9 @@ bun --bun scripts/marketing/build.mjs \
   --out .staging/marketing/site
 ```
 
-Every build writes `build-manifest.json` beside the copied files:
+Every build writes `build-manifest.json` beside the copied files. This is the
+manifest recorded for the 0.3.1 source and is illustrative only; a current
+build reports `productVersion` from `package.json`, which is `0.4.0`:
 
 ```json
 {
@@ -164,11 +166,18 @@ MARKETING_ALLOWED_EXTERNAL_PREFIXES="https://example.com/product" \
 The exact primary CTA target is:
 
 ```text
-https://github.com/ddawnlll/jcode-mobile/releases/download/v0.3.1/jcode-mobile-0.3.1-android-release.apk
+https://github.com/ddawnlll/jcode-mobile/releases/download/v0.4.0/jcode-mobile-0.4.0-android-release.apk
 ```
 
-`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.3.1`
+`e2e/marketing/layout.spec.ts` asserts that exact URL, the visible `0.4.0`
 version, and `referrerpolicy="no-referrer"`.
+
+The 0.4.0 source edits were not rebuilt or redeployed in this change. Deploy
+only after the `v0.4.0` release exists and has the
+`jcode-mobile-0.4.0-android-release.apk` asset attached; until then the CTA
+target does not resolve. The scene, specimen, and pairing images in
+`website/assets/media/` are still the 0.3.1 captures and stay labelled
+`v0.3.1`, because that is what they show.
 
 ## Commands
 
@@ -232,7 +241,7 @@ Assertions include:
 
 - no horizontal document/body overflow and a single visible `h1`
 - visible heading hierarchy with no skipped levels
-- exact v0.3.1 APK CTA and visible version text
+- exact v0.4.0 APK CTA and visible version text
 - every internal anchor and local image resolves
 - custom fonts load and all runtime requests stay inside `/jcode-mobile/`
 - scene tabs are keyboard operable (`ArrowRight`, `Home`, `End`, `Enter`),
