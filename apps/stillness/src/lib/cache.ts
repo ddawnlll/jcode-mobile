@@ -17,6 +17,8 @@ export interface CachedSessionList {
   projects: Project[];
   observed_at_ms: number;
   source: string;
+  /** Durable adapter delta revision this cache was merged at. */
+  revision?: number;
 }
 
 export function loadSessionListCache(serverId: string): CachedSessionList | null {

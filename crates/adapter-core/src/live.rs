@@ -130,10 +130,10 @@ impl JcodeLive {
                         Ok(events) => loop {
                             match events.next() {
                                 Ok(Some(event)) => {
-                                    if let Some(event) = map_event(event) {
-                                        if sink.blocking_send(event).is_err() {
-                                            return;
-                                        }
+                                    if let Some(event) = map_event(event)
+                                        && sink.blocking_send(event).is_err()
+                                    {
+                                        return;
                                     }
                                 }
                                 Ok(None) => break,
@@ -147,10 +147,10 @@ impl JcodeLive {
                             warn!(%error, "JCode global event stream unavailable");
                             let events = client.events(None);
                             while let Some(event) = events.next() {
-                                if let Some(event) = map_event(event) {
-                                    if sink.blocking_send(event).is_err() {
-                                        return;
-                                    }
+                                if let Some(event) = map_event(event)
+                                    && sink.blocking_send(event).is_err()
+                                {
+                                    return;
                                 }
                             }
                         }
@@ -172,6 +172,27 @@ impl JcodeLive {
             std::thread::sleep(backoff);
             backoff = (backoff * 2).min(Duration::from_secs(15));
         }
+    }
+
+    /// Single write path for text and text+images. Attach is required by the
+    /// harness and is a no-op when the session is already current.
+    fn send_inner(
+        &self,
+        session_id: &str,
+        content: &str,
+        images: Vec<(String, String)>,
+    ) -> CoreResult<()> {
+        let client = self.client()?;
+        let _guard = self.attach_for_command(&client, session_id)?;
+        client
+            .notify(ApiRequest::SendMessage {
+                session_id: session_id.to_string(),
+                content: content.to_string(),
+                system_reminder: None,
+                images,
+                no_reply: false,
+            })
+            .map_err(map_sdk_error)
     }
 
     fn client(&self) -> CoreResult<JcodeClient> {
@@ -387,19 +408,16 @@ impl Backend for JcodeLive {
     }
 
     fn send(&self, session_id: &str, content: &str) -> CoreResult<()> {
-        let client = self.client()?;
-        // The harness requires the connection to be attached before SendMessage.
-        // Attach is a no-op when this session is already current.
-        let _guard = self.attach_for_command(&client, session_id)?;
-        client
-            .notify(ApiRequest::SendMessage {
-                session_id: session_id.to_string(),
-                content: content.to_string(),
-                system_reminder: None,
-                images: Vec::new(),
-                no_reply: false,
-            })
-            .map_err(map_sdk_error)
+        self.send_inner(session_id, content, Vec::new())
+    }
+
+    fn send_images(
+        &self,
+        session_id: &str,
+        content: &str,
+        images: Vec<(String, String)>,
+    ) -> CoreResult<()> {
+        self.send_inner(session_id, content, images)
     }
 
     fn cancel(&self, session_id: &str) -> CoreResult<()> {

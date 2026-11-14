@@ -12,6 +12,10 @@ path = "src/lib.rs"
 name = "jcode-adapter-v2"
 path = "src/main.rs"
 
+[[bin]]
+name = "jcode-adapter-v3"
+path = "src/bin/jcode-adapter-v3.rs"
+
 [dependencies]
 adapter-core.workspace = true
 adapter-protocol.workspace = true

@@ -8,9 +8,10 @@ use tracing::info;
 use crate::paths::{CoreError, CoreResult, ProjectRow, now_ms};
 
 pub struct Store {
-    conn: Mutex<Connection>,
+    pub(crate) conn: Mutex<Connection>,
     server_id: String,
     path: PathBuf,
+    pub(crate) journal_retention: u32,
 }
 
 impl std::fmt::Debug for Store {
@@ -101,6 +102,55 @@ impl Store {
                 session_id TEXT PRIMARY KEY,
                 server_id TEXT NOT NULL,
                 project_id TEXT NOT NULL
+             );
+             -- Adapter v3 durable event journal. `seq` is allocated inside the
+             -- insert transaction so it survives an adapter restart. Retention
+             -- trims old rows per session; a replay from below the floor is
+             -- reported as a gap, never silently filled.
+             CREATE TABLE IF NOT EXISTS event_journal (
+                session_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                epoch TEXT NOT NULL,
+                turn_id TEXT,
+                operation_id TEXT,
+                event_json TEXT NOT NULL,
+                observed_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (session_id, seq)
+             );
+             CREATE INDEX IF NOT EXISTS idx_event_journal_session_seq
+                ON event_journal(session_id, seq);
+             CREATE INDEX IF NOT EXISTS idx_event_journal_observed
+                ON event_journal(observed_at_ms);
+             -- Per-device acknowledged cursor. It is diagnostic and retention
+             -- input, never a promise that an unacknowledged event was lost.
+             CREATE TABLE IF NOT EXISTS event_cursors (
+                device_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                acked_seq INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL,
+                PRIMARY KEY (device_id, session_id)
+             );
+             -- Durable session index used by `sessions.delta`. `revision` is a
+             -- server-wide monotonic counter; removed rows keep their last
+             -- revision so a client converges.
+             CREATE TABLE IF NOT EXISTS session_index (
+                session_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                summary_json TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                removed INTEGER NOT NULL DEFAULT 0,
+                updated_at_ms INTEGER NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS idx_session_index_revision
+                ON session_index(server_id, revision);
+             -- Validated inline images for one send operation. Kept separate
+             -- from `operations` so an existing v2 database needs no column
+             -- migration. Bytes are base64 exactly as validated by the server.
+             CREATE TABLE IF NOT EXISTS operation_attachments (
+                operation_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                attachments_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL
              );",
         )?;
         let server_id = match conn
@@ -122,10 +172,16 @@ impl Store {
             }
         };
         info!(path = %path.display(), server_id = %server_id, "adapter store ready");
+        let journal_retention = std::env::var("JCODE_ADAPTER_JOURNAL_RETENTION")
+            .ok()
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(4096)
+            .clamp(128, 65_536);
         Ok(std::sync::Arc::new(Self {
             conn: Mutex::new(conn),
             server_id,
             path,
+            journal_retention,
         }))
     }
 
@@ -386,6 +442,51 @@ impl Store {
             .optional()?)
     }
 
+    /// Attach validated image tuples to an operation. A retry with different
+    /// attachments for the same operation id is a conflict, not a silent
+    /// overwrite.
+    pub fn set_operation_attachments(
+        &self,
+        operation_id: &str,
+        attachments_json: &str,
+    ) -> CoreResult<()> {
+        let conn = self.conn.lock().expect("store lock");
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT attachments_json FROM operation_attachments
+                 WHERE operation_id = ?1 AND server_id = ?2",
+                params![operation_id, self.server_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if let Some(existing) = existing {
+            if existing != attachments_json {
+                return Err(CoreError::Conflict(
+                    "operation id was already used with different attachments".into(),
+                ));
+            }
+            return Ok(());
+        }
+        conn.execute(
+            "INSERT INTO operation_attachments(operation_id, server_id, attachments_json, created_at_ms)
+             VALUES(?1, ?2, ?3, ?4)",
+            params![operation_id, self.server_id, attachments_json, now_ms()],
+        )?;
+        Ok(())
+    }
+
+    pub fn operation_attachments(&self, operation_id: &str) -> CoreResult<Option<String>> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn
+            .query_row(
+                "SELECT attachments_json FROM operation_attachments
+                 WHERE operation_id = ?1 AND server_id = ?2",
+                params![operation_id, self.server_id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     pub fn operation(&self, operation_id: &str) -> CoreResult<Option<OperationView>> {
         let conn = self.conn.lock().expect("store lock");
         Ok(conn
@@ -504,6 +605,26 @@ impl Store {
                 Self::operation_from_row,
             )
             .optional()?)
+    }
+
+    /// `(pending, unknown, accepted)` counts for diagnostics. Pending means the
+    /// adapter has not reached a terminal state yet.
+    pub fn operation_counts(&self) -> CoreResult<(u64, u64, u64)> {
+        let conn = self.conn.lock().expect("store lock");
+        let count = |sql: &str| -> CoreResult<u64> {
+            Ok(conn.query_row(sql, params![self.server_id], |row| row.get::<_, i64>(0))? as u64)
+        };
+        let pending = count(
+            "SELECT COUNT(*) FROM operations WHERE server_id = ?1
+             AND state IN ('staged','reserved','dispatching')",
+        )?;
+        let unknown =
+            count("SELECT COUNT(*) FROM operations WHERE server_id = ?1 AND state = 'unknown'")?;
+        let accepted = count(
+            "SELECT COUNT(*) FROM operations WHERE server_id = ?1
+             AND state IN ('accepted','observed_in_history')",
+        )?;
+        Ok((pending, unknown, accepted))
     }
 
     // ------------------------------------------------------------------

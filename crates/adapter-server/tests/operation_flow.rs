@@ -12,8 +12,9 @@ use adapter_core::{
     BackendSession, CoreError, CoreResult, Store,
 };
 use adapter_protocol::{
-    CreateSessionResponse, Envelope, Kind, OperationState, OperationStatePayload,
-    SessionSnapshotPayload,
+    CreateSessionResponse, DiagnosticsSnapshot, Envelope, EventsAckPayload, EventsSubscribePayload,
+    Kind, OperationState, OperationStatePayload, ServerHelloPayload, SessionSnapshotPayload,
+    SessionsDeltaPayload,
 };
 use adapter_server::dispatch::handle_request;
 use adapter_server::handle_backend_event;
@@ -26,6 +27,7 @@ struct FakeBackend {
     fail_send: AtomicBool,
     next_id: AtomicU64,
     history: Mutex<Vec<adapter_protocol::HistoryMessageView>>,
+    image_sends: Mutex<Vec<(String, String, usize)>>,
 }
 
 impl Default for FakeBackend {
@@ -36,6 +38,7 @@ impl Default for FakeBackend {
             fail_send: AtomicBool::new(false),
             next_id: AtomicU64::new(1),
             history: Mutex::new(Vec::new()),
+            image_sends: Mutex::new(Vec::new()),
         }
     }
 }
@@ -166,6 +169,25 @@ impl Backend for FakeBackend {
         Ok(())
     }
 
+    fn send_images(
+        &self,
+        session_id: &str,
+        content: &str,
+        images: Vec<(String, String)>,
+    ) -> CoreResult<()> {
+        if self.fail_send.load(Ordering::Relaxed) {
+            return Err(CoreError::BackendRejected(
+                "provider route is unavailable".into(),
+            ));
+        }
+        self.image_sends.lock().unwrap().push((
+            session_id.to_string(),
+            content.to_string(),
+            images.len(),
+        ));
+        Ok(())
+    }
+
     fn cancel(&self, _session_id: &str) -> CoreResult<()> {
         Ok(())
     }
@@ -230,6 +252,9 @@ fn harness(data_dir: &std::path::Path) -> Harness {
         device,
         subscribed: Arc::new(Mutex::new(std::collections::HashSet::new())),
         outbound,
+        protocol_version: Arc::new(std::sync::atomic::AtomicU32::new(
+            adapter_protocol::PROTOCOL_VERSION,
+        )),
     };
     Harness {
         state,
@@ -617,4 +642,460 @@ async fn snapshot_after_finished_tool_turn_includes_tool_rows_and_promotes_pendi
         OperationState::ObservedInHistory,
         "the authoritative snapshot carrying the user message must promote the send operation"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Adapter v3 conformance
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn handshake_negotiates_the_highest_common_version() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+
+    let hello: ServerHelloPayload = response_payload(
+        &call(
+            &h,
+            "client.hello",
+            json!({
+                "client_name": "v3-test",
+                "client_version": "0.4.0",
+                "min_version": 3,
+                "max_version": 3,
+                "supports": ["jcode.mobile.v3"]
+            }),
+        )
+        .await,
+    );
+    assert_eq!(hello.negotiated_version, 3);
+    assert_eq!(hello.max_protocol_version, 3);
+    assert_eq!(h.conn.protocol_version(), 3);
+
+    // A v2 client negotiates v2 and is not dropped.
+    let legacy: ServerHelloPayload = response_payload(
+        &call(
+            &h,
+            "client.hello",
+            json!({
+                "client_name": "v2-test",
+                "client_version": "0.3.1",
+                "min_version": 2,
+                "max_version": 2,
+                "supports": ["jcode.mobile.v2"]
+            }),
+        )
+        .await,
+    );
+    assert_eq!(legacy.negotiated_version, 2);
+    assert_eq!(h.conn.protocol_version(), 2);
+
+    // A client with no overlapping range is rejected explicitly.
+    let rejected = call(
+        &h,
+        "client.hello",
+        json!({
+            "client_name": "future",
+            "client_version": "9",
+            "min_version": 9,
+            "max_version": 10,
+            "supports": []
+        }),
+    )
+    .await;
+    assert_eq!(rejected.kind, Kind::Response);
+    assert_eq!(rejected.msg_type, "error");
+    let payload: adapter_protocol::ErrorPayload = serde_json::from_value(rejected.payload).unwrap();
+    // A missing protocol range is a version error, not an internal failure.
+    assert_eq!(
+        payload.code,
+        adapter_protocol::ErrorCode::UnsupportedVersion
+    );
+}
+
+#[tokio::test]
+async fn journal_replay_survives_adapter_restart_and_reports_gaps() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"v3-create","project_id":null,"working_dir":null,"title":"v3"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+    for index in 0..5 {
+        h.state.hub.publish(
+            &session_id,
+            None,
+            None,
+            adapter_protocol::SessionEvent::TextDelta {
+                text: index.to_string(),
+                message_id: None,
+            },
+        );
+    }
+    let epoch = h.state.hub.epoch().to_string();
+    let replay: EventsSubscribePayload = response_payload(
+        &call(
+            &h,
+            "events.subscribe",
+            json!({
+                "session_id": session_id,
+                "after_seq": 2,
+                "epoch": epoch,
+                "limit": 100,
+                "tail": 20,
+                "include_snapshot": false
+            }),
+        )
+        .await,
+    );
+    assert_eq!(replay.events.len(), 3);
+    assert_eq!(replay.events.first().unwrap().seq, 3);
+    assert_eq!(replay.latest_seq, 5);
+    assert!(!replay.gap);
+    assert!(!replay.resync_required);
+    assert!(replay.snapshot.is_none());
+
+    let ack: EventsAckPayload = response_payload(
+        &call(
+            &h,
+            "events.ack",
+            json!({"session_id": session_id, "seq": 5}),
+        )
+        .await,
+    );
+    assert_eq!(ack.acked_seq, 5);
+    assert_eq!(ack.latest_seq, 5);
+
+    // Restart: a fresh adapter process on the same data directory continues the
+    // durable sequence and replays from the acknowledged cursor.
+    drop(h);
+    let restarted = harness(dir.path());
+    // The fake daemon is in-memory, so give the restarted harness the same
+    // session that the real daemon would still persist.
+    restarted
+        .backend
+        .sessions
+        .lock()
+        .unwrap()
+        .push(adapter_core::BackendSession {
+            session_id: session_id.clone(),
+            title: Some("v3".into()),
+            status: "idle".into(),
+            working_dir: None,
+            updated_at_ms: Some(1),
+            transcript_bytes: Some(0),
+            saved: true,
+            archived: false,
+            parent_session_id: None,
+            agent_label: None,
+        });
+    let replay: EventsSubscribePayload = response_payload(
+        &call(
+            &restarted,
+            "events.subscribe",
+            json!({
+                "session_id": session_id,
+                "after_seq": 5,
+                "epoch": "epoch-test",
+                "limit": 100,
+                "include_snapshot": false
+            }),
+        )
+        .await,
+    );
+    assert_eq!(replay.latest_seq, 5);
+    assert!(replay.events.is_empty());
+    assert!(!replay.resync_required);
+
+    // A stale epoch cannot resume silently.
+    let stale: EventsSubscribePayload = response_payload(
+        &call(
+            &restarted,
+            "events.subscribe",
+            json!({
+                "session_id": session_id,
+                "after_seq": 5,
+                "epoch": "epoch-from-an-old-process",
+                "limit": 100,
+                "tail": 20,
+                "include_snapshot": true
+            }),
+        )
+        .await,
+    );
+    assert!(stale.resync_required);
+    let snapshot = stale.snapshot.expect("a resync must include a snapshot");
+    assert_eq!(snapshot.session.session_id, session_id);
+}
+
+#[tokio::test]
+async fn event_replay_reports_a_gap_beyond_retention() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let session_id = "sess_gap";
+    let total = h.state.store.journal_retention() as u64 + 12;
+    for index in 0..total {
+        h.state.hub.publish(
+            session_id,
+            None,
+            None,
+            adapter_protocol::SessionEvent::TextDelta {
+                text: index.to_string(),
+                message_id: None,
+            },
+        );
+    }
+    let epoch = h.state.hub.epoch().to_string();
+    let replay: EventsSubscribePayload = response_payload(
+        &call(
+            &h,
+            "events.subscribe",
+            json!({
+                "session_id": session_id,
+                "after_seq": 1,
+                "epoch": epoch,
+                "limit": 5,
+                "include_snapshot": false
+            }),
+        )
+        .await,
+    );
+    assert!(replay.gap, "an expired cursor must be reported as a gap");
+    assert!(replay.has_more);
+    assert!(replay.floor_seq > 1);
+    assert_eq!(replay.events.len(), 5);
+}
+
+#[tokio::test]
+async fn session_delta_is_full_then_incremental() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let a: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"delta-a","project_id":null,"working_dir":null,"title":"A"}),
+        )
+        .await,
+    );
+    let b: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"delta-b","project_id":null,"working_dir":null,"title":"B"}),
+        )
+        .await,
+    );
+    let full: SessionsDeltaPayload = response_payload(
+        &call(
+            &h,
+            "sessions.delta",
+            json!({"since_revision": 0, "include_projects": true}),
+        )
+        .await,
+    );
+    assert!(full.full);
+    assert!(full.revision > 0);
+    assert_eq!(full.sessions.len(), 2);
+
+    let empty: SessionsDeltaPayload = response_payload(
+        &call(
+            &h,
+            "sessions.delta",
+            json!({"since_revision": full.revision, "include_projects": false}),
+        )
+        .await,
+    );
+    assert!(!empty.full);
+    assert!(empty.sessions.is_empty());
+    assert!(empty.removed.is_empty());
+    assert!(empty.projects.is_empty());
+
+    // Change one session and remove the other in the authoritative listing.
+    {
+        let mut sessions = h.backend.sessions.lock().unwrap();
+        sessions.retain(|session| session.session_id == a.session.session_id);
+        sessions[0].status = "working".into();
+    }
+    let delta: SessionsDeltaPayload = response_payload(
+        &call(
+            &h,
+            "sessions.delta",
+            json!({"since_revision": full.revision, "include_projects": false}),
+        )
+        .await,
+    );
+    assert!(!delta.full);
+    assert_eq!(delta.sessions.len(), 1);
+    assert_eq!(delta.sessions[0].session_id, a.session.session_id);
+    assert_eq!(delta.sessions[0].status, "working");
+    assert_eq!(delta.removed, vec![b.session.session_id]);
+    assert!(delta.revision > full.revision);
+}
+
+#[tokio::test]
+async fn diagnostics_report_real_adapter_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    h.state.hub.publish(
+        "sess_diag",
+        None,
+        None,
+        adapter_protocol::SessionEvent::TextDelta {
+            text: "x".into(),
+            message_id: None,
+        },
+    );
+    let diagnostics: DiagnosticsSnapshot =
+        response_payload(&call(&h, "diagnostics.snapshot", json!({})).await);
+    assert_eq!(diagnostics.protocol_version, 3);
+    assert_eq!(diagnostics.min_protocol_version, 2);
+    assert_eq!(diagnostics.epoch, "epoch-test");
+    assert_eq!(diagnostics.journal.events, 1);
+    assert_eq!(diagnostics.journal.sessions, 1);
+    assert_eq!(diagnostics.journal.append_failures, 0);
+    assert_eq!(
+        diagnostics.journal.retention_per_session,
+        h.state.store.journal_retention()
+    );
+    assert!(!diagnostics.fault_injection.enabled);
+    assert!(
+        diagnostics
+            .capabilities
+            .contains(&"events.journal".to_string())
+    );
+    assert!(diagnostics.jcode.healthy);
+}
+
+#[tokio::test]
+async fn image_attachments_are_validated_and_sent_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"img","project_id":null,"working_dir":null,"title":"img"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+    // 1x1 PNG.
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==";
+    let reserve = |body: &str, images: Value| {
+        json!({
+            "operation_id": "op-image",
+            "session_id": session_id,
+            "kind": "send",
+            "body": body,
+            "expected_turn_id": null,
+            "images": images
+        })
+    };
+    let raw_reserved = call(
+        &h,
+        "operations.reserve",
+        reserve(
+            "look at this",
+            json!([{"media_type": "image/png", "data_base64": png, "name": "px.png"}]),
+        ),
+    )
+    .await;
+    assert_eq!(
+        raw_reserved.kind,
+        Kind::Response,
+        "reserve failed: {:?}",
+        raw_reserved.payload
+    );
+    let reserved: OperationStatePayload = response_payload(&raw_reserved);
+    assert!(!reserved.duplicate);
+
+    // A retry with the same id and attachments is idempotent.
+    let duplicate: OperationStatePayload = response_payload(
+        &call(
+            &h,
+            "operations.reserve",
+            reserve(
+                "look at this",
+                json!([{"media_type": "image/png", "data_base64": png}]),
+            ),
+        )
+        .await,
+    );
+    assert!(duplicate.duplicate);
+
+    // A retry that drops the attachment is a conflict, not a silent text-only send.
+    let conflict = call(&h, "operations.reserve", reserve("look at this", json!([]))).await;
+    assert_eq!(conflict.msg_type, "error");
+    let error: adapter_protocol::ErrorPayload = serde_json::from_value(conflict.payload).unwrap();
+    assert!(error.message.contains("attachments"), "{}", error.message);
+
+    let raw_dispatch = call(
+        &h,
+        "operations.dispatch",
+        json!({"operation_id": "op-image"}),
+    )
+    .await;
+    assert_eq!(
+        raw_dispatch.kind,
+        Kind::Response,
+        "dispatch failed: {:?}",
+        raw_dispatch.payload
+    );
+    let dispatched: OperationStatePayload = response_payload(&raw_dispatch);
+    assert_eq!(dispatched.operation.state, OperationState::Dispatching);
+    let sends = h.backend.image_sends.lock().unwrap().clone();
+    assert_eq!(sends.len(), 1);
+    assert_eq!(sends[0].2, 1);
+    assert!(h.backend.sends.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn invalid_image_attachments_are_rejected_before_reservation() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"img-bad","project_id":null,"working_dir":null,"title":"img"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+    // Valid base64, but the bytes are not a PNG.
+    let response = call(
+        &h,
+        "operations.reserve",
+        json!({
+            "operation_id": "op-bad-image",
+            "session_id": session_id,
+            "kind": "send",
+            "body": "hello",
+            "expected_turn_id": null,
+            "images": [{"media_type": "image/png", "data_base64": "aGVsbG8="}]
+        }),
+    )
+    .await;
+    assert_eq!(response.msg_type, "error");
+    assert!(h.state.store.operation("op-bad-image").unwrap().is_none());
+
+    let response = call(
+        &h,
+        "operations.reserve",
+        json!({
+            "operation_id": "op-bad-type",
+            "session_id": session_id,
+            "kind": "send",
+            "body": "hello",
+            "expected_turn_id": null,
+            "images": [{"media_type": "image/svg+xml", "data_base64": "PHN2Zz4="}]
+        }),
+    )
+    .await;
+    assert_eq!(response.msg_type, "error");
 }

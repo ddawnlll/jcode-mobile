@@ -1,16 +1,41 @@
-//! Mobile Adapter v2 wire contract for the Stillness 12 client.
+//! Mobile Adapter v3 wire contract for the Stillness client.
 //!
 //! This crate is deliberately independent of JCode and of the server. It
 //! defines the authenticated mobile envelope, request payloads, snapshots and
 //! stream events. JCode harness types are converted at the adapter boundary so
 //! that an upstream protocol change cannot silently reshape the client API.
+//!
+//! Version 3 keeps every v2 request and event shape intact. It adds negotiated
+//! protocol versions, a durable event journal with cursor replay, delta session
+//! sync and diagnostics. A v2 client still connects: the adapter normalizes
+//! outbound frames to the version the client negotiated and only emits v3-only
+//! message types in reply to a v3-only request.
 
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 pub const MIN_PROTOCOL_VERSION: u32 = 2;
-pub const WS_SUBPROTOCOL: &str = "jcode.mobile.v2";
+pub const WS_SUBPROTOCOL: &str = "jcode.mobile.v3";
+pub const LEGACY_WS_SUBPROTOCOL: &str = "jcode.mobile.v2";
 pub const TOKEN_SUBPROTOCOL_PREFIX: &str = "token.";
+
+/// Every wire version this adapter can speak. The set is intentionally small:
+/// a new version is added only with request-level conformance fixtures.
+pub const SUPPORTED_PROTOCOL_VERSIONS: &[u32] = &[MIN_PROTOCOL_VERSION, PROTOCOL_VERSION];
+
+pub fn supports_protocol_version(version: u32) -> bool {
+    SUPPORTED_PROTOCOL_VERSIONS.contains(&version)
+}
+
+/// Negotiate the highest mutually supported version. Returns `None` when the
+/// client range and the adapter range do not overlap.
+pub fn negotiate_protocol_version(min_version: u32, max_version: u32) -> Option<u32> {
+    let highest = max_version.min(PROTOCOL_VERSION);
+    if highest < MIN_PROTOCOL_VERSION || min_version > highest {
+        return None;
+    }
+    Some(highest.max(MIN_PROTOCOL_VERSION))
+}
 
 /// Capabilities the adapter actually implements. Do not add a string here
 /// until the corresponding request has a tested implementation.
@@ -38,7 +63,22 @@ pub const CAPABILITIES: &[&str] = &[
     "plan.snapshot",
     "activity.snapshot",
     "tool.permission_response",
+    // v3 additions. Each one has a dispatch arm and a conformance test.
+    "protocol.v3",
+    "events.journal",
+    "events.subscribe",
+    "events.ack",
+    "sessions.delta",
+    "diagnostics.snapshot",
+    "attachments.images",
 ];
+
+/// Bounded image attachment limits. A larger request is rejected before it can
+/// consume adapter memory.
+pub const MAX_IMAGE_ATTACHMENTS: usize = 4;
+pub const MAX_IMAGE_BYTES: usize = 4 * 1024 * 1024;
+pub const ALLOWED_IMAGE_MEDIA_TYPES: &[&str] =
+    &["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -127,7 +167,7 @@ impl Envelope {
     }
 
     pub fn validate(&self) -> Result<(), ProtocolError> {
-        if self.v != PROTOCOL_VERSION {
+        if !supports_protocol_version(self.v) {
             return Err(ProtocolError::UnsupportedVersion(self.v));
         }
         if self.id.trim().is_empty() {
@@ -164,9 +204,12 @@ pub enum ErrorCode {
     Forbidden,
     BadRequest,
     UnsupportedVersion,
+    UnsupportedCapability,
     NotFound,
     Conflict,
     NotSupported,
+    NotConfigured,
+    RateLimited,
     ProviderUnavailable,
     AccountMissing,
     ModelUnavailable,
@@ -236,6 +279,24 @@ pub struct ServerHelloPayload {
     pub server: ServerInfo,
     pub device: DeviceInfo,
     pub resumed: bool,
+    /// The version selected for this connection. Outbound frames use it.
+    #[serde(default = "legacy_protocol_version")]
+    pub negotiated_version: u32,
+    /// Highest version this adapter implements, independent of negotiation.
+    #[serde(default = "default_protocol_version")]
+    pub max_protocol_version: u32,
+    #[serde(default)]
+    pub resumed_from_epoch: Option<String>,
+}
+
+const fn default_protocol_version() -> u32 {
+    PROTOCOL_VERSION
+}
+
+// A field that did not exist in a v2 payload must not make the payload fail to
+// parse if an older client is reading it.
+const fn legacy_protocol_version() -> u32 {
+    MIN_PROTOCOL_VERSION
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -283,6 +344,10 @@ pub struct SessionsListPayload {
     pub source: String,
     pub observed_at_ms: i64,
     pub stale: bool,
+    /// Delta revision this listing was observed at. Clients pass it back to
+    /// `sessions.delta`; a v2 client can ignore it.
+    #[serde(default)]
+    pub revision: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -586,6 +651,19 @@ pub struct OperationReserveRequest {
     pub kind: String,
     pub body: String,
     pub expected_turn_id: Option<String>,
+    /// Inline images carried with a user message. The adapter validates the
+    /// media type and size before handing them to the daemon.
+    #[serde(default)]
+    pub images: Vec<AttachmentInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AttachmentInput {
+    pub media_type: String,
+    /// Standard base64, not a data URL.
+    pub data_base64: String,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -656,6 +734,186 @@ pub struct ServerStatusPayload {
     pub jcode_connected: bool,
     pub message: Option<String>,
     pub observed_at_ms: i64,
+}
+
+// ---------------------------------------------------------------------------
+// Durable event journal (v3)
+// ---------------------------------------------------------------------------
+
+/// One durably persisted, ordered session event. `seq` is assigned by the
+/// adapter's SQLite journal inside the same transaction as the insert, so it
+/// survives an adapter restart and can be replayed exactly once per cursor.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct JournalEventView {
+    pub seq: u64,
+    pub turn_id: Option<String>,
+    pub operation_id: Option<String>,
+    pub event: SessionEvent,
+    pub observed_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EventsSubscribeRequest {
+    pub session_id: String,
+    /// Replay events with `seq > after_seq`. Absent or zero means "from the
+    /// retention floor", which the reply reports explicitly.
+    #[serde(default)]
+    pub after_seq: Option<u64>,
+    /// The epoch the client last observed. A mismatch means the client cannot
+    /// trust its cursor as continuous and must resynchronize from a snapshot.
+    #[serde(default)]
+    pub epoch: Option<String>,
+    #[serde(default = "default_events_limit")]
+    pub limit: u32,
+    /// Tail used when the reply also carries an authoritative snapshot.
+    #[serde(default = "default_tail")]
+    pub tail: u32,
+    #[serde(default)]
+    pub include_snapshot: bool,
+}
+
+fn default_events_limit() -> u32 {
+    512
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EventsSubscribePayload {
+    pub session_id: String,
+    pub epoch: String,
+    pub events: Vec<JournalEventView>,
+    /// Oldest sequence still retained for this session, or 0 when empty.
+    pub floor_seq: u64,
+    /// Highest sequence assigned for this session.
+    pub latest_seq: u64,
+    /// A gap means events between the requested cursor and the retention floor
+    /// are no longer available. The client must not present its cursor as
+    /// continuous.
+    pub gap: bool,
+    pub has_more: bool,
+    /// True when the client's cursor or epoch cannot be resumed safely.
+    pub resync_required: bool,
+    /// Present only when `include_snapshot` was requested or resync is required.
+    #[serde(default)]
+    pub snapshot: Option<SessionSnapshotPayload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EventsAckRequest {
+    pub session_id: String,
+    pub seq: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EventsAckPayload {
+    pub session_id: String,
+    pub acked_seq: u64,
+    pub floor_seq: u64,
+    pub latest_seq: u64,
+}
+
+// ---------------------------------------------------------------------------
+// Delta session sync (v3)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionsDeltaRequest {
+    /// Revision the client already holds. Zero requests a full listing.
+    #[serde(default)]
+    pub since_revision: u64,
+    #[serde(default)]
+    pub include_projects: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionsDeltaPayload {
+    /// Authoritative revision at observation time. A client stores it with the
+    /// merged result and sends it as `since_revision` next time.
+    pub revision: u64,
+    /// True when the payload is a complete replacement, not a delta.
+    pub full: bool,
+    pub sessions: Vec<SessionSummary>,
+    pub removed: Vec<String>,
+    pub projects: Vec<Project>,
+    pub source: String,
+    pub observed_at_ms: i64,
+    pub stale: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics (v3)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct JcodeDiagnostics {
+    pub healthy: bool,
+    pub server: String,
+    pub jcode_version: String,
+    pub protocol_version: u32,
+    pub capabilities: u32,
+    pub last_contact_ms: Option<i64>,
+    pub reconnects: u64,
+    pub last_error: Option<String>,
+    pub active_turns: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct JournalDiagnostics {
+    pub events: u64,
+    pub bytes: u64,
+    pub sessions: u64,
+    pub oldest_observed_at_ms: Option<i64>,
+    pub newest_observed_at_ms: Option<i64>,
+    pub retention_per_session: u32,
+    pub append_failures: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConnectionDiagnostics {
+    pub active: u64,
+    pub devices: u64,
+    pub subscriptions: u64,
+    pub frames_in: u64,
+    pub frames_out: u64,
+    pub gaps_announced: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OperationDiagnostics {
+    pub pending: u64,
+    pub unknown: u64,
+    pub accepted: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LatencyDiagnostics {
+    pub samples: u64,
+    pub dispatch_p50_ms: Option<u64>,
+    pub dispatch_p95_ms: Option<u64>,
+    pub replay_p50_ms: Option<u64>,
+    pub replay_p95_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FaultInjectionState {
+    pub enabled: bool,
+    pub rules: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DiagnosticsSnapshot {
+    pub adapter_version: String,
+    pub protocol_version: u32,
+    pub min_protocol_version: u32,
+    pub epoch: String,
+    pub started_at_ms: i64,
+    pub observed_at_ms: i64,
+    pub capabilities: Vec<String>,
+    pub jcode: JcodeDiagnostics,
+    pub journal: JournalDiagnostics,
+    pub connections: ConnectionDiagnostics,
+    pub operations: OperationDiagnostics,
+    pub latency: LatencyDiagnostics,
+    pub fault_injection: FaultInjectionState,
 }
 
 // ---------------------------------------------------------------------------
@@ -793,6 +1051,188 @@ mod tests {
             envelope.validate(),
             Err(ProtocolError::UnsupportedVersion(1))
         ));
+    }
+
+    #[test]
+    fn v2_and_v3_envelopes_are_both_accepted() {
+        for version in SUPPORTED_PROTOCOL_VERSIONS {
+            let mut envelope = Envelope::request("req", "sessions.list", serde_json::json!({}));
+            envelope.v = *version;
+            assert_eq!(envelope.validate(), Ok(()), "version {version}");
+        }
+        let mut envelope = Envelope::request("req", "x", serde_json::json!({}));
+        envelope.v = 4;
+        assert!(envelope.validate().is_err());
+    }
+
+    #[test]
+    fn negotiation_picks_the_highest_common_version() {
+        assert_eq!(negotiate_protocol_version(2, 3), Some(3));
+        assert_eq!(negotiate_protocol_version(2, 2), Some(2));
+        assert_eq!(negotiate_protocol_version(3, 3), Some(3));
+        assert_eq!(negotiate_protocol_version(1, 3), Some(3));
+        assert_eq!(negotiate_protocol_version(2, 99), Some(3));
+        // No overlap: a client that requires v4, or one that only speaks v1.
+        assert_eq!(negotiate_protocol_version(4, 5), None);
+        assert_eq!(negotiate_protocol_version(1, 1), None);
+        assert_eq!(negotiate_protocol_version(5, 2), None);
+    }
+
+    #[test]
+    fn v3_capabilities_are_declared_with_corresponding_requests() {
+        for required in [
+            "protocol.v3",
+            "events.journal",
+            "events.subscribe",
+            "events.ack",
+            "sessions.delta",
+            "diagnostics.snapshot",
+        ] {
+            assert!(CAPABILITIES.contains(&required), "{required} missing");
+        }
+        // v2 capabilities remain present so a v2 client keeps its full surface.
+        for legacy in ["sessions.snapshot", "operations.dispatch", "models.set"] {
+            assert!(CAPABILITIES.contains(&legacy), "{legacy} removed");
+        }
+    }
+
+    #[test]
+    fn events_subscribe_fixture_round_trips() {
+        let request = EventsSubscribeRequest {
+            session_id: "s1".into(),
+            after_seq: Some(41),
+            epoch: Some("epoch_1".into()),
+            limit: 128,
+            tail: 80,
+            include_snapshot: true,
+        };
+        let value = serde_json::to_value(&request).unwrap();
+        assert_eq!(value["after_seq"], 41);
+        let parsed: EventsSubscribeRequest = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed, request);
+
+        let payload = EventsSubscribePayload {
+            session_id: "s1".into(),
+            epoch: "epoch_1".into(),
+            events: vec![JournalEventView {
+                seq: 42,
+                turn_id: Some("t1".into()),
+                operation_id: Some("op1".into()),
+                event: SessionEvent::TextDelta {
+                    text: "hello".into(),
+                    message_id: None,
+                },
+                observed_at_ms: 1_700_000_000_000,
+            }],
+            floor_seq: 1,
+            latest_seq: 42,
+            gap: false,
+            has_more: false,
+            resync_required: false,
+            snapshot: None,
+        };
+        let text = serde_json::to_string(&payload).unwrap();
+        let parsed: EventsSubscribePayload = serde_json::from_str(&text).unwrap();
+        assert_eq!(parsed, payload);
+    }
+
+    #[test]
+    fn v2_client_hello_payload_still_decodes_without_v3_fields() {
+        let legacy = serde_json::json!({
+            "server": {
+                "server_id": "srv",
+                "name": "n",
+                "adapter_version": "0.3.1",
+                "protocol_version": 2,
+                "min_protocol_version": 2,
+                "jcode_version": "x",
+                "jcode_protocol_version": 1,
+                "jcode_capabilities": [],
+                "healthy": true,
+                "capabilities": ["sessions.list"],
+                "started_at_ms": 1,
+                "command_code_available": null
+            },
+            "device": {"device_id":"d","name":"phone","created_at_ms":1,"last_seen_at_ms":1},
+            "resumed": false
+        });
+        let hello: ServerHelloPayload = serde_json::from_value(legacy).unwrap();
+        assert_eq!(hello.negotiated_version, MIN_PROTOCOL_VERSION);
+        assert_eq!(hello.max_protocol_version, PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn sessions_delta_and_diagnostics_fixtures_round_trip() {
+        let delta = SessionsDeltaPayload {
+            revision: 12,
+            full: false,
+            sessions: vec![],
+            removed: vec!["s_old".into()],
+            projects: vec![],
+            source: "adapter.sqlite".into(),
+            observed_at_ms: 5,
+            stale: false,
+        };
+        let parsed: SessionsDeltaPayload =
+            serde_json::from_str(&serde_json::to_string(&delta).unwrap()).unwrap();
+        assert_eq!(parsed, delta);
+
+        let diagnostics = DiagnosticsSnapshot {
+            adapter_version: "0.4.0".into(),
+            protocol_version: PROTOCOL_VERSION,
+            min_protocol_version: MIN_PROTOCOL_VERSION,
+            epoch: "epoch_1".into(),
+            started_at_ms: 1,
+            observed_at_ms: 2,
+            capabilities: CAPABILITIES.iter().map(|c| (*c).to_string()).collect(),
+            jcode: JcodeDiagnostics {
+                healthy: true,
+                server: "vps".into(),
+                jcode_version: "0.99".into(),
+                protocol_version: 1,
+                capabilities: 4,
+                last_contact_ms: Some(2),
+                reconnects: 1,
+                last_error: None,
+                active_turns: 0,
+            },
+            journal: JournalDiagnostics {
+                events: 10,
+                bytes: 1024,
+                sessions: 2,
+                oldest_observed_at_ms: Some(1),
+                newest_observed_at_ms: Some(2),
+                retention_per_session: 4096,
+                append_failures: 0,
+            },
+            connections: ConnectionDiagnostics {
+                active: 1,
+                devices: 1,
+                subscriptions: 1,
+                frames_in: 1,
+                frames_out: 1,
+                gaps_announced: 0,
+            },
+            operations: OperationDiagnostics {
+                pending: 0,
+                unknown: 0,
+                accepted: 1,
+            },
+            latency: LatencyDiagnostics {
+                samples: 1,
+                dispatch_p50_ms: Some(3),
+                dispatch_p95_ms: Some(4),
+                replay_p50_ms: Some(1),
+                replay_p95_ms: Some(2),
+            },
+            fault_injection: FaultInjectionState {
+                enabled: false,
+                rules: vec![],
+            },
+        };
+        let parsed: DiagnosticsSnapshot =
+            serde_json::from_str(&serde_json::to_string(&diagnostics).unwrap()).unwrap();
+        assert_eq!(parsed, diagnostics);
     }
 
     #[test]

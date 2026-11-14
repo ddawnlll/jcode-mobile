@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use adapter_core::{BackendEvent, BackendSession, CoreError, CoreResult, now_ms};
 use adapter_protocol::*;
+use base64::Engine as _;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
@@ -24,6 +25,68 @@ where
 fn decode<T: DeserializeOwned>(value: &Value) -> CoreResult<T> {
     serde_json::from_value(value.clone())
         .map_err(|error| CoreError::InvalidInput(error.to_string()))
+}
+
+/// Validate inline images before anything is reserved or written.
+///
+/// The media type must be one the harness can render, the decoded size is
+/// bounded per image, and the bytes must actually match the declared type. A
+/// message with invalid images is rejected, never sent without them.
+fn validate_images(images: &[AttachmentInput]) -> CoreResult<Vec<(String, String)>> {
+    if images.len() > MAX_IMAGE_ATTACHMENTS {
+        return Err(CoreError::InvalidInput(format!(
+            "at most {MAX_IMAGE_ATTACHMENTS} images are allowed"
+        )));
+    }
+    let mut validated = Vec::with_capacity(images.len());
+    for (index, image) in images.iter().enumerate() {
+        let media_type = image.media_type.trim().to_ascii_lowercase();
+        if !ALLOWED_IMAGE_MEDIA_TYPES.contains(&media_type.as_str()) {
+            return Err(CoreError::InvalidInput(format!(
+                "image {index} has an unsupported media type: {}",
+                image.media_type
+            )));
+        }
+        let encoded = image.data_base64.trim();
+        if encoded.is_empty() {
+            return Err(CoreError::InvalidInput(format!(
+                "image {index} has no data"
+            )));
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(|error| {
+                CoreError::InvalidInput(format!("image {index} is not valid base64: {error}"))
+            })?;
+        if bytes.is_empty() {
+            return Err(CoreError::InvalidInput(format!(
+                "image {index} decoded to zero bytes"
+            )));
+        }
+        if bytes.len() > MAX_IMAGE_BYTES {
+            return Err(CoreError::InvalidInput(format!(
+                "image {index} exceeds the {} byte limit",
+                MAX_IMAGE_BYTES
+            )));
+        }
+        if !image_magic_matches(&media_type, &bytes) {
+            return Err(CoreError::InvalidInput(format!(
+                "image {index} content does not match its declared media type {media_type}"
+            )));
+        }
+        validated.push((media_type, encoded.to_string()));
+    }
+    Ok(validated)
+}
+
+fn image_magic_matches(media_type: &str, bytes: &[u8]) -> bool {
+    match media_type {
+        "image/png" => bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]),
+        "image/jpeg" => bytes.starts_with(&[0xff, 0xd8, 0xff]),
+        "image/gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "image/webp" => bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP",
+        _ => false,
+    }
 }
 
 fn ok(state: &AppState, request: &Envelope, msg_type: &str, payload: Value) -> Envelope {
@@ -122,17 +185,23 @@ pub async fn handle_request(
     match request.msg_type.as_str() {
         "client.hello" => match decode::<ClientHello>(&request.payload) {
             Ok(hello) => {
-                if hello.max_version < MIN_PROTOCOL_VERSION || hello.min_version > PROTOCOL_VERSION
-                {
+                let Some(negotiated) =
+                    negotiate_protocol_version(hello.min_version, hello.max_version)
+                else {
                     return error_response(
                         &state,
                         &request,
                         CoreError::Message(format!(
-                            "client supports protocol {}..{}, adapter requires {}",
-                            hello.min_version, hello.max_version, PROTOCOL_VERSION
+                            "client supports protocol {}..{}, adapter requires {}..={}",
+                            hello.min_version,
+                            hello.max_version,
+                            MIN_PROTOCOL_VERSION,
+                            PROTOCOL_VERSION
                         )),
                     );
-                }
+                };
+                conn.set_protocol_version(negotiated);
+                state.note_jcode_contact();
                 ok(
                     &state,
                     &request,
@@ -141,6 +210,9 @@ pub async fn handle_request(
                         server: state.server_info(),
                         device: conn.device.clone(),
                         resumed: false,
+                        negotiated_version: negotiated,
+                        max_protocol_version: PROTOCOL_VERSION,
+                        resumed_from_epoch: None,
                     })
                     .unwrap_or_default(),
                 )
@@ -160,23 +232,31 @@ pub async fn handle_request(
         // ----------------------------------------------------------------
         "sessions.list" => match list_summaries(&state).await {
             Ok(sessions) => match state.store.list_projects() {
-                Ok(projects) => ok(
-                    &state,
-                    &request,
-                    "sessions.list",
-                    serde_json::to_value(SessionsListPayload {
-                        sessions,
-                        projects,
-                        source: "jcode.list_sessions".into(),
-                        observed_at_ms: now_ms(),
-                        stale: false,
-                    })
-                    .unwrap_or_default(),
-                ),
+                Ok(projects) => {
+                    let revision = state
+                        .store
+                        .reconcile_session_index(&sessions)
+                        .unwrap_or_default();
+                    ok(
+                        &state,
+                        &request,
+                        "sessions.list",
+                        serde_json::to_value(SessionsListPayload {
+                            sessions,
+                            projects,
+                            source: "jcode.list_sessions".into(),
+                            observed_at_ms: now_ms(),
+                            stale: false,
+                            revision,
+                        })
+                        .unwrap_or_default(),
+                    )
+                }
                 Err(error) => error_response(&state, &request, error),
             },
             Err(error) => error_response(&state, &request, error),
         },
+        "sessions.delta" => handle_sessions_delta(state.clone(), request).await,
         "sessions.create" => handle_create_session(state, request).await,
         "sessions.subscribe" => handle_subscribe(state, conn, request).await,
         "sessions.snapshot" => handle_snapshot(state, conn, request).await,
@@ -211,6 +291,12 @@ pub async fn handle_request(
         "operations.cancel" => handle_cancel(state, request).await,
 
         // ----------------------------------------------------------------
+        // Durable event journal (v3)
+        // ----------------------------------------------------------------
+        "events.subscribe" => handle_events_subscribe(state, conn, request).await,
+        "events.ack" => handle_events_ack(state, conn, request).await,
+
+        // ----------------------------------------------------------------
         // Models, runtime, context, plan, activity
         // ----------------------------------------------------------------
         "models.list" => handle_models(state, request).await,
@@ -220,6 +306,12 @@ pub async fn handle_request(
         "plan.snapshot" => handle_plan(state, request).await,
         "activity.snapshot" => handle_activity(state, request).await,
         "tool.permission_response" => handle_permission(state, request).await,
+        "diagnostics.snapshot" => ok(
+            &state,
+            &request,
+            "diagnostics.snapshot",
+            serde_json::to_value(state.diagnostics()).unwrap_or_default(),
+        ),
 
         // ----------------------------------------------------------------
         // Projects and files
@@ -388,27 +480,26 @@ async fn build_snapshot(
     }
     // Promote an operation to ObservedInHistory only on real transcript
     // evidence, never on a timer or a socket write.
-    if let Ok(Some(operation)) = state.store.pending_operation_for_session(session_id) {
-        if matches!(
+    if let Ok(Some(operation)) = state.store.pending_operation_for_session(session_id)
+        && matches!(
             operation.state,
             OperationState::Accepted | OperationState::Unknown
-        ) {
-            if let Ok(Some((body, _))) = state.store.operation_body(&operation.operation_id) {
-                let found = messages
-                    .iter()
-                    .any(|message| message.role == "user" && message.content == body);
-                if found {
-                    if let Ok(updated) = state.store.transition_operation(
-                        &operation.operation_id,
-                        operation.state,
-                        OperationState::ObservedInHistory,
-                        None,
-                        None,
-                    ) {
-                        state.hub.publish_operation(updated);
-                    }
-                }
-            }
+        )
+        && let Ok(Some((body, _))) = state.store.operation_body(&operation.operation_id)
+    {
+        let found = messages
+            .iter()
+            .any(|message| message.role == "user" && message.content == body);
+        if found
+            && let Ok(updated) = state.store.transition_operation(
+                &operation.operation_id,
+                operation.state,
+                OperationState::ObservedInHistory,
+                None,
+                None,
+            )
+        {
+            state.hub.publish_operation(updated);
         }
     }
     Ok(SessionSnapshotPayload {
@@ -444,7 +535,12 @@ async fn handle_subscribe(
         Ok(value) => value,
         Err(error) => return error_response(&state, &request, error),
     };
-    conn.subscribe(&payload.session_id);
+    if conn.subscribe(&payload.session_id) {
+        state
+            .metrics
+            .subscriptions
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     let (_, gap) = state
         .hub
         .replay_after(&payload.session_id, payload.after_seq.unwrap_or(0));
@@ -462,6 +558,180 @@ async fn handle_subscribe(
         }
         Err(error) => error_response(&state, &request, error),
     }
+}
+
+/// Cursor based replay from the durable journal.
+///
+/// The reply is explicit about its own limits: `gap` means events between the
+/// requested cursor and the retained floor are gone, and `resync_required`
+/// means the client's cursor or epoch cannot be resumed at all. In either case
+/// an authoritative snapshot is attached when it can be built, so the client
+/// never has to present a partial transcript as current.
+async fn handle_events_subscribe(
+    state: std::sync::Arc<AppState>,
+    conn: ConnContext,
+    request: Envelope,
+) -> Envelope {
+    let payload: EventsSubscribeRequest = match decode(&request.payload) {
+        Ok(value) => value,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    if payload.session_id.trim().is_empty() {
+        return error_response(
+            &state,
+            &request,
+            CoreError::InvalidInput("session_id is required".into()),
+        );
+    }
+    if conn.subscribe(&payload.session_id) {
+        state
+            .metrics
+            .subscriptions
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(delay) = state.faults.replay_delay() {
+        tokio::time::sleep(delay).await;
+    }
+    let started = std::time::Instant::now();
+    let after_seq = payload.after_seq.unwrap_or(0);
+    let epoch = state.hub.epoch().to_string();
+    let epoch_mismatch = payload
+        .epoch
+        .as_deref()
+        .map(|observed| observed != epoch)
+        .unwrap_or(false);
+    let replay = match state
+        .store
+        .replay_events(&payload.session_id, after_seq, payload.limit)
+    {
+        Ok(replay) => replay,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    state
+        .metrics
+        .replay_latency
+        .record(started.elapsed().as_millis() as u64);
+    let cursor_ahead = after_seq > replay.latest_seq;
+    let resync_required = epoch_mismatch || cursor_ahead || replay.gap;
+    let need_snapshot = payload.include_snapshot || resync_required;
+    let snapshot = if need_snapshot {
+        match build_snapshot(&state, &payload.session_id, payload.tail).await {
+            Ok(mut snapshot) => {
+                if resync_required {
+                    // A snapshot taken while the live stream moved is still
+                    // authoritative for what it contains, but the client must
+                    // treat it as a new base at `last_seq`.
+                    snapshot.stale = false;
+                }
+                Some(snapshot)
+            }
+            Err(error) => {
+                if replay.events.is_empty() && after_seq == 0 {
+                    return error_response(&state, &request, error);
+                }
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let events: Vec<JournalEventView> = replay
+        .events
+        .into_iter()
+        .map(|record| JournalEventView {
+            seq: record.seq,
+            turn_id: record.turn_id,
+            operation_id: record.operation_id,
+            event: record.event,
+            observed_at_ms: record.observed_at_ms,
+        })
+        .collect();
+    ok(
+        &state,
+        &request,
+        "events.subscribe",
+        serde_json::to_value(EventsSubscribePayload {
+            session_id: payload.session_id,
+            epoch,
+            events,
+            floor_seq: replay.floor_seq,
+            latest_seq: replay.latest_seq,
+            gap: replay.gap,
+            has_more: replay.has_more,
+            resync_required,
+            snapshot,
+        })
+        .unwrap_or_default(),
+    )
+}
+
+async fn handle_events_ack(
+    state: std::sync::Arc<AppState>,
+    conn: ConnContext,
+    request: Envelope,
+) -> Envelope {
+    let payload: EventsAckRequest = match decode(&request.payload) {
+        Ok(value) => value,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    let acked =
+        match state
+            .store
+            .ack_event_cursor(&conn.device.device_id, &payload.session_id, payload.seq)
+        {
+            Ok(acked) => acked,
+            Err(error) => return error_response(&state, &request, error),
+        };
+    let (floor_seq, latest_seq) = state
+        .store
+        .journal_bounds(&payload.session_id)
+        .unwrap_or((0, 0));
+    ok(
+        &state,
+        &request,
+        "events.ack",
+        serde_json::to_value(EventsAckPayload {
+            session_id: payload.session_id,
+            acked_seq: acked,
+            floor_seq,
+            latest_seq,
+        })
+        .unwrap_or_default(),
+    )
+}
+
+/// Delta session sync. The durable index is reconciled against the daemon when
+/// the daemon is reachable; if it is not, the last observed index is returned
+/// with `stale: true` instead of inventing a current state or failing offline.
+async fn handle_sessions_delta(state: std::sync::Arc<AppState>, request: Envelope) -> Envelope {
+    let payload: SessionsDeltaRequest = match decode(&request.payload) {
+        Ok(value) => value,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    let (summaries, stale, source) = match list_summaries(&state).await {
+        Ok(summaries) => (Some(summaries), false, "jcode.list_sessions"),
+        Err(_) => (None, true, "adapter.sqlite.session_index"),
+    };
+    if let Some(summaries) = summaries.as_ref()
+        && let Err(error) = state.store.reconcile_session_index(summaries)
+    {
+        return error_response(&state, &request, error);
+    }
+    let mut delta = match state.store.sessions_delta(payload.since_revision) {
+        Ok(delta) => delta,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    delta.stale = stale;
+    delta.source = source.into();
+    if !payload.include_projects {
+        delta.projects.clear();
+    }
+    ok(
+        &state,
+        &request,
+        "sessions.delta",
+        serde_json::to_value(delta).unwrap_or_default(),
+    )
 }
 
 async fn handle_snapshot(
@@ -603,22 +873,41 @@ async fn handle_reserve(state: std::sync::Arc<AppState>, request: Envelope) -> E
             CoreError::InvalidInput("prompt exceeds the 256 KiB limit".into()),
         );
     }
-    if let Some(active) = state.turns.active(&payload.session_id) {
-        if !payload
+    let images = match validate_images(&payload.images) {
+        Ok(images) => images,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    if !images.is_empty() && payload.kind != "send" {
+        return error_response(
+            &state,
+            &request,
+            CoreError::InvalidInput("images are only valid for a send operation".into()),
+        );
+    }
+    let attachments_json = if images.is_empty() {
+        None
+    } else {
+        Some(
+            serde_json::to_string(&images)
+                .map_err(|error| CoreError::Message(error.to_string()))
+                .unwrap_or_default(),
+        )
+    };
+    if let Some(active) = state.turns.active(&payload.session_id)
+        && !payload
             .expected_turn_id
             .as_deref()
             .map(|expected| expected == active.turn_id)
             .unwrap_or(false)
-        {
-            return error_response(
-                &state,
-                &request,
-                CoreError::Conflict(format!(
-                    "a turn is already active for this session: {}",
-                    active.turn_id
-                )),
-            );
-        }
+    {
+        return error_response(
+            &state,
+            &request,
+            CoreError::Conflict(format!(
+                "a turn is already active for this session: {}",
+                active.turn_id
+            )),
+        );
     }
     match state.store.reserve_operation(
         &payload.operation_id,
@@ -627,16 +916,39 @@ async fn handle_reserve(state: std::sync::Arc<AppState>, request: Envelope) -> E
         &payload.body,
         payload.expected_turn_id.as_deref(),
     ) {
-        Ok((operation, duplicate)) => ok(
-            &state,
-            &request,
-            "operations.reserve",
-            serde_json::to_value(OperationStatePayload {
-                operation,
-                duplicate,
-            })
-            .unwrap_or_default(),
-        ),
+        Ok((operation, duplicate)) => {
+            if duplicate {
+                match state.store.operation_attachments(&operation.operation_id) {
+                    Ok(existing) if existing.as_deref() == attachments_json.as_deref() => {}
+                    Ok(_) => {
+                        return error_response(
+                            &state,
+                            &request,
+                            CoreError::Conflict(
+                                "operation id was already used with different attachments".into(),
+                            ),
+                        );
+                    }
+                    Err(error) => return error_response(&state, &request, error),
+                }
+            } else if let Some(json) = attachments_json.as_deref()
+                && let Err(error) = state
+                    .store
+                    .set_operation_attachments(&operation.operation_id, json)
+            {
+                return error_response(&state, &request, error);
+            }
+            ok(
+                &state,
+                &request,
+                "operations.reserve",
+                serde_json::to_value(OperationStatePayload {
+                    operation,
+                    duplicate,
+                })
+                .unwrap_or_default(),
+            )
+        }
         Err(error) => error_response(&state, &request, error),
     }
 }
@@ -678,14 +990,14 @@ async fn handle_dispatch(state: std::sync::Arc<AppState>, request: Envelope) -> 
             .unwrap_or_default(),
         );
     }
-    if let Some(active) = state.turns.active(&operation.session_id) {
-        if active.operation_id != operation.operation_id {
-            return error_response(
-                &state,
-                &request,
-                CoreError::Conflict("another turn is active for this session".into()),
-            );
-        }
+    if let Some(active) = state.turns.active(&operation.session_id)
+        && active.operation_id != operation.operation_id
+    {
+        return error_response(
+            &state,
+            &request,
+            CoreError::Conflict("another turn is active for this session".into()),
+        );
     }
     let mut operation = operation;
     if operation.state == OperationState::Staged {
@@ -733,9 +1045,50 @@ async fn handle_dispatch(state: std::sync::Arc<AppState>, request: Envelope) -> 
         Ok(None) => String::new(),
         Err(error) => return error_response(&state, &request, error),
     };
+    let images: Vec<(String, String)> =
+        match state.store.operation_attachments(&operation.operation_id) {
+            Ok(Some(json)) => match serde_json::from_str(&json) {
+                Ok(images) => images,
+                Err(error) => {
+                    return error_response(
+                        &state,
+                        &request,
+                        CoreError::Message(format!("stored attachments are corrupt: {error}")),
+                    );
+                }
+            },
+            Ok(None) => Vec::new(),
+            Err(error) => return error_response(&state, &request, error),
+        };
+    if let Some(delay) = state.faults.dispatch_delay() {
+        tokio::time::sleep(delay).await;
+    }
+    if state.faults.backend_unavailable {
+        let message = "fault injection: JCode harness is unavailable".to_string();
+        state.turns.finish(&operation.session_id);
+        if let Ok(updated) = state.store.transition_operation(
+            &operation.operation_id,
+            OperationState::Dispatching,
+            OperationState::Rejected,
+            Some(("dispatch_failed", &message)),
+            Some(&turn_id),
+        ) {
+            state.hub.publish_operation(updated);
+        }
+        return error_response(&state, &request, CoreError::BackendUnavailable(message));
+    }
     let backend = std::sync::Arc::clone(&state.backend);
     let session_id = operation.session_id.clone();
-    let send_result = blocking(move || backend.send(&session_id, &body)).await;
+    let send_started = std::time::Instant::now();
+    let send_result = if images.is_empty() {
+        blocking(move || backend.send(&session_id, &body)).await
+    } else {
+        blocking(move || backend.send_images(&session_id, &body, images)).await
+    };
+    state
+        .metrics
+        .dispatch_latency
+        .record(send_started.elapsed().as_millis() as u64);
     match send_result {
         Ok(()) => {
             schedule_acceptance_timeout(
@@ -943,7 +1296,7 @@ fn models_payload(
                     is_command_code: runtime
                         .provider
                         .as_deref()
-                        .map(|provider| adapter_core::is_command_code_provider(provider))
+                        .map(adapter_core::is_command_code_provider)
                         .unwrap_or(false),
                 });
             }
@@ -982,17 +1335,17 @@ async fn handle_set_model(state: std::sync::Arc<AppState>, request: Envelope) ->
             )),
         );
     };
-    if let Some(expected_provider) = payload.expected_provider.as_deref() {
-        if !route.provider.eq_ignore_ascii_case(expected_provider) {
-            return error_response(
-                &state,
-                &request,
-                CoreError::Conflict(format!(
-                    "route provider is {}, not {}",
-                    route.provider, expected_provider
-                )),
-            );
-        }
+    if let Some(expected_provider) = payload.expected_provider.as_deref()
+        && !route.provider.eq_ignore_ascii_case(expected_provider)
+    {
+        return error_response(
+            &state,
+            &request,
+            CoreError::Conflict(format!(
+                "route provider is {}, not {}",
+                route.provider, expected_provider
+            )),
+        );
     }
     if !route.available {
         return error_response(
@@ -1323,6 +1676,7 @@ pub async fn handle_backend_event(state: std::sync::Arc<AppState>, event: Backen
     match event {
         BackendEvent::Connected { info } => {
             tracing::info!(server = %info.server, "JCode link connected");
+            state.note_jcode_contact();
             state.set_connection_message(None);
             let _ = state.hub.subscribe().try_recv();
             crate::events::broadcast_connection(&state, true, "JCode harness connected".into());
@@ -1330,6 +1684,7 @@ pub async fn handle_backend_event(state: std::sync::Arc<AppState>, event: Backen
         }
         BackendEvent::Disconnected { message } => {
             tracing::warn!(message = %message, "JCode link disconnected");
+            state.note_jcode_reconnect(Some(message.clone()));
             state.set_connection_message(Some(message.clone()));
             crate::events::broadcast_connection(&state, false, message);
         }
@@ -1341,24 +1696,24 @@ pub async fn handle_backend_event(state: std::sync::Arc<AppState>, event: Backen
                     return;
                 }
             };
-            if let Some(operation) = operation {
-                if matches!(
+            if let Some(operation) = operation
+                && matches!(
                     operation.state,
                     OperationState::Dispatching | OperationState::Unknown
+                )
+            {
+                let from = operation.state;
+                if let Ok(updated) = state.store.transition_operation(
+                    &operation.operation_id,
+                    from,
+                    OperationState::Accepted,
+                    None,
+                    None,
                 ) {
-                    let from = operation.state;
-                    if let Ok(updated) = state.store.transition_operation(
-                        &operation.operation_id,
-                        from,
-                        OperationState::Accepted,
-                        None,
-                        None,
-                    ) {
-                        state
-                            .turns
-                            .mark_accepted(&session_id, &operation.operation_id);
-                        state.hub.publish_operation(updated);
-                    }
+                    state
+                        .turns
+                        .mark_accepted(&session_id, &operation.operation_id);
+                    state.hub.publish_operation(updated);
                 }
             }
         }
@@ -1410,26 +1765,24 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
             | SessionEvent::TurnDone { .. }
             | SessionEvent::TurnStopped { .. }
     );
-    if proves_turn {
-        if let Some(operation_id) = operation_id.as_deref() {
-            state.turns.mark_observed(&session_id, operation_id);
-            if let Ok(Some(operation)) = state.store.operation(operation_id) {
-                if matches!(
-                    operation.state,
-                    OperationState::Dispatching | OperationState::Unknown
-                ) {
-                    let from = operation.state;
-                    if let Ok(updated) = state.store.transition_operation(
-                        operation_id,
-                        from,
-                        OperationState::Accepted,
-                        None,
-                        None,
-                    ) {
-                        state.turns.mark_accepted(&session_id, operation_id);
-                        state.hub.publish_operation(updated);
-                    }
-                }
+    if proves_turn && let Some(operation_id) = operation_id.as_deref() {
+        state.turns.mark_observed(&session_id, operation_id);
+        if let Ok(Some(operation)) = state.store.operation(operation_id)
+            && matches!(
+                operation.state,
+                OperationState::Dispatching | OperationState::Unknown
+            )
+        {
+            let from = operation.state;
+            if let Ok(updated) = state.store.transition_operation(
+                operation_id,
+                from,
+                OperationState::Accepted,
+                None,
+                None,
+            ) {
+                state.turns.mark_accepted(&session_id, operation_id);
+                state.hub.publish_operation(updated);
             }
         }
     }
@@ -1455,21 +1808,21 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
     ) {
         let finished = state.turns.finish(&session_id);
         let operation = state.store.pending_operation_for_session(&session_id);
-        if let Ok(Some(operation)) = operation {
-            if operation.state == OperationState::Dispatching {
-                // A daemon-observed turn ending is stronger evidence than a
-                // transport acknowledgment. Mark the operation accepted and
-                // let the history snapshot promote it once the user message
-                // appears in the session transcript.
-                if let Ok(updated) = state.store.transition_operation(
-                    &operation.operation_id,
-                    OperationState::Dispatching,
-                    OperationState::Accepted,
-                    None,
-                    None,
-                ) {
-                    state.hub.publish_operation(updated);
-                }
+        if let Ok(Some(operation)) = operation
+            && operation.state == OperationState::Dispatching
+        {
+            // A daemon-observed turn ending is stronger evidence than a
+            // transport acknowledgment. Mark the operation accepted and
+            // let the history snapshot promote it once the user message
+            // appears in the session transcript.
+            if let Ok(updated) = state.store.transition_operation(
+                &operation.operation_id,
+                OperationState::Dispatching,
+                OperationState::Accepted,
+                None,
+                None,
+            ) {
+                state.hub.publish_operation(updated);
             }
         }
         let _ = finished;

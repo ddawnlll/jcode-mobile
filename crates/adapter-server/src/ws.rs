@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use adapter_core::{CoreError, classify_backend_error};
 use adapter_protocol::{
-    DeviceInfo, Envelope, ErrorCode, ErrorPayload, PairRedeemRequest, PairRedeemResponse,
-    WS_SUBPROTOCOL,
+    DeviceInfo, Envelope, ErrorCode, ErrorPayload, LEGACY_WS_SUBPROTOCOL, MIN_PROTOCOL_VERSION,
+    PairRedeemRequest, PairRedeemResponse, WS_SUBPROTOCOL,
 };
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
@@ -70,13 +70,18 @@ async fn api_not_found() -> impl IntoResponse {
 
 async fn health(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let info = state.backend.info();
+    let journal = state.store.journal_stats().unwrap_or_default();
     Json(serde_json::json!({
         "ok": true,
         "server_id": state.store.server_id(),
         "adapter_version": crate::state::ADAPTER_VERSION,
         "protocol_version": adapter_protocol::PROTOCOL_VERSION,
+        "min_protocol_version": adapter_protocol::MIN_PROTOCOL_VERSION,
+        "epoch": state.hub.epoch(),
         "jcode_connected": info.healthy,
         "jcode_server": if info.server.is_empty() { serde_json::Value::Null } else { serde_json::Value::String(info.server) },
+        "journal_events": journal.events,
+        "connections": state.metrics.active_connections.load(Ordering::Relaxed),
     }))
 }
 
@@ -180,7 +185,9 @@ async fn ws_handler(
                 .into_response();
         }
     };
-    ws.protocols([WS_SUBPROTOCOL])
+    // A v2 client offers `jcode.mobile.v2` and keeps working: the connection
+    // negotiates v2 and every outbound frame is normalized to that version.
+    ws.protocols([WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL])
         .on_upgrade(move |socket| connection_loop(state, device, socket))
 }
 
@@ -216,14 +223,13 @@ pub fn origin_allowed(configured: &[String], origin: &str) -> bool {
 }
 
 fn extract_token(headers: &HeaderMap) -> Option<String> {
-    if let Some(value) = headers.get(header::AUTHORIZATION) {
-        if let Some(value) = value.to_str().ok() {
-            if let Some(token) = value.strip_prefix("Bearer ") {
-                let token = token.trim();
-                if !token.is_empty() {
-                    return Some(token.to_string());
-                }
-            }
+    if let Some(value) = headers.get(header::AUTHORIZATION)
+        && let Ok(value) = value.to_str()
+        && let Some(token) = value.strip_prefix("Bearer ")
+    {
+        let token = token.trim();
+        if !token.is_empty() {
+            return Some(token.to_string());
         }
     }
     let protocols = headers.get("sec-websocket-protocol")?.to_str().ok()?;
@@ -238,15 +244,29 @@ fn extract_token(headers: &HeaderMap) -> Option<String> {
 async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSocket) {
     let connection_id = CONNECTION_SEQ.fetch_add(1, Ordering::Relaxed);
     info!(device = %device.device_id, connection = connection_id, "device connected");
+    state
+        .metrics
+        .active_connections
+        .fetch_add(1, Ordering::Relaxed);
     let (mut sink, mut stream) = socket.split();
     let (out_tx, mut out_rx) = mpsc::channel::<Outbound>(state.config.event_queue.max(64));
+    // Until `client.hello` names its range, use the lowest version the adapter
+    // speaks so no frame can claim a version the client may not understand.
+    let protocol_version = Arc::new(AtomicU32::new(MIN_PROTOCOL_VERSION));
+    let writer_version = Arc::clone(&protocol_version);
+    let writer_state = Arc::clone(&state);
     let writer = tokio::spawn(async move {
         while let Some(outbound) = out_rx.recv().await {
             match outbound {
-                Outbound::Envelope(envelope) => {
+                Outbound::Envelope(mut envelope) => {
+                    envelope.v = writer_version.load(Ordering::Relaxed);
                     let Ok(text) = serde_json::to_string(&envelope) else {
                         continue;
                     };
+                    writer_state
+                        .metrics
+                        .frames_out
+                        .fetch_add(1, Ordering::Relaxed);
                     if sink.send(Message::Text(text.into())).await.is_err() {
                         break;
                     }
@@ -267,6 +287,7 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
         device: device.clone(),
         subscribed: Arc::new(Mutex::new(std::collections::HashSet::new())),
         outbound: out_tx.clone(),
+        protocol_version: Arc::clone(&protocol_version),
     };
     let mut broadcast_rx = state.hub.subscribe();
     let mut revocation_rx = state.revocation.subscribe();
@@ -277,30 +298,39 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
             inbound = stream.next() => {
                 match inbound {
                     Some(Ok(Message::Text(text))) => {
+                        state.metrics.frames_in.fetch_add(1, Ordering::Relaxed);
                         match serde_json::from_str::<Envelope>(text.as_str()) {
                             Ok(envelope) => {
                                 let state_for_task = Arc::clone(&state);
                                 let conn_for_task = conn.clone();
                                 let outbound = out_tx.clone();
                                 tokio::spawn(async move {
-                                    let response = handle_request(state_for_task, conn_for_task, envelope).await;
+                                    let mut response = handle_request(
+                                        state_for_task,
+                                        conn_for_task.clone(),
+                                        envelope,
+                                    )
+                                    .await;
+                                    response.v = conn_for_task.protocol_version();
                                     let _ = outbound.send(Outbound::Envelope(response)).await;
                                 });
                             }
                             Err(error) => {
-                                let response = error_envelope(
+                                let mut response = error_envelope(
                                     "invalid-frame",
                                     &CoreError::InvalidInput(format!("invalid JSON envelope: {error}")),
                                 );
+                                response.v = conn.protocol_version();
                                 let _ = out_tx.send(Outbound::Envelope(response)).await;
                             }
                         }
                     }
                     Some(Ok(Message::Binary(_))) => {
-                        let response = error_envelope(
+                        let mut response = error_envelope(
                             "invalid-frame",
                             &CoreError::InvalidInput("binary frames are not supported".into()),
                         );
+                        response.v = conn.protocol_version();
                         let _ = out_tx.send(Outbound::Envelope(response)).await;
                     }
                     Some(Ok(Message::Close(_))) | None => break,
@@ -344,6 +374,7 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
                     Err(broadcast::error::RecvError::Lagged(skipped)) => {
                         if !gap_announced {
                             gap_announced = true;
+                            state.metrics.gaps_announced.fetch_add(1, Ordering::Relaxed);
                             let sessions: Vec<String> = conn
                                 .subscribed
                                 .lock()
@@ -380,6 +411,17 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
         }
     }
     info!(device = %device.device_id, connection = connection_id, "device disconnected");
+    state
+        .metrics
+        .active_connections
+        .fetch_sub(1, Ordering::Relaxed);
+    let subscriptions = conn.subscribed.lock().expect("subscribed").len() as u64;
+    if subscriptions > 0 {
+        state
+            .metrics
+            .subscriptions
+            .fetch_sub(subscriptions, Ordering::Relaxed);
+    }
     drop(conn);
     drop(out_tx);
     writer.abort();

@@ -153,6 +153,19 @@ pub trait Backend: Send + Sync {
     /// Write a user message. Returning Ok means the frame was written, not that
     /// the agent accepted it. Acceptance arrives as `BackendEvent::Accepted`.
     fn send(&self, session_id: &str, content: &str) -> CoreResult<()>;
+    /// Send a user message with inline images as `(media_type, base64)` pairs.
+    /// Backends that cannot carry images must reject the call, never silently
+    /// drop them.
+    fn send_images(
+        &self,
+        _session_id: &str,
+        _content: &str,
+        _images: Vec<(String, String)>,
+    ) -> CoreResult<()> {
+        Err(CoreError::InvalidInput(
+            "this backend does not support image attachments".into(),
+        ))
+    }
     fn cancel(&self, session_id: &str) -> CoreResult<()>;
     fn permission_response(
         &self,
@@ -258,6 +271,16 @@ impl SessionTurnRegistry {
                     .unwrap_or(false)
             })
             .map(|(session, _)| session.clone())
+    }
+
+    /// Number of sessions with a live turn. Used for diagnostics only.
+    pub fn active_count(&self) -> usize {
+        self.inner
+            .lock()
+            .expect("turn registry")
+            .values()
+            .filter(|state| state.active.is_some())
+            .count()
     }
 }
 
