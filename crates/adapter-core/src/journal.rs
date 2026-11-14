@@ -469,6 +469,7 @@ mod tests {
             archived: false,
             parent_session_id: None,
             agent_label: None,
+            favorite: false,
         }
     }
 

@@ -1553,6 +1553,75 @@ export class Controller {
     }
   }
 
+  /** Shared archive/restore path. Resolves true only on an acknowledgement. */
+  private async sessionAction(type: string, sessionId: string): Promise<boolean> {
+    if (!this.client || this.client.status !== 'connected') {
+      this.setToast('The adapter is offline. This change was not sent.');
+      return false;
+    }
+    try {
+      const payload = await this.client.request<{ session: SessionSummary }>(
+        type,
+        { session_id: sessionId },
+        20_000,
+        { sessionId },
+      );
+      this.applySessionSummary(payload.session);
+      return true;
+    } catch (error) {
+      this.setToast(error instanceof Error ? error.message : 'The adapter rejected this change.');
+      return false;
+    }
+  }
+
+  async archiveSession(sessionId: string): Promise<boolean> {
+    return this.sessionAction('sessions.archive', sessionId);
+  }
+
+  async restoreSession(sessionId: string): Promise<boolean> {
+    return this.sessionAction('sessions.restore', sessionId);
+  }
+
+  /**
+   * The JCode daemon has no delete capability. The adapter refuses with a
+   * clear error; the UI must not pretend the session was removed.
+   */
+  async deleteSession(sessionId: string): Promise<boolean> {
+    return this.sessionAction('sessions.delete', sessionId);
+  }
+
+  async toggleFavorite(sessionId: string): Promise<boolean> {
+    if (!this.client || this.client.status !== 'connected') return false;
+    const current = this.state.sessions.find((session) => session.session_id === sessionId);
+    const favorite = !(current?.favorite ?? false);
+    try {
+      const payload = await this.client.request<{ session: SessionSummary }>(
+        'sessions.favorite',
+        { session_id: sessionId, favorite },
+        20_000,
+        { sessionId },
+      );
+      this.applySessionSummary(payload.session);
+      return true;
+    } catch (error) {
+      this.setToast(error instanceof Error ? error.message : 'Favorite was rejected.');
+      return false;
+    }
+  }
+
+  private applySessionSummary(session: SessionSummary) {
+    const snapshot = this.state.snapshot;
+    this.setState({
+      sessions: this.state.sessions.map((existing) =>
+        existing.session_id === session.session_id ? session : existing,
+      ),
+      snapshot:
+        snapshot && snapshot.session.session_id === session.session_id
+          ? { ...snapshot, session }
+          : snapshot,
+    });
+  }
+
   async renameSession(title: string) {
     const sessionId = this.state.activeSessionId;
     if (!this.client || this.client.status !== 'connected' || !sessionId) return;

@@ -154,6 +154,26 @@ impl Backend for FakeBackend {
         }
     }
 
+    fn archive_session(&self, session_id: &str) -> CoreResult<()> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions
+            .iter_mut()
+            .find(|session| session.session_id == session_id)
+            .ok_or_else(|| CoreError::NotFound(session_id.into()))?;
+        session.archived = true;
+        Ok(())
+    }
+
+    fn restore_session(&self, session_id: &str) -> CoreResult<()> {
+        let mut sessions = self.sessions.lock().unwrap();
+        let session = sessions
+            .iter_mut()
+            .find(|session| session.session_id == session_id)
+            .ok_or_else(|| CoreError::NotFound(session_id.into()))?;
+        session.archived = false;
+        Ok(())
+    }
+
     fn plan(&self, _session_id: &str) -> CoreResult<Option<Value>> {
         Ok(None)
     }
@@ -1284,4 +1304,69 @@ async fn push_registration_is_scoped_and_never_echoes_the_token() {
     let status: adapter_protocol::PushStatusPayload =
         response_payload(&call(&h, "push.status", json!({})).await);
     assert_eq!(status.registrations, 0);
+}
+
+#[tokio::test]
+async fn archive_restore_and_favorite_are_authoritative() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"actions","project_id":null,"working_dir":null,"title":"actions"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+
+    let archived: serde_json::Value =
+        response_payload(&call(&h, "sessions.archive", json!({"session_id": session_id})).await);
+    assert_eq!(archived["session"]["archived"], true);
+    assert!(h.backend.session(&session_id).expect("session").archived);
+
+    let restored: serde_json::Value =
+        response_payload(&call(&h, "sessions.restore", json!({"session_id": session_id})).await);
+    assert_eq!(restored["session"]["archived"], false);
+
+    let favorite: serde_json::Value = response_payload(
+        &call(
+            &h,
+            "sessions.favorite",
+            json!({"session_id": session_id, "favorite": true}),
+        )
+        .await,
+    );
+    assert_eq!(favorite["session"]["favorite"], true);
+    // The favorite persists and is part of the durable delta index.
+    let delta: SessionsDeltaPayload = response_payload(
+        &call(
+            &h,
+            "sessions.delta",
+            json!({"since_revision": 0, "include_projects": false}),
+        )
+        .await,
+    );
+    let summary = delta
+        .sessions
+        .iter()
+        .find(|session| session.session_id == session_id)
+        .expect("session in delta");
+    assert!(summary.favorite);
+
+    let unfavorite: serde_json::Value = response_payload(
+        &call(
+            &h,
+            "sessions.favorite",
+            json!({"session_id": session_id, "favorite": false}),
+        )
+        .await,
+    );
+    assert_eq!(unfavorite["session"]["favorite"], false);
+
+    // The daemon has no delete capability; the adapter refuses honestly.
+    let delete = call(&h, "sessions.delete", json!({"session_id": session_id})).await;
+    assert_eq!(delete.msg_type, "error");
+    let error: adapter_protocol::ErrorPayload = serde_json::from_value(delete.payload).unwrap();
+    assert!(error.message.contains("archive"));
 }

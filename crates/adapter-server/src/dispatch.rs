@@ -264,6 +264,17 @@ pub async fn handle_request(
         "sessions.peek" => handle_peek(state, request).await,
         "sessions.history" => handle_history(state, request).await,
         "sessions.rename" => handle_rename(state, request).await,
+        "sessions.archive" => handle_archive(state, request).await,
+        "sessions.restore" => handle_restore(state, request).await,
+        "sessions.favorite" => handle_favorite(state, request).await,
+        "sessions.delete" => error_response(
+            &state,
+            &request,
+            CoreError::InvalidInput(
+                "the JCode daemon has no session delete capability; archive the session instead"
+                    .into(),
+            ),
+        ),
 
         // ----------------------------------------------------------------
         // Operations
@@ -891,6 +902,65 @@ async fn handle_rename(state: std::sync::Arc<AppState>, request: Envelope) -> En
             }
         }
         Err(error) => error_response(&state, &request, error),
+    }
+}
+
+async fn handle_archive(state: std::sync::Arc<AppState>, request: Envelope) -> Envelope {
+    let payload: SessionActionRequest = match decode(&request.payload) {
+        Ok(value) => value,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    let backend = std::sync::Arc::clone(&state.backend);
+    let session_id = payload.session_id.clone();
+    match blocking(move || backend.archive_session(&session_id)).await {
+        Ok(()) => {
+            state.hub.sessions_changed();
+            respond_with_summary(&state, &request, "sessions.archive", &payload.session_id).await
+        }
+        Err(error) => error_response(&state, &request, error),
+    }
+}
+
+async fn handle_restore(state: std::sync::Arc<AppState>, request: Envelope) -> Envelope {
+    let payload: SessionActionRequest = match decode(&request.payload) {
+        Ok(value) => value,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    let backend = std::sync::Arc::clone(&state.backend);
+    let session_id = payload.session_id.clone();
+    match blocking(move || backend.restore_session(&session_id)).await {
+        Ok(()) => {
+            state.hub.sessions_changed();
+            respond_with_summary(&state, &request, "sessions.restore", &payload.session_id).await
+        }
+        Err(error) => error_response(&state, &request, error),
+    }
+}
+
+async fn handle_favorite(state: std::sync::Arc<AppState>, request: Envelope) -> Envelope {
+    let payload: FavoriteSessionRequest = match decode(&request.payload) {
+        Ok(value) => value,
+        Err(error) => return error_response(&state, &request, error),
+    };
+    if let Err(error) = state
+        .store
+        .set_session_favorite(&payload.session_id, payload.favorite)
+    {
+        return error_response(&state, &request, error);
+    }
+    state.hub.sessions_changed();
+    respond_with_summary(&state, &request, "sessions.favorite", &payload.session_id).await
+}
+
+async fn respond_with_summary(
+    state: &std::sync::Arc<AppState>,
+    request: &Envelope,
+    msg_type: &str,
+    session_id: &str,
+) -> Envelope {
+    match find_summary(state, session_id).await {
+        Ok(session) => ok(state, request, msg_type, json!({"session": session})),
+        Err(error) => error_response(state, request, error),
     }
 }
 

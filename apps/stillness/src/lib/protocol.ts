@@ -75,6 +75,8 @@ export interface SessionSummary {
   archived: boolean;
   parent_session_id: string | null;
   agent_label: string | null;
+  /// Adapter-owned favorite flag, not a daemon field.
+  favorite?: boolean;
 }
 
 export interface Project {

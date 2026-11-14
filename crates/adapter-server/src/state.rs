@@ -229,7 +229,10 @@ impl AppState {
         if project_id.is_none() {
             project_id = self.infer_project(session.working_dir.as_deref())?;
         }
-        Ok(session.into_summary(title, project_id))
+        let favorite = self.store.session_favorite(&session.session_id)?;
+        let mut summary = session.into_summary(title, project_id);
+        summary.favorite = favorite;
+        Ok(summary)
     }
 
     fn infer_project(&self, working_dir: Option<&str>) -> CoreResult<Option<String>> {

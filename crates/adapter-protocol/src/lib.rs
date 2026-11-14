@@ -73,6 +73,9 @@ pub const CAPABILITIES: &[&str] = &[
     "attachments.images",
     "push.register_v1",
     "push.preferences",
+    "sessions.archive",
+    "sessions.restore",
+    "sessions.favorite",
 ];
 
 /// Bounded image attachment limits. A larger request is rejected before it can
@@ -337,6 +340,9 @@ pub struct SessionSummary {
     pub archived: bool,
     pub parent_session_id: Option<String>,
     pub agent_label: Option<String>,
+    /// Adapter-owned favorite flag. It is not a daemon field.
+    #[serde(default)]
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -701,6 +707,17 @@ pub struct CancelTurnResponse {
     /// race explicitly rather than claiming atomic turn cancellation.
     pub atomic_turn_scope: bool,
     pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SessionActionRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FavoriteSessionRequest {
+    pub session_id: String,
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

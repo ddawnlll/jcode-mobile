@@ -53,6 +53,7 @@ impl BackendSession {
             archived: self.archived,
             parent_session_id: self.parent_session_id,
             agent_label: self.agent_label,
+            favorite: false,
         }
     }
 }
@@ -149,6 +150,18 @@ pub trait Backend: Send + Sync {
     fn set_reasoning_effort(&self, session_id: &str, effort: &str) -> CoreResult<()>;
     fn set_context_cap(&self, session_id: &str, max_tokens: Option<u64>) -> CoreResult<()>;
     fn rename_session(&self, session_id: &str, title: Option<&str>) -> CoreResult<()>;
+    fn archive_session(&self, session_id: &str) -> CoreResult<()> {
+        let _ = session_id;
+        Err(CoreError::InvalidInput(
+            "this backend does not support archiving".into(),
+        ))
+    }
+    fn restore_session(&self, session_id: &str) -> CoreResult<()> {
+        let _ = session_id;
+        Err(CoreError::InvalidInput(
+            "this backend does not support restoring".into(),
+        ))
+    }
     fn plan(&self, session_id: &str) -> CoreResult<Option<Value>>;
     /// Write a user message. Returning Ok means the frame was written, not that
     /// the agent accepted it. Acceptance arrives as `BackendEvent::Accepted`.

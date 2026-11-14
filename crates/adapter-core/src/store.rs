@@ -182,6 +182,12 @@ impl Store {
              );
              -- One row per notification attempt that passed dedupe. The primary
              -- key makes a concurrent duplicate a no-op.
+             CREATE TABLE IF NOT EXISTS session_favorites (
+                session_id TEXT PRIMARY KEY,
+                server_id TEXT NOT NULL,
+                favorite INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+             );
              CREATE TABLE IF NOT EXISTS push_log (
                 device_id TEXT NOT NULL,
                 notification_key TEXT NOT NULL,
@@ -737,6 +743,37 @@ impl Store {
                 |row| row.get(0),
             )
             .optional()?)
+    }
+
+    pub fn session_favorite(&self, session_id: &str) -> CoreResult<bool> {
+        let conn = self.conn.lock().expect("store lock");
+        Ok(conn
+            .query_row(
+                "SELECT favorite FROM session_favorites WHERE session_id = ?1 AND server_id = ?2",
+                params![session_id, self.server_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .map(|value| value != 0)
+            .unwrap_or(false))
+    }
+
+    pub fn set_session_favorite(&self, session_id: &str, favorite: bool) -> CoreResult<()> {
+        let conn = self.conn.lock().expect("store lock");
+        if favorite {
+            conn.execute(
+                "INSERT INTO session_favorites(session_id, server_id, favorite, updated_at_ms)
+                 VALUES(?1, ?2, 1, ?3)
+                 ON CONFLICT(session_id) DO UPDATE SET favorite = 1, updated_at_ms = excluded.updated_at_ms",
+                params![session_id, self.server_id, now_ms()],
+            )?;
+        } else {
+            conn.execute(
+                "DELETE FROM session_favorites WHERE session_id = ?1 AND server_id = ?2",
+                params![session_id, self.server_id],
+            )?;
+        }
+        Ok(())
     }
 
     pub fn set_session_project(&self, session_id: &str, project_id: &str) -> CoreResult<()> {

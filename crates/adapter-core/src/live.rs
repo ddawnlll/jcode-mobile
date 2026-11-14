@@ -398,6 +398,16 @@ impl Backend for JcodeLive {
             .map_err(map_sdk_error)
     }
 
+    fn archive_session(&self, session_id: &str) -> CoreResult<()> {
+        let client = self.client()?;
+        client.archive_session(session_id).map_err(map_sdk_error)
+    }
+
+    fn restore_session(&self, session_id: &str) -> CoreResult<()> {
+        let client = self.client()?;
+        client.restore_session(session_id).map_err(map_sdk_error)
+    }
+
     fn plan(&self, session_id: &str) -> CoreResult<Option<Value>> {
         let client = self.client()?;
         let _guard = self.attach_for_command(&client, session_id)?;
