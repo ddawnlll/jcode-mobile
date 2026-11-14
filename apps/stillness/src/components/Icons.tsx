@@ -269,3 +269,13 @@ export function IconExternal(props: IconProps) {
     </svg>
   );
 }
+
+export function IconImage(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="9" cy="10" r="1.4" />
+      <path d="M4.5 17l4.6-4.6 3.1 3.1 2.6-2.6 4.7 4.1" />
+    </svg>
+  );
+}

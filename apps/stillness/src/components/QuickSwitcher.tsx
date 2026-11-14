@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { controller, type AppState } from '../lib/controller';
 import { relativeTime, sessionTitle, isRunning } from '../lib/format';
-import { useSessionPrefs, visibleSessions } from '../lib/sessionPrefs';
+import { favoriteView, useSessionPrefs, visibleSessions } from '../lib/sessionPrefs';
 import { IconSearch } from './Icons';
 import { useBackGuard } from './gestures';
 
@@ -61,6 +61,7 @@ export function QuickSwitcher({ state }: { state: AppState }) {
   const [selected, setSelected] = useState(0);
   const serverId = state.credential?.serverId ?? null;
   const prefs = useSessionPrefs(serverId);
+  const online = state.connection.status === 'connected';
   const login = state.connection.status === 'connected' && state.jcodeConnected;
 
   useBackGuard(open, closeSwitcher, 'quick-switcher');
@@ -75,8 +76,7 @@ export function QuickSwitcher({ state }: { state: AppState }) {
 
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const ordered = visibleSessions(state.sessions, prefs);
-    const pinned = new Set(prefs.pinned);
+    const ordered = visibleSessions(state.sessions, prefs, online);
     const matches = ordered.filter((session) => {
       if (!needle) return true;
       return (
@@ -85,11 +85,11 @@ export function QuickSwitcher({ state }: { state: AppState }) {
         (session.project_id ?? '').toLowerCase().includes(needle)
       );
     });
-    return matches.map((session) => ({
-      session,
-      pinned: pinned.has(session.session_id),
-    }));
-  }, [prefs, query, state.sessions]);
+    return matches.map((session) => {
+      const favorite = favoriteView(session, prefs, online);
+      return { session, favorite: favorite.favorite, source: favorite.source };
+    });
+  }, [online, prefs, query, state.sessions]);
 
   useEffect(() => {
     setSelected((value) => Math.min(value, Math.max(0, results.length - 1)));
@@ -102,8 +102,21 @@ export function QuickSwitcher({ state }: { state: AppState }) {
     void controller.openSession(sessionId);
   };
 
-  const pinnedResults = results.filter((item) => item.pinned);
-  const otherResults = results.filter((item) => !item.pinned);
+  const favoriteResults = results.filter((item) => item.favorite);
+  const otherResults = results.filter((item) => !item.favorite);
+  const favoriteSources = new Set(favoriteResults.map((item) => item.source));
+  const favoriteLabel =
+    favoriteSources.size === 0
+      ? ''
+      : favoriteSources.size > 1
+        ? online
+          ? 'Favorites and phone pins'
+          : 'Favorites and pins on this phone'
+        : favoriteSources.has('server')
+          ? online
+            ? 'Favorites on this server'
+            : 'Favorites saved on this phone'
+          : 'Pinned on this phone';
   let rowIndex = -1;
 
   return (
@@ -165,10 +178,10 @@ export function QuickSwitcher({ state }: { state: AppState }) {
                 : 'No session matches that search.'}
             </p>
           ) : null}
-          {pinnedResults.length ? (
-            <div className="switcher-group" role="group" aria-label="Pinned on this phone">
-              <span className="switcher-label">Pinned on this phone</span>
-              {pinnedResults.map(({ session }) => {
+          {favoriteResults.length ? (
+            <div className="switcher-group" role="group" aria-label={favoriteLabel}>
+              <span className="switcher-label">{favoriteLabel}</span>
+              {favoriteResults.map(({ session, source }) => {
                 rowIndex += 1;
                 return (
                   <SwitcherRow
@@ -176,7 +189,8 @@ export function QuickSwitcher({ state }: { state: AppState }) {
                     session={session}
                     index={rowIndex}
                     selected={rowIndex === selected}
-                    pinned
+                    favorite
+                    favoriteSource={source}
                     onHover={setSelected}
                     onChoose={choose}
                   />
@@ -189,7 +203,7 @@ export function QuickSwitcher({ state }: { state: AppState }) {
               <span className="switcher-label">
                 {state.savedOnPhone ? 'Saved on this phone' : 'On this server'}
               </span>
-              {otherResults.map(({ session }) => {
+              {otherResults.map(({ session, source }) => {
                 rowIndex += 1;
                 return (
                   <SwitcherRow
@@ -197,7 +211,8 @@ export function QuickSwitcher({ state }: { state: AppState }) {
                     session={session}
                     index={rowIndex}
                     selected={rowIndex === selected}
-                    pinned={false}
+                    favorite={false}
+                    favoriteSource={source}
                     onHover={setSelected}
                     onChoose={choose}
                   />
@@ -219,14 +234,16 @@ function SwitcherRow({
   session,
   index,
   selected,
-  pinned,
+  favorite,
+  favoriteSource,
   onHover,
   onChoose,
 }: {
   session: AppState['sessions'][number];
   index: number;
   selected: boolean;
-  pinned: boolean;
+  favorite: boolean;
+  favoriteSource: 'server' | 'local';
   onHover: (index: number) => void;
   onChoose: (sessionId: string) => void;
 }) {
@@ -245,7 +262,11 @@ function SwitcherRow({
       <span className="switcher-item-main">
         <span className="switcher-title">
           {sessionTitle(session)}
-          {pinned ? <span className="switcher-pin">Pinned</span> : null}
+          {favorite ? (
+            <span className="switcher-pin">
+              {favoriteSource === 'server' ? 'Favorite' : 'Pinned'}
+            </span>
+          ) : null}
         </span>
         <small>
           {isRunning(session.status) ? 'Working · ' : ''}

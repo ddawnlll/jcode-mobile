@@ -6,18 +6,22 @@ import { ConnectionBanner, EmptyState, ScreenHeader, SessionRow, SavedTag, useDo
 import { sessionTitle, isRunning } from '../lib/format';
 import { credentialStorageKind } from '../lib/credentials';
 import {
+  sessionIsArchived,
   useSessionPrefs,
   visibleSessions,
 } from '../lib/sessionPrefs';
 import { restoreArchived } from '../lib/sessionShelf';
 import { usePullToRefresh } from '../components/gestures';
 import { useScrollMemory } from '../components/motion';
+import { NativeSettings } from '../components/NativeSettings';
+import { hasPendingShare } from '../lib/pendingShare';
 
 export function HomeScreen({ state }: { state: AppState }) {
   const [paused, setPaused] = useState(false);
   useDocumentTitle('Home');
   const prefs = useSessionPrefs(state.credential?.serverId ?? null);
-  const visible = visibleSessions(state.sessions, prefs);
+  const online = state.connection.status === 'connected';
+  const visible = visibleSessions(state.sessions, prefs, online);
   const running = visible.filter((session) => isRunning(session.status));
   const recent = visible.slice(0, 5);
   const projects = state.projects.slice(0, 5);
@@ -125,11 +129,13 @@ export function SessionsScreen({ state }: { state: AppState }) {
   const [filter, setFilter] = useState<'all' | 'running' | 'finished'>('all');
   const [showArchived, setShowArchived] = useState(false);
   const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
   const scrollKey = `sessions:${state.credential?.serverId ?? 'none'}`;
   const scroll = useScrollMemory<HTMLElement>(scrollKey);
-  const archivedCount = prefs.archived.filter((id) =>
-    state.sessions.some((session) => session.session_id === id),
-  ).length;
+  const archivedSessions = state.sessions.filter((session) =>
+    sessionIsArchived(session, prefs, online),
+  );
+  const archivedCount = archivedSessions.length;
 
   const refresh = async (): Promise<boolean> => {
     if (state.connection.status !== 'connected') {
@@ -153,7 +159,7 @@ export function SessionsScreen({ state }: { state: AppState }) {
   useDocumentTitle('Sessions');
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const base = visibleSessions(state.sessions, prefs);
+    const base = visibleSessions(state.sessions, prefs, online);
     return base.filter((session) => {
       if (filter === 'running' && !isRunning(session.status)) return false;
       if (filter === 'finished' && isRunning(session.status)) return false;
@@ -163,12 +169,12 @@ export function SessionsScreen({ state }: { state: AppState }) {
         (session.working_dir ?? '').toLowerCase().includes(needle)
       );
     });
-  }, [filter, prefs, query, state.sessions]);
+  }, [filter, online, prefs, query, state.sessions]);
   return (
     <div className="screen" data-testid="sessions-screen">
       <ScreenHeader
         title="Sessions"
-        subtitle={`${visibleSessions(state.sessions, prefs).length} on this server`}
+        subtitle={`${visibleSessions(state.sessions, prefs, online).length} on this server`}
         menu
         right={
           <button className="icon-btn" aria-label="New session" onClick={() => controller.go('new-session')}>
@@ -241,21 +247,22 @@ export function SessionsScreen({ state }: { state: AppState }) {
           </div>
           {showArchived && archivedCount > 0 ? (
             <div className="archived-shelf">
-              <span className="small-heading">ARCHIVED ON THIS PHONE</span>
-              {prefs.archived
-                .map((id) => state.sessions.find((session) => session.session_id === id))
-                .filter((session): session is NonNullable<typeof session> => Boolean(session))
-                .map((session) => (
-                  <div className="archived-row" key={session.session_id}>
-                    <span>{sessionTitle(session)}</span>
-                    <button
-                      className="tiny-action"
-                      onClick={() => restoreArchived(state.credential?.serverId, session.session_id)}
-                    >
-                      Restore
-                    </button>
-                  </div>
-                ))}
+              <span className="small-heading">
+                {online ? 'ARCHIVED ON THIS SERVER' : 'ARCHIVED · SAVED ON THIS PHONE'}
+              </span>
+              {archivedSessions.map((session) => (
+                <div className="archived-row" key={session.session_id}>
+                  <span>{sessionTitle(session)}</span>
+                  <button
+                    className="tiny-action"
+                    onClick={() =>
+                      void restoreArchived(state.credential?.serverId, session.session_id)
+                    }
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
             </div>
           ) : null}
           {filtered.length === 0 ? (
@@ -348,9 +355,11 @@ export function ProjectDetailScreen({ state }: { state: AppState }) {
   const project = state.projects.find((item) => item.project_id === state.activeProjectId) ?? null;
   useDocumentTitle(project?.label ?? 'Project');
   const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const online = state.connection.status === 'connected';
   const sessions = visibleSessions(
     state.sessions.filter((session) => session.project_id === project?.project_id),
     prefs,
+    online,
   );
   if (!project) {
     return (
@@ -508,6 +517,11 @@ export function NewSessionScreen({ state }: { state: AppState }) {
           <p className="quiet-eyebrow">A NEW THREAD</p>
           <h1 className="page-heading">Where to work?</h1>
           <p className="page-sub">Choose a project, or use the adapter’s default server folder.</p>
+          {hasPendingShare() ? (
+            <p className="form-help" data-testid="pending-share-note">
+              Shared text and images will be added to the session you create.
+            </p>
+          ) : null}
           <div className="choice-rows" role="group" aria-label="Session location">
             {state.projects.map((project) => (
               <button
@@ -649,6 +663,8 @@ export function SettingsScreen({ state }: { state: AppState }) {
               <button className="tiny-action" onClick={() => controller.openSheet('reasoning')}>Effort</button>
             </div>
           </section>
+
+          <NativeSettings state={state} />
 
           <section className="pref-group">
             <h2 className="pref-title">Connection</h2>

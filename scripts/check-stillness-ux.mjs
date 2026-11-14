@@ -23,6 +23,27 @@ import {
 } from '../apps/stillness/src/lib/modelSearch.ts';
 import { TimelineJournal } from '../apps/stillness/src/lib/timelineJournal.ts';
 import { confirmedSessionTitle } from '../apps/stillness/src/lib/format.ts';
+import {
+  favoriteView,
+  sessionFavorite,
+  sessionIsArchived,
+  sortSessions,
+  visibleSessions,
+} from '../apps/stillness/src/lib/sessionPrefs.ts';
+import {
+  MAX_IMAGE_BYTES,
+  validateImage,
+} from '../apps/stillness/src/lib/attachmentRules.ts';
+import {
+  deepLinkIntent,
+  sessionIdFromUrl,
+  sharePlan,
+} from '../apps/stillness/src/lib/nativeIntents.ts';
+import {
+  hasPendingShare,
+  holdPendingShare,
+  takePendingShare,
+} from '../apps/stillness/src/lib/pendingShare.ts';
 
 let checks = 0;
 function check(name, fn) {
@@ -152,6 +173,125 @@ check('confirmed title prefers the snapshot and never merges sources', () => {
   assert.equal(confirmedSessionTitle({ activeSessionId: 's1', snapshot, sessions: inventory }), 'Snapshot title');
   assert.equal(confirmedSessionTitle({ activeSessionId: 's1', snapshot: null, sessions: inventory }), 'Inventory title');
   assert.equal(confirmedSessionTitle({ activeSessionId: 's2', snapshot, sessions: inventory }), 'Untitled session');
+});
+
+check('server favorite and archive flags are authoritative online', () => {
+  const prefs = { pinned: ['a'], archived: ['b'] };
+  const a = { session_id: 'a', favorite: false, archived: false };
+  const b = { session_id: 'b', favorite: true, archived: true };
+  assert.deepEqual(favoriteView(a, prefs, true), { favorite: false, source: 'server' });
+  assert.deepEqual(favoriteView(b, prefs, true), { favorite: true, source: 'server' });
+  assert.equal(sessionFavorite(a, prefs, true), false, 'local pin must not override server false');
+  assert.equal(sessionIsArchived(a, prefs, true), false);
+  assert.equal(sessionIsArchived(b, prefs, true), true);
+});
+
+check('offline favorites and archives fall back to phone state', () => {
+  const prefs = { pinned: ['a'], archived: ['b'] };
+  const a = { session_id: 'a', favorite: false, archived: false };
+  const b = { session_id: 'b', favorite: false, archived: false };
+  const cached = { session_id: 'c', favorite: true, archived: false };
+  assert.deepEqual(favoriteView(a, prefs, false), { favorite: true, source: 'local' });
+  assert.deepEqual(favoriteView(b, prefs, false), { favorite: false, source: 'local' });
+  assert.deepEqual(favoriteView(cached, prefs, false), { favorite: true, source: 'server' });
+  assert.deepEqual(
+    favoriteView({ session_id: 'd', favorite: true }, { pinned: ['d'], archived: [] }, false),
+    { favorite: true, source: 'server' },
+    'a server favorite stays server-owned even if a stale phone pin exists',
+  );
+  assert.equal(sessionIsArchived(a, prefs, false), false);
+  assert.equal(sessionIsArchived(b, prefs, false), true);
+});
+
+check('favorites sort first and archived rows are filtered', () => {
+  const prefs = { pinned: [], archived: [] };
+  const sessions = [
+    { session_id: 'one', favorite: false, archived: false, updated_at_ms: 10 },
+    { session_id: 'two', favorite: true, archived: false, updated_at_ms: 5 },
+    { session_id: 'three', favorite: false, archived: true, updated_at_ms: 30 },
+  ];
+  assert.deepEqual(
+    visibleSessions(sessions, prefs, true).map((session) => session.session_id),
+    ['two', 'one'],
+  );
+  assert.deepEqual(
+    sortSessions(sessions, prefs, true).map((session) => session.session_id),
+    ['two', 'three', 'one'],
+  );
+});
+
+check('image validation enforces type and the 4 MiB limit', () => {
+  assert.equal(validateImage('image/png', 1024), null);
+  assert.equal(validateImage('image/jpeg', MAX_IMAGE_BYTES), null);
+  assert.match(validateImage('image/svg+xml', 1024), /PNG, JPEG, WebP or GIF/);
+  assert.match(validateImage('image/jpeg', MAX_IMAGE_BYTES + 1), /4 MiB/);
+});
+
+check('deep links resolve sessions, new sessions, and unhandled links', () => {
+  assert.deepEqual(
+    deepLinkIntent({ action: 'open_session', sessionId: 's1', url: null }),
+    { kind: 'session', sessionId: 's1' },
+  );
+  assert.deepEqual(
+    deepLinkIntent({ action: 'new_session', sessionId: null, url: 'jcode://new' }),
+    { kind: 'new' },
+  );
+  assert.deepEqual(
+    deepLinkIntent({ action: 'open_session', sessionId: null, url: 'jcode://session/s9' }),
+    { kind: 'session', sessionId: 's9' },
+  );
+  assert.deepEqual(
+    deepLinkIntent({
+      action: 'open_session',
+      sessionId: null,
+      url: 'https://example.test/sessions/abc?x=1',
+    }),
+    { kind: 'session', sessionId: 'abc' },
+  );
+  assert.equal(
+    deepLinkIntent({ action: 'unknown', sessionId: null, url: 'https://example.test/' }).kind,
+    'unhandled',
+  );
+  assert.equal(deepLinkIntent({ action: 'none', sessionId: null, url: null }).kind, 'none');
+  assert.equal(sessionIdFromUrl('jcode://session/s9'), 's9');
+});
+
+check('share plans keep text and images and count unsupported items', () => {
+  const plan = sharePlan([
+    { kind: 'text', text: 'hello', url: null, mimeType: null, fileName: null, uri: null, sizeBytes: null },
+    { kind: 'url', text: null, url: 'https://x.test', mimeType: null, fileName: null, uri: null, sizeBytes: null },
+    { kind: 'image', text: null, url: null, mimeType: 'image/png', fileName: 'a.png', uri: 'content://a', sizeBytes: 3 },
+    { kind: 'file', text: null, url: null, mimeType: 'application/pdf', fileName: 'b.pdf', uri: 'content://b', sizeBytes: 3 },
+  ]);
+  assert.equal(plan.text, 'hello\n\nhttps://x.test');
+  assert.deepEqual(plan.imageUris, ['content://a']);
+  assert.equal(plan.unsupported, 1);
+});
+
+check('pending shares are scoped to the paired server', () => {
+  const attachment = {
+    id: 'att_1',
+    name: 'a.png',
+    mediaType: 'image/png',
+    dataBase64: 'AAAA',
+    size: 3,
+  };
+  holdPendingShare({ serverId: 'srv_a', text: 'hello', attachments: [attachment] });
+  assert.equal(hasPendingShare('srv_b'), false, 'another server must not see the share');
+  assert.equal(takePendingShare('srv_b'), null, 'another server must not take the share');
+  assert.equal(hasPendingShare('srv_a'), true, 'the owning server still has the share');
+  const taken = takePendingShare('srv_a');
+  assert.equal(taken.text, 'hello');
+  assert.equal(taken.attachments.length, 1);
+  assert.equal(hasPendingShare('srv_a'), false, 'taking the share clears it');
+
+  holdPendingShare({ serverId: null, text: 'pre-pairing', attachments: [] });
+  assert.equal(hasPendingShare('srv_b'), true, 'an unscoped share belongs to the first server');
+  assert.equal(takePendingShare('srv_b').text, 'pre-pairing');
+  assert.equal(hasPendingShare(), false);
+
+  holdPendingShare({ serverId: 'srv_a', text: '', attachments: [] });
+  assert.equal(hasPendingShare(), false, 'an empty share is not held');
 });
 
 console.log(`\n${checks} checks passed.`);

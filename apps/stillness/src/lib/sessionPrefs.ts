@@ -1,10 +1,11 @@
 /**
- * Phone-local session preferences: pinned and archived shelves.
+ * Phone-local session preferences: an ordering and offline fallback cache.
  *
- * These are not server mutations. The protocol exposes no favorite or archive
- * verb, so pinning is labelled "on this phone" and archiving is an undoable
- * local shelf. Everything is keyed by the paired server id so two servers never
- * share a pinned or hidden list.
+ * The adapter is now authoritative for favorites and archive state through
+ * `SessionSummary.favorite` and `SessionSummary.archived`. Local pins and
+ * archive marks are only used when the adapter is offline (or when an older
+ * adapter does not report a favorite flag). Everything is keyed by the paired
+ * server id so two servers never share a pinned or hidden list.
  */
 import { useSyncExternalStore } from 'react';
 import type { SessionSummary } from './protocol';
@@ -62,33 +63,56 @@ export function getSessionPrefs(serverId: string | null | undefined): SessionPre
 
 export function togglePinned(serverId: string | null | undefined, sessionId: string): boolean {
   if (!serverId) return false;
+  const current = getSessionPrefs(serverId);
+  const pinned = !current.pinned.includes(sessionId);
+  setPinnedPref(serverId, sessionId, pinned);
+  return pinned;
+}
+
+/** Sets (never toggles) the local fallback pin, used to mirror server favorites. */
+export function setPinnedPref(
+  serverId: string | null | undefined,
+  sessionId: string,
+  pinned: boolean,
+) {
+  if (!serverId) return;
   const all = read();
   const current = normalize(all[serverId]);
-  const pinned = current.pinned.includes(sessionId)
-    ? current.pinned.filter((id) => id !== sessionId)
-    : [...current.pinned, sessionId];
-  all[serverId] = { ...current, pinned };
+  const has = current.pinned.includes(sessionId);
+  if (pinned === has) return;
+  all[serverId] = {
+    ...current,
+    pinned: pinned
+      ? [...current.pinned, sessionId]
+      : current.pinned.filter((id) => id !== sessionId),
+  };
   write();
-  return pinned.includes(sessionId);
 }
 
 export function archiveSessionPref(serverId: string | null | undefined, sessionId: string) {
-  if (!serverId) return;
-  const all = read();
-  const current = normalize(all[serverId]);
-  if (current.archived.includes(sessionId)) return;
-  all[serverId] = { ...current, archived: [...current.archived, sessionId] };
-  write();
+  setArchivedPref(serverId, sessionId, true);
 }
 
 export function restoreSessionPref(serverId: string | null | undefined, sessionId: string) {
+  setArchivedPref(serverId, sessionId, false);
+}
+
+/** Sets (never toggles) the local offline archive fallback. */
+export function setArchivedPref(
+  serverId: string | null | undefined,
+  sessionId: string,
+  archived: boolean,
+) {
   if (!serverId) return;
   const all = read();
   const current = normalize(all[serverId]);
-  if (!current.archived.includes(sessionId)) return;
+  const has = current.archived.includes(sessionId);
+  if (archived === has) return;
   all[serverId] = {
     ...current,
-    archived: current.archived.filter((id) => id !== sessionId),
+    archived: archived
+      ? [...current.archived, sessionId]
+      : current.archived.filter((id) => id !== sessionId),
   };
   write();
 }
@@ -115,18 +139,71 @@ export function useSessionPrefs(serverId: string | null | undefined): SessionPre
   );
 }
 
+export type FavoriteSource = 'server' | 'local';
+
+export interface FavoriteView {
+  favorite: boolean;
+  /** Where the visible state came from, so the UI can label it honestly. */
+  source: FavoriteSource;
+}
+
 /**
- * Deterministic order: pinned first, then most recently updated. Stable for
+ * Server favorite wins while the adapter is connected. Offline, a phone pin is
+ * used first, then the last server summary so a known favorite is not lost.
+ */
+export function favoriteView(
+  session: Pick<SessionSummary, 'session_id' | 'favorite'>,
+  prefs: SessionPrefs,
+  online: boolean,
+): FavoriteView {
+  if (online) {
+    if (typeof session.favorite === 'boolean') {
+      return { favorite: session.favorite, source: 'server' };
+    }
+    return { favorite: prefs.pinned.includes(session.session_id), source: 'local' };
+  }
+  // A known server favorite cannot be changed offline. A phone pin only
+  // applies to sessions the server does not report as favorites.
+  if (session.favorite === true) return { favorite: true, source: 'server' };
+  if (prefs.pinned.includes(session.session_id)) {
+    return { favorite: true, source: 'local' };
+  }
+  return { favorite: false, source: 'local' };
+}
+
+export function sessionFavorite(
+  session: Pick<SessionSummary, 'session_id' | 'favorite'>,
+  prefs: SessionPrefs,
+  online: boolean,
+): boolean {
+  return favoriteView(session, prefs, online).favorite;
+}
+
+/**
+ * Online, the server archive flag is authoritative. Offline, a local archive
+ * fallback and the last cached server flag both hide the row.
+ */
+export function sessionIsArchived(
+  session: Pick<SessionSummary, 'session_id' | 'archived'>,
+  prefs: SessionPrefs,
+  online: boolean,
+): boolean {
+  if (!online && prefs.archived.includes(session.session_id)) return true;
+  return session.archived === true;
+}
+
+/**
+ * Deterministic order: favorites first, then most recently updated. Stable for
  * equal timestamps so the list does not reshuffle on every render.
  */
 export function sortSessions(
   sessions: SessionSummary[],
   prefs: SessionPrefs,
+  online = true,
 ): SessionSummary[] {
-  const pinned = new Set(prefs.pinned);
   return [...sessions].sort((a, b) => {
-    const pa = pinned.has(a.session_id) ? 0 : 1;
-    const pb = pinned.has(b.session_id) ? 0 : 1;
+    const pa = sessionFavorite(a, prefs, online) ? 0 : 1;
+    const pb = sessionFavorite(b, prefs, online) ? 0 : 1;
     if (pa !== pb) return pa - pb;
     const ta = a.updated_at_ms ?? 0;
     const tb = b.updated_at_ms ?? 0;
@@ -138,21 +215,23 @@ export function sortSessions(
 export function pinnedSessions(
   sessions: SessionSummary[],
   prefs: SessionPrefs,
+  online = true,
 ): SessionSummary[] {
-  const pinned = new Set(prefs.pinned);
   return sortSessions(
-    sessions.filter((session) => pinned.has(session.session_id)),
+    sessions.filter((session) => sessionFavorite(session, prefs, online)),
     prefs,
+    online,
   );
 }
 
 export function visibleSessions(
   sessions: SessionSummary[],
   prefs: SessionPrefs,
+  online = true,
 ): SessionSummary[] {
-  const archived = new Set(prefs.archived);
   return sortSessions(
-    sessions.filter((session) => !archived.has(session.session_id)),
+    sessions.filter((session) => !sessionIsArchived(session, prefs, online)),
     prefs,
+    online,
   );
 }

@@ -1,4 +1,11 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import {
   IconArchive,
   IconBack,
@@ -18,12 +25,31 @@ import { BottomSheet } from './BottomSheet';
 import { SwipeableRow } from './SwipeableRow';
 import { openSwitcher } from './QuickSwitcher';
 import { copyText, haptic } from './motion';
-import { useSessionPrefs } from '../lib/sessionPrefs';
-import { archiveSession, deleteSession, pinSession } from '../lib/sessionShelf';
+import {
+  favoriteView,
+  sessionIsArchived,
+  useSessionPrefs,
+  type FavoriteView,
+} from '../lib/sessionPrefs';
+import {
+  archiveSession,
+  deleteSession,
+  favoriteSession,
+  restoreArchived,
+} from '../lib/sessionShelf';
 
 export { BottomSheet as Sheet } from './BottomSheet';
 export { Drawer } from './GestureDrawer';
 export { RichMarkdown as Markdown } from './RichMarkdown';
+
+/** The row labels server favorites differently while the adapter is offline. */
+function useOnline(): boolean {
+  return useSyncExternalStore(
+    controller.subscribe,
+    () => controller.getSnapshot().connection.status === 'connected',
+    () => false,
+  );
+}
 
 export function ScreenHeader({
   title,
@@ -81,12 +107,16 @@ export function ScreenHeader({
 function SessionActionsMenu({
   session,
   serverId,
-  pinned,
+  favorite,
+  archived,
+  online,
   onClose,
 }: {
   session: SessionSummary;
   serverId: string | null;
-  pinned: boolean;
+  favorite: FavoriteView;
+  archived: boolean;
+  online: boolean;
   onClose: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -105,15 +135,37 @@ function SessionActionsMenu({
       </button>
       <button
         className="overlay-row"
-        onClick={() => finish(() => pinSession(serverId, session))}
+        onClick={() => finish(() => void favoriteSession(serverId, session))}
       >
-        <span>{pinned ? 'Unpin on this phone' : 'Pin on this phone'}</span>
+        <span>
+          {online
+            ? favorite.favorite
+              ? 'Remove from favorites'
+              : 'Add to favorites'
+            : favorite.source === 'server'
+              ? 'Favorite is stored on the server'
+              : favorite.favorite
+                ? 'Unpin on this phone'
+                : 'Pin on this phone'}
+        </span>
       </button>
       <button
         className="overlay-row"
-        onClick={() => finish(() => archiveSession(serverId, session))}
+        onClick={() =>
+          finish(() =>
+            archived
+              ? void restoreArchived(serverId, session.session_id)
+              : void archiveSession(serverId, session),
+          )
+        }
       >
-        <span>Archive on this phone</span>
+        <span>
+          {archived
+            ? 'Restore to the session list'
+            : online
+              ? 'Archive on this server'
+              : 'Archive (adapter offline)'}
+        </span>
       </button>
       <button
         className="overlay-row"
@@ -133,8 +185,8 @@ function SessionActionsMenu({
       ) : (
         <div className="confirm-row">
           <p>
-            Delete is a server mutation. It is only sent when the controller exposes a delete verb;
-            otherwise nothing is removed and the session stays exactly as it is.
+            The JCode daemon has no delete capability. The adapter refuses this request and nothing
+            is removed.
           </p>
           <button
             className="danger-btn"
@@ -162,17 +214,22 @@ export const SessionRow = memo(function SessionRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const serverId = controller.getSnapshot().credential?.serverId ?? null;
+  const online = useOnline();
   const prefs = useSessionPrefs(serverId);
-  const pinned = prefs.pinned.includes(session.session_id);
+  const favorite = favoriteView(session, prefs, online);
+  const archived = sessionIsArchived(session, prefs, online);
   const running = isRunning(session.status);
   const open = onOpen ?? (() => void controller.openSession(session.session_id));
 
   const leftActions = [
     {
-      key: 'archive',
-      label: 'Archive',
+      key: archived ? 'restore' : 'archive',
+      label: archived ? 'Restore' : 'Archive',
       icon: <IconArchive size={18} />,
-      onAction: () => archiveSession(serverId, session),
+      onAction: () =>
+        void (archived
+          ? restoreArchived(serverId, session.session_id)
+          : archiveSession(serverId, session)),
     },
     {
       key: 'delete',
@@ -185,10 +242,18 @@ export const SessionRow = memo(function SessionRow({
   const rightActions = [
     {
       key: 'pin',
-      label: pinned ? 'Unpin' : 'Pin',
+      label: online
+        ? favorite.favorite
+          ? 'Unfavorite'
+          : 'Favorite'
+        : favorite.source === 'server'
+          ? 'Favorite'
+          : favorite.favorite
+            ? 'Unpin'
+            : 'Pin',
       icon: <IconPin size={18} />,
       tone: 'accent' as const,
-      onAction: () => pinSession(serverId, session),
+      onAction: () => void favoriteSession(serverId, session),
     },
   ];
 
@@ -203,7 +268,11 @@ export const SessionRow = memo(function SessionRow({
           setMenuOpen(true);
         }}
       >
-        <div className={`session-row ${active ? 'is-active' : ''}`} data-pinned={pinned}>
+        <div
+          className={`session-row ${active ? 'is-active' : ''}`}
+          data-pinned={favorite.favorite}
+          data-favorite-source={favorite.source}
+        >
           <button
             type="button"
             className="session-row-open"
@@ -212,7 +281,7 @@ export const SessionRow = memo(function SessionRow({
           >
             <span className="text">
               <strong>
-                {pinned ? <IconPin size={13} className="row-pin" /> : null}
+                {favorite.favorite ? <IconPin size={13} className="row-pin" /> : null}
                 {sessionTitle(session)}
               </strong>
               <small>
@@ -245,7 +314,9 @@ export const SessionRow = memo(function SessionRow({
         <SessionActionsMenu
           session={session}
           serverId={serverId}
-          pinned={pinned}
+          favorite={favorite}
+          archived={archived}
+          online={online}
           onClose={() => setMenuOpen(false)}
         />
       ) : null}

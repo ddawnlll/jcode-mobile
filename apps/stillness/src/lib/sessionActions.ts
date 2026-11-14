@@ -1,16 +1,9 @@
 /**
- * Bridge to optional controller session mutations.
+ * Bridge to the controller session mutations.
  *
- * The coordinator owns `controller.ts`. Archive, delete and favorite verbs are
- * not on the public controller today, so this module feature-detects them at
- * runtime. When a method exists the UI calls it; when it does not, the UI says
- * so instead of mutating the server or inventing success.
- *
- * Expected shapes for the coordinator (documented in docs/STILLNESS_UX_0_4.md):
- *   archiveSession(sessionId: string): Promise<boolean>
- *   restoreSession(sessionId: string): Promise<boolean>
- *   deleteSession(sessionId: string): Promise<boolean>
- *   toggleFavorite(sessionId: string): Promise<boolean>
+ * The integrated controller exposes archive/restore/delete/favorite. Feature
+ * detection is kept so an older controller build fails honestly instead of
+ * throwing. `true` means the adapter acknowledged the mutation.
  */
 import { controller } from './controller';
 
@@ -58,12 +51,14 @@ export function favoriteSessionOnServer(sessionId: string): Promise<MutationResu
   return invoke('toggleFavorite', sessionId);
 }
 
-export function mutationMessage(result: MutationResult, verb: 'Archive' | 'Restore' | 'Delete'): string {
+export type MutationVerb = 'Archive' | 'Restore' | 'Favorite' | 'Delete';
+
+export function mutationMessage(result: MutationResult, verb: MutationVerb): string {
   if (result === 'unavailable') {
-    return `${verb} is not available from this adapter build. Nothing changed on the server.`;
+    return `${verb} is not available from this adapter build. Nothing changed.`;
   }
   if (result === 'failed') {
-    return `${verb} was rejected by the adapter. Nothing was removed.`;
+    return `${verb} was not acknowledged. Nothing changed on the server.`;
   }
   return `${verb} requested.`;
 }
