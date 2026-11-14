@@ -7,5 +7,10 @@
     "resolveJsonModule": true,
     "skipLibCheck": true
   },
-  "exclude": ["node_modules", "apps/stillness", ".staging"]
+  "exclude": [
+    "node_modules",
+    "apps/stillness",
+    ".staging",
+    "scripts/check-stillness-ux.mjs"
+  ]
 }

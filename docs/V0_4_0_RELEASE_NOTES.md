@@ -68,7 +68,7 @@ Android package: `dev.jcode.stillness`, versionCode 4000
 | `cargo test --workspace` | PASS, 72 tests: 28 core, 10 protocol, 17 server lib, 17 integration |
 | `cargo fmt --check`, `cargo clippy -D warnings` | PASS |
 | Stillness `tsc --noEmit && vite build` | PASS |
-| UX helper checks (`scripts/check-stillness-ux.mjs`) | PASS 7/7 |
+| UX helper checks (`scripts/check-stillness-ux.mjs`) | PASS 14/14 |
 | Browser e2e against real daemon + Adapter v3 | PASS, 4 passed / 3 skipped; 5 passed / 3 skipped with the perf spec. The skips are desktop duplicates plus the desktop delivery case |
 | Adapter v3 real-stack smoke (real agent turn) | PASS |
 | Android Kotlin compile | PASS on this host (JDK 24, SDK 37, NDK 27.1.12297006) |

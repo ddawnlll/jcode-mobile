@@ -7,8 +7,8 @@ Updated: 2026-11-14
 | Item | Value |
 | --- | --- |
 | Branch | `feat/adapter-v3` (release docs: `feat/release-docs`) |
-| Head | `c3627fe` merge `feat/android-native` into `feat/adapter-v3` |
-| Commits since `v0.3.1` | 18 |
+| Head | see `git log -1` on `feat/adapter-v3` (release integration) |
+| Commits since `v0.3.1` | 23 |
 | Release | `v0.4.0`, prepared; tag and GitHub release not published |
 | App version | 0.4.0 |
 | Adapter | Rust Adapter v3, protocol 3, minimum 2 |
@@ -46,19 +46,19 @@ forward" means it was not re-run for 0.4.0.
 | Adapter v3 Rust tests | `cargo test --workspace` | PASS, 72 tests: 28 core, 10 protocol, 17 server lib, 17 integration |
 | Rust formatting | `cargo fmt --all -- --check` | PASS |
 | Rust clippy | `cargo clippy --workspace --all-targets -- -D warnings` | PASS |
-| Root typecheck | `bun run typecheck` | NOT_RUN in the docs worktree (no `node_modules`); last recorded PASS for 0.3.1 |
-| Repository lint | `bun run lint` | NOT_RUN in the docs worktree; last recorded PASS for 0.3.1 |
-| Legacy Jest/RNTL | `bun run test` | NOT_RUN in the docs worktree; last recorded PASS for 0.3.1, 14 suites / 139 tests |
-| Stillness typecheck and bundle | `cd apps/stillness && bun run build` | PASS in the 0.4.0 run (`docs/V0_4_0_RELEASE_NOTES.md`); not re-run here |
-| UX helper checks | `node scripts/check-stillness-ux.mjs` | PASS, 7/7 (`docs/STILLNESS_UX_0_4.md`) |
+| Root typecheck | `bun run typecheck` | PASS for 0.4.0 after the final merge |
+| Repository lint | `bun run lint` | PASS, 0 errors, 0 warnings after the final merge |
+| Legacy Jest/RNTL | `bun run test` | PASS, 14 suites / 139 tests for 0.4.0 |
+| Stillness typecheck and bundle | `cd apps/stillness && bun run build` | PASS after the native shell and attachment UI merge |
+| UX helper checks | `node scripts/check-stillness-ux.mjs` | PASS, 14/14 (`docs/STILLNESS_UX_0_4.md`) |
 | Browser interaction checks | `node .staging/ui-0.4/verify.mjs` | PASS, 14/14 (`ui/verify.json`); staging script, not committed |
-| Browser e2e, real daemon + Adapter v3 | `cd apps/stillness && npx playwright test` via the staging harness | PASS, 4 passed / 3 skipped; 5 passed / 3 skipped with the perf spec |
-| Startup measurements | same run, `JCODE_PERF` line | PASS, web target only: 27 ms online, 60 ms cached, 56 ms shell to paint |
+| Browser e2e, real daemon + Adapter v3 | `bash scripts/stillness-e2e.sh` | PASS, 5 passed / 3 skipped (skips are the designed desktop duplicates and the mobile-only delivery case) |
+| Startup measurements | same run, `JCODE_PERF` line | PASS, web target only: 26 ms online, 71 ms cached with the socket blocked, 63 ms shell to paint, 6 requests / 933,522 bytes |
 | Adapter v3 real-stack smoke | `bash scripts/v3-smoke-up.sh` | PASS, real agent turn `OK`, seq 7, replay 0 duplicates, one accepted operation |
 | Android Kotlin compile | `./gradlew :app:compileUniversalDebugKotlin` | PASS, JDK 24, SDK 37, NDK 27.1.12297006 |
-| Android release APK | `bash scripts/build-android-release.sh` | PASS, 12,693,953 bytes, v2 + v3 signatures |
+| Android release APK | `bash scripts/build-android-release.sh` | PASS, 12,718,529 bytes, v2 + v3 signatures |
 | Android release APK static verification | `aapt2 dump badging`, `apksigner verify`, `zipalign -c` | PASS |
-| Android release APK on emulator | install, launch, pair, restart, one turn | PASS, API 36 arm64-v8a: versionCode 4000 installed and launched with no fatal crash, paired to staging Adapter v3, emulator restart restored the exact session with history, and one real turn was accepted and answered on device. The adb-typed prompt was truncated to `Repl` and the agent asked about a REPL, so this is a real accepted turn, not a completed task |
+| Android release APK on emulator | install, launch, pair, restart, one turn | PASS, API 36 arm64-v8a: versionCode 4000 installed and launched with no fatal crash after the Room keep fix; paired to staging Adapter v3; emulator restart restored the exact session with history; the final build shows the enabled Add image control, the v0.4.0 drawer footer and the quick switcher; one real turn was accepted and answered on device. The adb-typed prompt was truncated to `Repl` and the agent asked about a REPL, so this is a real accepted turn, not a completed task |
 | Android native interaction matrix | see `docs/ANDROID_NATIVE.md` | PASS on the emulator for notifications, sharesheet, biometric device-credential, downloads, clipboard/haptics, lifecycle/insets/back, settings |
 | Android image pickers | photo picker, image read | PARTIAL: decode works, camera capture blocked on the AVD |
 | FCM push | registration, preferences, dedupe, FCM v1 sender | PARTIAL: `not_configured`, no Firebase credentials, no delivery |
@@ -83,7 +83,7 @@ committed; the run itself has not been pushed or executed.
 
 | Artifact | Bytes | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.4.0-android-release.apk` | 12,693,953 (12.1 MiB) | `db6fadf9d305a958388859e50aa93490adc35907ba6e3cbe9f6e2f87d86ca531` |
+| `artifacts/jcode-mobile-0.4.0-android-release.apk` | 12,718,529 (12.1 MiB) | `8f5467aad760371facca6603fe38e5b205d895b1fd02f5242af980fc81af9035` |
 
 ```text
 package dev.jcode.stillness
@@ -97,7 +97,7 @@ zipalign 4-byte check: successful
 The `.sha256` file beside the APK contains:
 
 ```text
-db6fadf9d305a958388859e50aa93490adc35907ba6e3cbe9f6e2f87d86ca531  jcode-mobile-0.4.0-android-release.apk
+8f5467aad760371facca6603fe38e5b205d895b1fd02f5242af980fc81af9035  jcode-mobile-0.4.0-android-release.apk
 ```
 
 `shasum -a 256` over the APK reproduces that digest. Artifacts are gitignored

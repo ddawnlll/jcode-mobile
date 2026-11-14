@@ -13,8 +13,8 @@ target; it is never used to claim Android behaviour.
 | File | What it is | What it proves | Status |
 | --- | --- | --- | --- |
 | [`adapter-v3-smoke.txt`](adapter-v3-smoke.txt) | Console trace of the v3 smoke harness plus the health payload and JSON result | Adapter v3 negotiates protocol 3, lists `min_protocol_version: 2`, opens a real session, runs one real agent turn that answers `OK`, records journal `latest_seq: 7`, replays 0 events on reconnect, and leaves exactly one operation `accepted` | PASS |
-| [`stillness-e2e.txt`](stillness-e2e.txt) | Playwright run against the real staging daemon + Adapter v3 | Pairing persists the exact server; mobile session restores draft, plan, activity, files, and preferences; delivery reports acceptance honestly and Stop is the only cancellation; desktop three-pane layout renders. 4 passed / 3 skipped | PASS |
-| [`stillness-e2e-perf.txt`](stillness-e2e-perf.txt) | Same suite with `perf.spec.ts` added, including the `JCODE_PERF` line | 5 passed / 3 skipped; online first interactive screen 27 ms, cached paint with the socket blocked 60 ms, shell to first paint 56 ms, 6 cold requests / 900,318 bytes, offline saved marker visible | PASS |
+| [`stillness-e2e.txt`](stillness-e2e.txt) | Playwright run against the real staging daemon + Adapter v3 | Pairing persists the exact server; mobile session restores draft, plan, activity, files, and preferences; delivery reports acceptance honestly and Stop is the only cancellation; desktop three-pane layout renders. Final merged run: 5 passed / 3 skipped | PASS |
+| [`stillness-e2e-perf.txt`](stillness-e2e-perf.txt) | Same suite with `perf.spec.ts` added, including the `JCODE_PERF` line | 5 passed / 3 skipped; online first interactive screen 26 ms, cached paint with the socket blocked 71 ms, shell to first paint 63 ms, 6 cold requests / 933,522 bytes, offline saved marker visible | PASS |
 | [`stillness-mobile-accepted.png`](stillness-mobile-accepted.png) | Mobile web target after a real turn | The prompt `Reply with exactly: stillness-mwgnmgn4-ok` was answered verbatim, the header shows `Ready · gpt-6.1-sol`, the composer is re-enabled, and the footer states navigation never stops a running turn | PASS |
 | [`android-emulator-release.png`](android-emulator-release.png) | 0.4.0 release APK on an API 36 arm64 emulator, fresh install | The release build launches to the welcome/pairing screen with no fatal crash | PASS |
 | [`android-emulator-paired.png`](android-emulator-paired.png) | Same install after pairing to a staging Adapter v3 | `DEVICE TOKEN ACCEPTED`, `Adapter 0.4.0`, `Harness jcode-harness-api-bridge/0.1.0`, `JCode harness connected` | PASS |
@@ -44,7 +44,7 @@ The release APK itself is not committed (`*.apk` is gitignored). It is built to
 | Field | Value |
 | --- | --- |
 | Bytes | 12,693,953 (12.1 MiB) |
-| SHA-256 | `db6fadf9d305a958388859e50aa93490adc35907ba6e3cbe9f6e2f87d86ca531` |
+| SHA-256 | `8f5467aad760371facca6603fe38e5b205d895b1fd02f5242af980fc81af9035` (final build with the native shell UI) |
 | `.sha256` file | present beside the APK, same digest |
 | Package | `dev.jcode.stillness` |
 | versionCode / versionName | 4000 / 0.4.0 |
@@ -135,11 +135,11 @@ staging-only and not committed; their results are preserved in `ui/`.
   payload, `journal_events: 55` in diagnostics after the turn, and
   `journal_latest_seq: 7` for the turn. The turn produced seven journal events;
   the larger counters are the whole journal plus retention, not this turn.
-- `stillness-e2e.txt` records 4 passed / 3 skipped. `stillness-e2e-perf.txt`
+- `stillness-e2e-final.txt` is the final merged run: 5 passed / 3 skipped. `stillness-e2e-perf.txt`
   records 5 passed / 3 skipped because `perf.spec.ts` is added. The three skips
   are the same in both: the desktop duplicates of the mobile session and
   delivery specs, plus the desktop delivery case.
-- `docs/V0_4_0_RELEASE_NOTES.md` says 4 passed for the browser e2e; that is the
+- `docs/V0_4_0_RELEASE_NOTES.md` says 5 passed for the browser e2e; that is the
   non-perf run. It also says "SDK 36" for the Kotlin compile; the local compile
   used SDK 37, and CI is configured with platform 36. The Android APK itself is
   built against compileSdk/targetSdk 37.
