@@ -12,9 +12,9 @@ use adapter_core::{
     BackendSession, CoreError, CoreResult, Store,
 };
 use adapter_protocol::{
-    CreateSessionResponse, DiagnosticsSnapshot, Envelope, EventsAckPayload, EventsSubscribePayload,
-    Kind, OperationState, OperationStatePayload, ServerHelloPayload, SessionSnapshotPayload,
-    SessionsDeltaPayload,
+    CancelTurnResponse, CreateSessionResponse, DiagnosticsSnapshot, Envelope, EventsAckPayload,
+    EventsSubscribePayload, Kind, ModelsListPayload, OperationState, OperationStatePayload,
+    ServerHelloPayload, SessionSnapshotPayload, SessionsDeltaPayload,
 };
 use adapter_server::dispatch::handle_request;
 use adapter_server::handle_backend_event;
@@ -28,6 +28,7 @@ struct FakeBackend {
     next_id: AtomicU64,
     history: Mutex<Vec<adapter_protocol::HistoryMessageView>>,
     image_sends: Mutex<Vec<(String, String, usize)>>,
+    cancels: Mutex<Vec<String>>,
 }
 
 impl Default for FakeBackend {
@@ -39,6 +40,7 @@ impl Default for FakeBackend {
             next_id: AtomicU64::new(1),
             history: Mutex::new(Vec::new()),
             image_sends: Mutex::new(Vec::new()),
+            cancels: Mutex::new(Vec::new()),
         }
     }
 }
@@ -188,7 +190,8 @@ impl Backend for FakeBackend {
         Ok(())
     }
 
-    fn cancel(&self, _session_id: &str) -> CoreResult<()> {
+    fn cancel(&self, session_id: &str) -> CoreResult<()> {
+        self.cancels.lock().unwrap().push(session_id.to_string());
         Ok(())
     }
 
@@ -1098,4 +1101,129 @@ async fn invalid_image_attachments_are_rejected_before_reservation() {
     )
     .await;
     assert_eq!(response.msg_type, "error");
+}
+
+#[tokio::test]
+async fn stop_is_bound_to_the_expected_turn() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"stop","project_id":null,"working_dir":null,"title":"stop"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+    response_payload::<OperationStatePayload>(
+        &call(
+            &h,
+            "operations.reserve",
+            json!({
+                "operation_id": "op-stop",
+                "session_id": session_id,
+                "kind": "send",
+                "body": "long turn",
+                "expected_turn_id": null
+            }),
+        )
+        .await,
+    );
+    let dispatched: OperationStatePayload = response_payload(
+        &call(
+            &h,
+            "operations.dispatch",
+            json!({"operation_id": "op-stop"}),
+        )
+        .await,
+    );
+    let turn_id = dispatched.operation.turn_id.expect("turn id");
+
+    // A late or stale Stop for a different turn must not cancel the live turn.
+    let wrong = call(
+        &h,
+        "operations.cancel",
+        json!({
+            "session_id": session_id,
+            "operation_id": "op-stop",
+            "expected_turn_id": "turn_from_an_older_screen"
+        }),
+    )
+    .await;
+    assert_eq!(wrong.msg_type, "error");
+    assert!(h.backend.cancels.lock().unwrap().is_empty());
+
+    // The verified turn id cancels, and the adapter reports the residual
+    // session-scoped race rather than claiming atomic turn cancellation.
+    let cancelled: CancelTurnResponse = response_payload(
+        &call(
+            &h,
+            "operations.cancel",
+            json!({
+                "session_id": session_id,
+                "operation_id": "op-stop",
+                "expected_turn_id": turn_id
+            }),
+        )
+        .await,
+    );
+    assert!(cancelled.cancelled);
+    assert_eq!(cancelled.turn_id.as_deref(), Some(turn_id.as_str()));
+    assert!(!cancelled.atomic_turn_scope);
+    assert_eq!(h.backend.cancels.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn model_selection_rejects_a_mismatched_provider() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"route","project_id":null,"working_dir":null,"title":"route"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+
+    let wrong = call(
+        &h,
+        "models.set",
+        json!({
+            "session_id": session_id,
+            "model": "command-code-large",
+            "expected_provider": "Anthropic"
+        }),
+    )
+    .await;
+    assert_eq!(wrong.msg_type, "error");
+    let error: adapter_protocol::ErrorPayload = serde_json::from_value(wrong.payload).unwrap();
+    assert_eq!(error.code, adapter_protocol::ErrorCode::Conflict);
+
+    let accepted: ModelsListPayload = response_payload(
+        &call(
+            &h,
+            "models.set",
+            json!({
+                "session_id": session_id,
+                "model": "command-code-large",
+                "expected_provider": "command-code"
+            }),
+        )
+        .await,
+    );
+    assert_eq!(
+        accepted.runtime.model.as_deref(),
+        Some("command-code-large")
+    );
+
+    let bad_effort = call(
+        &h,
+        "reasoning.set",
+        json!({"session_id": session_id, "effort": "ultra"}),
+    )
+    .await;
+    assert_eq!(bad_effort.msg_type, "error");
 }

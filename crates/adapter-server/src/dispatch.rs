@@ -1207,7 +1207,14 @@ async fn handle_cancel(state: std::sync::Arc<AppState>, request: Envelope) -> En
         .as_deref()
         .map(|expected| expected == active.operation_id)
         .unwrap_or(false);
-    if !matches_turn && !matches_operation {
+    // Every identifier the client supplies must agree with the live turn. A
+    // stale screen that knows a previous operation but the current turn (or
+    // the reverse) is contradictory input, not authority to cancel.
+    let turn_ok = payload.expected_turn_id.is_none() || matches_turn;
+    let operation_ok = payload.operation_id.is_none() || matches_operation;
+    if (!turn_ok || !operation_ok)
+        || (payload.expected_turn_id.is_none() && payload.operation_id.is_none())
+    {
         return error_response(
             &state,
             &request,
