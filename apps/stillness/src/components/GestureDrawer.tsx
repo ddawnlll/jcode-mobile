@@ -89,7 +89,6 @@ export function Drawer({ state }: { state: AppState }) {
   useEffect(() => {
     paint(-(drawerRef.current?.offsetWidth || SAFE_WIDTH));
     return () => springRef.current?.cancel();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const drawerDrag = useAxisDrag({
@@ -256,7 +255,7 @@ export function Drawer({ state }: { state: AppState }) {
           <button onClick={() => controller.go('settings')}>
             <Torus size={18} animated={false} /> Preferences
           </button>
-          <span className="preview">v0.3.1</span>
+          <span className="preview">v0.4.0</span>
         </div>
       </aside>
       {!open ? (

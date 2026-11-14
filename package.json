@@ -35,7 +35,11 @@
     "check": "bun run typecheck && bun run lint && bun run test",
     "build:android:release": "bash scripts/build-android-release.sh",
     "build:ios:simulator": "bash scripts/build-ios-simulator.sh",
-    "postinstall": "bun --bun scripts/patch-expo-modules-jsi.js && bun --bun scripts/patch-metro-hermes-parser.js"
+    "postinstall": "bun --bun scripts/patch-expo-modules-jsi.js && bun --bun scripts/patch-metro-hermes-parser.js",
+    "adapter:v3": "cargo run -p adapter-server --bin jcode-adapter-v3",
+    "adapter:v3:test": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "adapter:v3:smoke": "bash scripts/v3-smoke-up.sh",
+    "ux:check": "node scripts/check-stillness-ux.mjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",

@@ -273,7 +273,9 @@ export function LiveTimeline({
   live: LiveState;
   visibility: 'compact' | 'hidden' | 'expanded';
 }) {
-  const journal = useMemo(() => new TimelineJournal(), [live.turnId ?? live.finishedTurnId ?? 'idle']);
+  // TimelineJournal resets itself when the observed turn key changes, so the
+  // instance can live for the component's lifetime.
+  const journal = useMemo(() => new TimelineJournal(), []);
   // Re-derives only when the live state object changes; idempotent for repeats.
   const items: TimelineItem[] = useMemo(
     () =>
