@@ -24,6 +24,9 @@ import {
 } from './screens/Library';
 import { BrowserScreen } from './screens/Browser';
 import { ActivityScreen, PlanScreen, SessionScreen } from './screens/Session';
+import { QuickSwitcher } from './components/QuickSwitcher';
+import { UndoToast } from './components/UndoToast';
+import { useSessionPrefs, visibleSessions } from './lib/sessionPrefs';
 
 function ScreenRouter({ state }: { state: AppState }) {
   switch (state.screen) {
@@ -62,6 +65,8 @@ function ScreenRouter({ state }: { state: AppState }) {
 }
 
 function Rail({ state }: { state: AppState }) {
+  const prefs = useSessionPrefs(state.credential?.serverId ?? null);
+  const railSessions = visibleSessions(state.sessions, prefs).slice(0, 12);
   const nav: Array<{ screen: 'home' | 'sessions' | 'projects' | 'settings'; label: string; icon: React.ReactNode }> = [
     { screen: 'home', label: 'Home', icon: <Torus size={18} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },
@@ -104,7 +109,7 @@ function Rail({ state }: { state: AppState }) {
         <button className="tiny-action" onClick={() => controller.go('sessions')}>All</button>
       </div>
       <div className="rail-recent">
-        {state.sessions.slice(0, 12).map((session) => (
+        {railSessions.map((session) => (
           <button
             key={session.session_id}
             className={`rail-session ${state.activeSessionId === session.session_id ? 'is-active' : ''}`}
@@ -114,7 +119,7 @@ function Rail({ state }: { state: AppState }) {
             <small>{session.status}</small>
           </button>
         ))}
-        {state.sessions.length === 0 ? <p className="inspector-empty">No sessions yet.</p> : null}
+        {railSessions.length === 0 ? <p className="inspector-empty">No sessions yet.</p> : null}
       </div>
       <div className="rail-foot">
         <IconServer size={16} />
@@ -133,10 +138,14 @@ function Shell({ state }: { state: AppState }) {
     <div className={`app-shell screen-${state.screen}`}>
       <Rail state={state} />
       <div className="app-main">
-        <ScreenRouter state={state} />
+        <div className="screen-stage" key={state.screen}>
+          <ScreenRouter state={state} />
+        </div>
       </div>
       <Drawer state={state} />
+      <QuickSwitcher state={state} />
       <Toast message={state.toast} />
+      <UndoToast />
     </div>
   );
 }

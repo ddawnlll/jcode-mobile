@@ -1,42 +1,43 @@
-import {
-  memo,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { controller, type AppState, type LiveState, type LiveTool } from '../lib/controller';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { controller, type AppState, type LiveState } from '../lib/controller';
 import {
   IconArrowUp,
   IconCheck,
   IconChevron,
+  IconCommand,
   IconEdit,
   IconMore,
   IconRefresh,
+  IconShield,
   IconStop,
 } from '../components/Icons';
 import { Torus } from '../components/Torus';
 import {
   ConnectionBanner,
+  CopyButton,
   EmptyState,
-  Markdown,
   ScreenHeader,
   Sheet,
 } from '../components/ui';
 import {
+  confirmedSessionTitle,
   longDate,
   operationLabel,
   parsePlan,
   relativeTime,
-  sessionTitle,
   statusLabel,
   type ParsedPlan,
 } from '../lib/format';
-import type { ActivityItem, ContextView, HistoryMessageView } from '../lib/protocol';
+import type { ActivityItem, ContextView } from '../lib/protocol';
+import { HistoryTimeline, LiveTimeline } from '../components/Timeline';
+import { ModelPicker } from '../components/ModelPicker';
+import { ReasoningSlider } from '../components/ReasoningSlider';
+import { openSwitcher } from '../components/QuickSwitcher';
+import { useScrollMemory, savedScrollOffset } from '../components/motion';
 
 function startedLabel(live: LiveState): string {
   if (live.needsReconcile) return 'Reconciling with server';
-  if (live.permission) return 'Waiting for your permission';
+  if (live.permission) return 'Waiting for your approval';
   if (live.phase) return live.phase;
   if (live.turnId) {
     if (live.status === 'dispatching') return 'Sending to server';
@@ -62,105 +63,6 @@ function Elapsed({ since }: { since: number | null }) {
   return <span className="thinking-time">observed {seconds}s</span>;
 }
 
-const ToolCard = memo(function ToolCard({
-  name,
-  input,
-  output,
-  error,
-  status,
-}: {
-  name: string;
-  input?: string;
-  output?: string;
-  error?: string | null;
-  status: string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`tool-card ${status}`}>
-      <button className="tool-card-head" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        <span className="tool-dot" />
-        <strong>{name}</strong>
-        <span className="tool-status">{status}</span>
-        <IconChevron size={15} />
-      </button>
-      {open ? (
-        <div className="tool-card-body">
-          {input ? (
-            <div>
-              <span className="small-heading flush">INPUT</span>
-              <pre>{input}</pre>
-            </div>
-          ) : null}
-          {error ? <p className="inline-error">{error}</p> : null}
-          {output ? (
-            <div>
-              <span className="small-heading flush">OUTPUT</span>
-              <pre>{output}</pre>
-            </div>
-          ) : null}
-          {!input && !output && !error ? <p className="form-help">No payload was reported.</p> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-});
-
-const HistoryRow = memo(function HistoryRow({ message }: { message: HistoryMessageView }) {
-  if (message.role === 'user') {
-    return (
-      <article className="chat-message user-msg" data-testid="user-message">
-        <div className="chat-meta">You</div>
-        <div className="chat-text preserve">{message.content}</div>
-      </article>
-    );
-  }
-  if (message.role === 'assistant') {
-    return (
-      <article className="chat-message assistant-msg" data-testid="assistant-message">
-        <div className="chat-meta">JCode</div>
-        <Markdown text={message.content} />
-      </article>
-    );
-  }
-  if (message.role === 'tool') {
-    return (
-      <div className="quiet-work history-tool">
-        <ToolCard
-          name={message.tool_name ?? 'tool result'}
-          input={message.tool_input ? JSON.stringify(message.tool_input, null, 2) : undefined}
-          output={message.content}
-          status="done"
-        />
-      </div>
-    );
-  }
-  return (
-    <article className="chat-message">
-      <div className="chat-meta">{message.role}</div>
-      <div className="chat-text preserve">{message.content}</div>
-    </article>
-  );
-});
-
-function LiveToolList({ tools }: { tools: LiveTool[] }) {
-  if (!tools.length) return null;
-  return (
-    <div className="live-tools">
-      {tools.map((tool) => (
-        <ToolCard
-          key={tool.callId}
-          name={tool.name}
-          input={tool.input}
-          output={tool.output}
-          error={tool.error}
-          status={tool.status}
-        />
-      ))}
-    </div>
-  );
-}
-
 function PendingCard({ state }: { state: AppState }) {
   const pending = state.pending;
   if (!pending) return null;
@@ -168,7 +70,10 @@ function PendingCard({ state }: { state: AppState }) {
   return (
     <article className={`chat-message user-msg pending-msg state-${pending.state}`} data-testid="pending-message">
       <div className="chat-meta">
-        You <span className="pending-label">{label}</span>
+        <span>
+          You <span className="pending-label">{label}</span>
+        </span>
+        <CopyButton value={pending.text} label="Copy message" icon />
       </div>
       <div className="chat-text preserve">{pending.text}</div>
       {pending.state === 'unknown' ? (
@@ -177,7 +82,7 @@ function PendingCard({ state }: { state: AppState }) {
             The adapter wrote this request but did not observe an acknowledgment. It is not safe to
             resend automatically.
           </p>
-          <button className="tiny-action" onClick={() => controller.refreshSnapshot()}>
+          <button className="tiny-action" onClick={() => void controller.refreshSnapshot()}>
             <IconRefresh size={14} /> Reconcile from server
           </button>
         </div>
@@ -187,35 +92,36 @@ function PendingCard({ state }: { state: AppState }) {
   );
 }
 
-function PermissionCard({ state }: { state: AppState }) {
+/**
+ * Persistent approval panel. It sits above the composer so the request stays
+ * reachable no matter where the transcript is scrolled.
+ */
+function PermissionPanel({ state }: { state: AppState }) {
   const permission = state.live.permission;
   if (!permission) return null;
   return (
-    <div className="permission-card" role="alert">
-      <div>
-        <strong>{permission.toolName}</strong>
-        <p>{permission.description}</p>
+    <div className="permission-panel" role="alert" data-testid="permission-panel">
+      <div className="permission-panel-head">
+        <span className="permission-glyph" aria-hidden="true">
+          <IconShield size={18} />
+        </span>
+        <div>
+          <strong>Waiting for your approval</strong>
+          <p>
+            <span className="permission-tool">{permission.toolName}</span>
+            {permission.description ? ` · ${permission.description}` : ''}
+          </p>
+        </div>
       </div>
       <div className="permission-actions">
-        <button className="primary-btn compact" onClick={() => controller.respondPermission('allow')}>
-          Allow
+        <button className="primary-btn compact" onClick={() => void controller.respondPermission('allow')}>
+          Approve
         </button>
-        <button className="onboard-secondary compact" onClick={() => controller.respondPermission('deny')}>
+        <button className="onboard-secondary compact" onClick={() => void controller.respondPermission('deny')}>
           Deny
         </button>
       </div>
     </div>
-  );
-}
-
-function ReasoningBlock({ state }: { state: AppState }) {
-  if (state.reasoningVisibility === 'hidden' || !state.live.reasoning) return null;
-  const expanded = state.reasoningVisibility === 'expanded';
-  return (
-    <details className="reasoning-block" open={expanded}>
-      <summary>Reasoning</summary>
-      <div className="reasoning-copy">{state.live.reasoning}</div>
-    </details>
   );
 }
 
@@ -248,7 +154,11 @@ function Composer({ state }: { state: AppState }) {
           rows={1}
           data-testid="composer-input"
           value={state.composerText}
-          placeholder={state.connection.status === 'connected' ? 'Ask or guide JCode…' : 'Draft saved on this phone. Reconnect to send.'}
+          placeholder={
+            state.connection.status === 'connected'
+              ? 'Ask or guide JCode…'
+              : 'Draft saved on this phone. Reconnect to send.'
+          }
           onChange={(event) => {
             controller.setComposerText(event.target.value);
             resize();
@@ -289,7 +199,12 @@ function Composer({ state }: { state: AppState }) {
             </button>
           </div>
           {hasTurn ? (
-            <button className="stop-btn" aria-label="Stop the active turn" onClick={() => controller.stop()} data-testid="stop-button">
+            <button
+              className="stop-btn"
+              aria-label="Stop the active turn"
+              onClick={() => void controller.stop()}
+              data-testid="stop-button"
+            >
               <IconStop size={18} />
             </button>
           ) : (
@@ -309,100 +224,6 @@ function Composer({ state }: { state: AppState }) {
         {state.pending ? operationLabel(state.pending.state) : 'Navigation never stops a running turn.'}
       </div>
     </div>
-  );
-}
-
-function ModelSheet({ state }: { state: AppState }) {
-  if (state.sheet !== 'model') return null;
-  const routes = state.models?.models ?? state.runtime?.routes ?? [];
-  const commandCode = routes.filter((route) => route.is_command_code);
-  const others = routes.filter((route) => !route.is_command_code);
-  return (
-    <Sheet title="Model" onClose={() => controller.openSheet(null)} testId="model-sheet">
-      {routes.length === 0 ? (
-        <div className="honest-unavailable">
-          <strong>No model routes are available.</strong>
-          <p>The adapter has not received an authoritative runtime catalog for this session.</p>
-          <button className="onboard-secondary" onClick={() => controller.refreshModels()}>
-            Retry runtime query
-          </button>
-        </div>
-      ) : (
-        <>
-          {commandCode.length > 0 ? (
-            <section className="model-section" data-testid="command-code-section">
-              <h3>Command Code</h3>
-              <p className="form-help">
-                Native provider · account {state.runtime?.account_label ?? 'label unknown'}
-              </p>
-              {commandCode.map((route) => (
-                <button
-                  key={`${route.provider}:${route.model}`}
-                  className={`overlay-row model-route ${state.runtime?.model === route.model ? 'selected' : ''}`}
-                  disabled={!route.available}
-                  onClick={() => controller.selectModel(route.model, route.provider)}
-                >
-                  <span>
-                    {route.model}
-                    <small>{route.api_method} · {route.detail || (route.available ? 'available' : 'unavailable')}</small>
-                  </span>
-                  {state.runtime?.model === route.model ? <IconCheck size={18} /> : null}
-                </button>
-              ))}
-            </section>
-          ) : null}
-          {others.length > 0 ? (
-            <section className="model-section">
-              <h3>Other routes</h3>
-              {others.map((route) => (
-                <button
-                  key={`${route.provider}:${route.model}`}
-                  className={`overlay-row model-route ${state.runtime?.model === route.model ? 'selected' : ''}`}
-                  disabled={!route.available}
-                  onClick={() => controller.selectModel(route.model, route.provider)}
-                >
-                  <span>
-                    {route.model}
-                    <small>{route.provider} · {route.api_method} · {route.detail || (route.available ? 'available' : 'unavailable')}</small>
-                  </span>
-                  {state.runtime?.model === route.model ? <IconCheck size={18} /> : null}
-                </button>
-              ))}
-            </section>
-          ) : null}
-          <p className="form-help">
-            Route availability is exactly what JCode reported. A model in the catalog is not proof of
-            plan entitlement. Selection is verified again from runtime state.
-          </p>
-        </>
-      )}
-    </Sheet>
-  );
-}
-
-function ReasoningSheet({ state }: { state: AppState }) {
-  if (state.sheet !== 'reasoning') return null;
-  const efforts = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-  return (
-    <Sheet title="Reasoning effort" onClose={() => controller.openSheet(null)}>
-      <p className="form-help">
-        Providers that do not support the chosen level reject it. The adapter re-reads runtime state
-        instead of assuming the change took effect.
-      </p>
-      {efforts.map((effort) => (
-        <button
-          key={effort}
-          className={`overlay-row ${state.runtime?.reasoning_effort === effort ? 'selected' : ''}`}
-          onClick={() => controller.setReasoning(effort)}
-        >
-          <span>{effort}</span>
-          {state.runtime?.reasoning_effort === effort ? <IconCheck size={18} /> : null}
-        </button>
-      ))}
-      <div className="context-note">
-        Provider: {state.runtime?.provider ?? 'unknown'} · account {state.runtime?.account_label ?? 'unknown'}
-      </div>
-    </Sheet>
   );
 }
 
@@ -443,26 +264,34 @@ function SessionInspector({ state, plan }: { state: AppState; plan: ParsedPlan |
     <aside className="inspector" aria-label="Session inspector">
       <div className="inspector-head">
         <span>Inspector</span>
-        <button className="icon-btn small" aria-label="Refresh inspector" onClick={() => {
-          void controller.refreshPlan();
-          void controller.refreshActivity();
-          void controller.refreshContext();
-          void controller.refreshModels();
-        }}>
+        <button
+          className="icon-btn small"
+          aria-label="Refresh inspector"
+          onClick={() => {
+            void controller.refreshPlan();
+            void controller.refreshActivity();
+            void controller.refreshContext();
+            void controller.refreshModels();
+          }}
+        >
           <IconRefresh size={16} />
         </button>
       </div>
       <section className="inspector-section">
         <div className="inspector-title">
           <h3>Plan</h3>
-          <button className="tiny-action" onClick={() => controller.go('plan')}>Open</button>
+          <button className="tiny-action" onClick={() => controller.go('plan')}>
+            Open
+          </button>
         </div>
         <PlanSummary plan={plan} />
       </section>
       <section className="inspector-section">
         <div className="inspector-title">
           <h3>Context</h3>
-          <button className="tiny-action" onClick={() => controller.openSheet('context')}>Details</button>
+          <button className="tiny-action" onClick={() => controller.openSheet('context')}>
+            Details
+          </button>
         </div>
         <div className="context-grid">
           <span>Input</span>
@@ -473,11 +302,18 @@ function SessionInspector({ state, plan }: { state: AppState; plan: ParsedPlan |
           <strong>{context?.effective_budget != null ? context.effective_budget.toLocaleString() : 'Unknown'}</strong>
         </div>
         <p className="inspector-note">Missing telemetry stays unknown, never zero.</p>
+        <CopyButton
+          value={`input ${context?.input_tokens ?? 'unknown'} · output ${context?.output_tokens ?? 'unknown'} · budget ${context?.effective_budget ?? 'unknown'}`}
+          label="Copy context"
+          icon
+        />
       </section>
       <section className="inspector-section">
         <div className="inspector-title">
           <h3>Activity</h3>
-          <button className="tiny-action" onClick={() => controller.go('activity')}>Open</button>
+          <button className="tiny-action" onClick={() => controller.go('activity')}>
+            Open
+          </button>
         </div>
         {recent.length === 0 ? (
           <p className="inspector-empty">No observed activity in this view.</p>
@@ -486,7 +322,9 @@ function SessionInspector({ state, plan }: { state: AppState; plan: ParsedPlan |
             {recent.map((item, index) => (
               <div key={`${item.at_ms}-${index}`}>
                 <strong>{item.title}</strong>
-                <small>{relativeTime(item.at_ms)} · {item.kind}</small>
+                <small>
+                  {relativeTime(item.at_ms)} · {item.kind}
+                </small>
               </div>
             ))}
           </div>
@@ -514,21 +352,33 @@ function SessionInspector({ state, plan }: { state: AppState; plan: ParsedPlan |
 }
 
 export function SessionScreen({ state }: { state: AppState }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const sessionKey = state.activeSessionId ?? 'none';
+  const scrollStorageKey = `session:${state.credential?.serverId ?? 'none'}:${sessionKey}`;
+  const scroll = useScrollMemory<HTMLDivElement>(scrollStorageKey);
+  const scrollRef = scroll.ref;
   const [autoFollow, setAutoFollow] = useState(true);
   const [showJump, setShowJump] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
   const plan = useMemo(() => parsePlan(state.plan ?? state.snapshot?.plan), [state.plan, state.snapshot?.plan]);
-  const session = state.snapshot?.session ?? state.sessions.find((item) => item.session_id === state.activeSessionId);
-  const title = sessionTitle(session);
+  const title = confirmedSessionTitle({
+    activeSessionId: state.activeSessionId,
+    snapshot: state.snapshot,
+    sessions: state.sessions,
+  });
 
   useEffect(() => {
     setAutoFollow(true);
     setShowJump(false);
-    const element = scrollRef.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [state.activeSessionId]);
+    if (savedScrollOffset(scrollStorageKey) != null) return;
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const element = scrollRef.current;
+        if (element) element.scrollTop = element.scrollHeight;
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [sessionKey, scrollRef, scrollStorageKey]);
 
   const messageCount = state.snapshot?.messages.length ?? 0;
   const liveText = state.live.assistants.map((block) => block.text).join('');
@@ -540,12 +390,12 @@ export function SessionScreen({ state }: { state: AppState }) {
     } else if (messageCount || liveText.length) {
       setShowJump(true);
     }
-  }, [messageCount, liveText, state.pending?.state, autoFollow]);
+  }, [messageCount, liveText, state.pending?.state, autoFollow, scrollRef]);
 
   useEffect(() => {
     if (!renaming) return;
-    setTitleDraft(session?.title ?? '');
-  }, [renaming, session?.title]);
+    setTitleDraft(state.snapshot?.session.title ?? '');
+  }, [renaming, state.snapshot?.session.title]);
 
   const dateLabel = state.snapshot?.authoritative_at_ms
     ? longDate(state.snapshot.authoritative_at_ms)
@@ -553,15 +403,28 @@ export function SessionScreen({ state }: { state: AppState }) {
       ? longDate(state.models.observed_at_ms)
       : '';
 
+  const liveActive =
+    state.live.turnId ||
+    state.live.assistants.length ||
+    state.live.tools.length ||
+    state.live.reasoning ||
+    state.live.permission;
+
   return (
     <div className="screen session-screen" data-testid="session-screen">
       <header className="header session-header">
         <div className="left-head">
-          <button className="icon-btn" aria-label="Back to sessions" onClick={() => controller.go('sessions')}>
+          <button
+            className="icon-btn"
+            aria-label="Back to sessions"
+            onClick={() => controller.go('sessions')}
+          >
             <IconChevron style={{ transform: 'rotate(90deg)' }} />
           </button>
           <div className="head-copy">
-            <div className="head-title" data-testid="session-title">{title}</div>
+            <div className="head-title" data-testid="session-title">
+              {title}
+            </div>
             <div className="head-sub">
               <span className={`status-mark ${state.live.turnId ? 'is-active' : ''}`} />
               {state.activeMissing ? 'Session missing from server' : startedLabel(state.live)}
@@ -571,6 +434,14 @@ export function SessionScreen({ state }: { state: AppState }) {
           </div>
         </div>
         <div className="head-actions">
+          <button
+            className="icon-btn"
+            aria-label="Open session switcher"
+            data-testid="open-switcher"
+            onClick={openSwitcher}
+          >
+            <IconCommand />
+          </button>
           <button className="icon-btn" aria-label="Rename session" onClick={() => setRenaming(true)}>
             <IconEdit />
           </button>
@@ -584,7 +455,9 @@ export function SessionScreen({ state }: { state: AppState }) {
         <div className="missing-session" role="alert">
           <strong>This session is no longer on the server.</strong>
           <p>No replacement session was created. Go back and choose an existing session.</p>
-          <button className="onboard-secondary" onClick={() => controller.go('sessions')}>Back to sessions</button>
+          <button className="onboard-secondary" onClick={() => controller.go('sessions')}>
+            Back to sessions
+          </button>
         </div>
       ) : null}
       <div className="session-layout">
@@ -593,6 +466,7 @@ export function SessionScreen({ state }: { state: AppState }) {
             className="body-scroll transcript-scroll"
             ref={scrollRef}
             onScroll={(event) => {
+              scroll.onScroll(event);
               const element = event.currentTarget;
               const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 90;
               setAutoFollow(nearBottom);
@@ -607,13 +481,13 @@ export function SessionScreen({ state }: { state: AppState }) {
                   Send an instruction below. The adapter journals it before dispatch.
                 </EmptyState>
               ) : null}
-              {state.snapshot?.messages.map((message) => (
-                <HistoryRow key={message.index} message={message} />
-              ))}
+              {state.snapshot?.messages.length ? (
+                <HistoryTimeline messages={state.snapshot.messages} />
+              ) : null}
               <PendingCard state={state} />
-              {state.live.turnId || state.live.assistants.length || state.live.tools.length || state.live.reasoning ? (
+              {liveActive ? (
                 <div className="live-turn" data-testid="live-turn">
-                  <div className="quiet-work active-work">
+                  <div className="quiet-work live-status">
                     <div className="work-main static">
                       <div className="work-glyph is-live">
                         <Torus size={24} animated={Boolean(state.live.turnId)} />
@@ -636,19 +510,17 @@ export function SessionScreen({ state }: { state: AppState }) {
                               : 'Streaming from the server'}
                         </div>
                       </div>
-                      <button className="work-action" onClick={() => controller.go('plan')}>Plan</button>
+                      <button className="work-action" onClick={() => controller.go('plan')}>
+                        Plan
+                      </button>
                     </div>
-                    <LiveToolList tools={state.live.tools} />
                   </div>
-                  <ReasoningBlock state={state} />
-                  <PermissionCard state={state} />
-                  {state.live.assistants.map((block) => (
-                    <article className="chat-message assistant-msg" key={block.id} data-testid="live-assistant-message">
-                      <div className="chat-meta">JCode {!block.done ? <span className="stream-caret">streaming</span> : null}</div>
-                      <Markdown text={block.text} />
-                    </article>
-                  ))}
-                  {state.live.error ? <p className="inline-error" role="alert">{state.live.error}</p> : null}
+                  <LiveTimeline live={state.live} visibility={state.reasoningVisibility} />
+                  {state.live.error ? (
+                    <p className="inline-error" role="alert">
+                      {state.live.error}
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
               {state.live.recovery ? (
@@ -684,12 +556,13 @@ export function SessionScreen({ state }: { state: AppState }) {
               ↓ Jump to latest
             </button>
           ) : null}
+          <PermissionPanel state={state} />
           <Composer state={state} />
         </main>
         <SessionInspector state={state} plan={plan} />
       </div>
       {renaming ? (
-        <Sheet title="Session title" onClose={() => setRenaming(false)}>
+        <Sheet title="Session title" onClose={() => setRenaming(false)} testId="rename-sheet">
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -706,14 +579,19 @@ export function SessionScreen({ state }: { state: AppState }) {
                 autoFocus
                 placeholder="Session title"
               />
-              <span className="field-hint">An explicit title is persisted by JCode and pinned locally, so refresh does not flip it.</span>
+              <span className="field-hint">
+                The confirmed title comes from the session snapshot. A background inventory refresh
+                can never flip it.
+              </span>
             </label>
-            <button className="primary-btn" type="submit">Save title</button>
+            <button className="primary-btn" type="submit">
+              Save title
+            </button>
           </form>
         </Sheet>
       ) : null}
-      <ModelSheet state={state} />
-      <ReasoningSheet state={state} />
+      {state.sheet === 'model' ? <ModelPicker state={state} /> : null}
+      {state.sheet === 'reasoning' ? <ReasoningSlider state={state} /> : null}
       {state.sheet === 'context' ? (
         <Sheet title="Context" onClose={() => controller.openSheet(null)}>
           <ContextDetails context={state.context} />
