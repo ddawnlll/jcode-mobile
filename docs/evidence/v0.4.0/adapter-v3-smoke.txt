@@ -1,0 +1,67 @@
+== staging daemon ==
+starting staging daemon (JCODE_HOME=/Users/hootie/src/jcode-mobile-app/.staging/e2e-v3/home, binary=jcode)
+staging harness API already listening at /Users/hootie/src/jcode-mobile-app/.staging/e2e-v3/run/jcode-api.sock
+/Users/hootie/src/jcode-mobile-app/.staging/e2e-v3
+== adapter v3 ==
+    Finished `dev` profile [unoptimized] target(s) in 0.23s
+{"adapter_version":"0.4.0","connections":0,"epoch":"epoch_f83fa853d9cd48b899650144453cf681","jcode_connected":true,"jcode_server":"jcode-harness-api-bridge/0.1.0","journal_events":34,"min_protocol_version":2,"ok":true,"protocol_version":3,"server_id":"srv_ac6b9e114da44132896e9438fffe4e7f"}
+== v3 protocol smoke ==
+{
+  "base": "http://127.0.0.1:7660",
+  "started_at": "2026-11-14T16:28:16.303Z",
+  "server_id": "srv_ac6b9e114da44132896e9438fffe4e7f",
+  "device_id": "dev_cf0ae6e8c004432b9423bf716c51532a",
+  "negotiated_version": 3,
+  "jcode_healthy": true,
+  "session_id": "session_tiger_1794673696329_283a7862f89ecc6a",
+  "first_summary": {
+    "agent_label": null,
+    "archived": false,
+    "parent_session_id": null,
+    "project_id": "prj_2f8c233375b544408d497fdf5bddea48",
+    "saved": false,
+    "session_id": "session_tiger_1794673696329_283a7862f89ecc6a",
+    "status": "attached",
+    "title": "Adapter v3 smoke",
+    "title_source": "adapter_rename",
+    "transcript_bytes": 2055,
+    "updated_at_ms": 1794673696345,
+    "working_dir": "/Users/hootie/src/jcode-mobile-app"
+  },
+  "delta_ids": [
+    "session_parrot_1794673696351_944d325186ff54c4",
+    "session_snail_1794673673366_fb71401211f84aea",
+    "session_tiger_1794673696329_283a7862f89ecc6a"
+  ],
+  "unchanged_resent": true,
+  "resent_summary_diff": {
+    "status": {
+      "before": "attached",
+      "after": "idle"
+    },
+    "updated_at_ms": {
+      "before": 1794673696345,
+      "after": 1794673697030
+    }
+  },
+  "delta_revision": 8,
+  "journal_latest_seq": 7,
+  "assistant_text": "OK",
+  "turn_done": true,
+  "diagnostics": {
+    "journal_events": 55,
+    "journal_bytes": 4006,
+    "retention": 4096,
+    "dispatch_p50_ms": 0,
+    "dispatch_p95_ms": 0,
+    "replay_p50_ms": 0,
+    "frames_out": 26
+  },
+  "reconnect": {
+    "latest_seq": 7,
+    "replayed_events": 0
+  },
+  "operation_state": "accepted",
+  "result": "PASS",
+  "finished_at": "2026-11-14T16:28:21.105Z"
+}

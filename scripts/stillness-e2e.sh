@@ -2,7 +2,7 @@
 # Real-stack Stillness 12 e2e.
 #
 # Starts an isolated JCode daemon from the pinned fork binary, a Rust Adapter
-# v2 instance, and serves the production web bundle from that adapter. It
+# v3 instance, and serves the production web bundle from that adapter. It
 # never touches the production daemon or the live adapter ports.
 #
 # Playwright Chromium is browser coverage. It is not native iOS or Android
@@ -13,8 +13,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STAGE="${STILLNESS_E2E_DIR:-$ROOT/.staging/stillness}"
 PORT="${STILLNESS_E2E_PORT:-7650}"
 PAIR_CODE="${STILLNESS_E2E_PAIR_CODE:-482913}"
-JCODE_BIN="${JCODE_BIN:-$HOME/projects/jcode-fork/target/release/jcode}"
-ADAPTER_BIN="${JCODE_ADAPTER_BIN:-$ROOT/target/debug/jcode-adapter-v2}"
+if [ -z "${JCODE_BIN:-}" ]; then
+  if [ -x "$HOME/projects/jcode-fork/target/release/jcode" ]; then
+    JCODE_BIN="$HOME/projects/jcode-fork/target/release/jcode"
+  else
+    JCODE_BIN="$(command -v jcode || true)"
+  fi
+fi
+ADAPTER_BIN="${JCODE_ADAPTER_BIN:-$ROOT/target/debug/jcode-adapter-v3}"
 
 mkdir -p "$STAGE"
 
@@ -24,8 +30,8 @@ if [ ! -x "$JCODE_BIN" ]; then
   exit 2
 fi
 if [ ! -x "$ADAPTER_BIN" ]; then
-  echo "building Rust Adapter v2"
-  (cd "$ROOT" && cargo build -p adapter-server --bin jcode-adapter-v2)
+  echo "building Rust Adapter v3"
+  (cd "$ROOT" && cargo build -p adapter-server --bin jcode-adapter-v3)
 fi
 
 stop_pid() {
@@ -65,9 +71,10 @@ fi
 rm -rf "$STAGE/adapter"
 rm -f "$ROOT/apps/stillness/.e2e-auth.json"
 
-echo "starting Rust Adapter v2 on 127.0.0.1:$PORT"
-setsid -f bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$STAGE/adapter.pid" \
-  env \
+echo "starting Rust Adapter v3 on 127.0.0.1:$PORT"
+# Portable detached start: setsid is Linux-only, so background the process in
+# the current shell and record its PID. Both macOS and Linux are supported.
+env \
   JCODE_HOME="$JCODE_HOME" \
   JCODE_RUNTIME_DIR="$JCODE_RUNTIME_DIR" \
   JCODE_SOCKET="$JCODE_SOCKET" \
@@ -81,7 +88,9 @@ setsid -f bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$STAGE/adapter.pid" \
   JCODE_ADAPTER_ALLOWED_ORIGINS="http://127.0.0.1:$PORT,http://localhost:$PORT" \
   JCODE_ADAPTER_NAME="JCode Mobile" \
   "$ADAPTER_BIN" \
-  > "$STAGE/adapter.log" 2>&1 < /dev/null
+  > "$STAGE/adapter.log" 2>&1 < /dev/null &
+echo $! > "$STAGE/adapter.pid"
+disown || true
 
 for _ in $(seq 1 120); do
   if curl -sf "http://127.0.0.1:$PORT/health" > /dev/null; then break; fi

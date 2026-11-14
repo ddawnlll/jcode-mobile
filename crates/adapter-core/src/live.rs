@@ -86,7 +86,7 @@ impl JcodeLive {
         loop {
             let options = ConnectOptions {
                 socket_path: Some(self.socket_path.clone()),
-                client_name: "jcode-mobile-adapter-v2/0.3.1".into(),
+                client_name: "jcode-mobile-adapter-v3/0.4.0".into(),
                 request_timeout: Some(Duration::from_secs(30)),
                 ensure_runtime: false,
                 supports_user_response: false,
