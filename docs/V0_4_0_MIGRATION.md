@@ -57,9 +57,15 @@ outbound frame stays at v2.
 
 ## 3. Phone upgrade
 
-Install `jcode-mobile-0.4.0-android-release.apk` over 0.3.1. The package id and
-signing key are unchanged for the debug-signed sideload artifact, so the app
+Install `jcode-mobile-0.4.0-android-release.apk` over 0.3.1. The published 0.3.1
+and 0.4.0 release artifacts use the same certificate (SHA-256
+`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`), so the app
 updates in place and keeps its credentials. versionCode is 4000.
+
+A locally rebuilt debug APK may use a different debug keystore; Android then
+rejects the update with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. That is a local
+keystore difference, not a release regression. Uninstalling to switch keys
+removes the phone credential and requires pairing again.
 
 First launch after upgrade:
 
