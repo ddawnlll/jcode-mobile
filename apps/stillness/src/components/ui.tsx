@@ -1,10 +1,29 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-import MarkdownIt from 'markdown-it';
-import { IconBack, IconClose, IconMenu, IconMore } from './Icons';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  IconArchive,
+  IconBack,
+  IconCheck,
+  IconCopy,
+  IconCommand,
+  IconMenu,
+  IconMore,
+  IconPin,
+  IconTrash,
+} from './Icons';
 import { controller, type AppState, type Screen } from '../lib/controller';
 import { relativeTime, sessionTitle, statusLabel, isRunning } from '../lib/format';
 import type { SessionSummary } from '../lib/protocol';
 import { Torus } from './Torus';
+import { BottomSheet } from './BottomSheet';
+import { SwipeableRow } from './SwipeableRow';
+import { openSwitcher } from './QuickSwitcher';
+import { copyText, haptic } from './motion';
+import { useSessionPrefs } from '../lib/sessionPrefs';
+import { archiveSession, deleteSession, pinSession } from '../lib/sessionShelf';
+
+export { BottomSheet as Sheet } from './BottomSheet';
+export { Drawer } from './GestureDrawer';
+export { RichMarkdown as Markdown } from './RichMarkdown';
 
 export function ScreenHeader({
   title,
@@ -12,6 +31,7 @@ export function ScreenHeader({
   back,
   menu = false,
   right,
+  switcher = true,
   children,
 }: {
   title: string;
@@ -19,6 +39,8 @@ export function ScreenHeader({
   back?: Screen | null;
   menu?: boolean;
   right?: ReactNode;
+  /** Command-palette affordance. On by default for every shell screen. */
+  switcher?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -38,8 +60,94 @@ export function ScreenHeader({
           {subtitle ? <div className="head-sub">{subtitle}</div> : null}
         </div>
       </div>
-      {right || children ? <div className="head-actions">{right ?? children}</div> : null}
+      <div className="head-actions">
+        {switcher ? (
+          <button
+            className="icon-btn"
+            aria-label="Open session switcher"
+            title="Session switcher (⌘K)"
+            data-testid="open-switcher"
+            onClick={openSwitcher}
+          >
+            <IconCommand />
+          </button>
+        ) : null}
+        {right ?? children}
+      </div>
     </header>
+  );
+}
+
+function SessionActionsMenu({
+  session,
+  serverId,
+  pinned,
+  onClose,
+}: {
+  session: SessionSummary;
+  serverId: string | null;
+  pinned: boolean;
+  onClose: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const finish = (action: () => void) => {
+    onClose();
+    window.setTimeout(action, 40);
+  };
+  return (
+    <BottomSheet title={sessionTitle(session)} onClose={onClose} testId="session-menu">
+      <div className="session-menu-id mono">{session.session_id}</div>
+      <button
+        className="overlay-row"
+        onClick={() => finish(() => controller.openSession(session.session_id))}
+      >
+        <span>Open session</span>
+      </button>
+      <button
+        className="overlay-row"
+        onClick={() => finish(() => pinSession(serverId, session))}
+      >
+        <span>{pinned ? 'Unpin on this phone' : 'Pin on this phone'}</span>
+      </button>
+      <button
+        className="overlay-row"
+        onClick={() => finish(() => archiveSession(serverId, session))}
+      >
+        <span>Archive on this phone</span>
+      </button>
+      <button
+        className="overlay-row"
+        onClick={() =>
+          finish(() => {
+            void copyText(session.session_id);
+            controller.setToast('Session id copied.');
+          })
+        }
+      >
+        <span>Copy session id</span>
+      </button>
+      {!confirmDelete ? (
+        <button className="overlay-row danger-text" onClick={() => setConfirmDelete(true)}>
+          <span>Delete session…</span>
+        </button>
+      ) : (
+        <div className="confirm-row">
+          <p>
+            Delete is a server mutation. It is only sent when the controller exposes a delete verb;
+            otherwise nothing is removed and the session stays exactly as it is.
+          </p>
+          <button
+            className="danger-btn"
+            onClick={() => finish(() => void deleteSession(serverId, session))}
+          >
+            Delete
+          </button>
+          <button className="tiny-action" onClick={() => setConfirmDelete(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+    </BottomSheet>
   );
 }
 
@@ -52,29 +160,96 @@ export function SessionRow({
   onOpen?: () => void;
   active?: boolean;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const serverId = controller.getSnapshot().credential?.serverId ?? null;
+  const prefs = useSessionPrefs(serverId);
+  const pinned = prefs.pinned.includes(session.session_id);
   const running = isRunning(session.status);
+  const open = onOpen ?? (() => void controller.openSession(session.session_id));
+
+  const leftActions = [
+    {
+      key: 'archive',
+      label: 'Archive',
+      icon: <IconArchive size={18} />,
+      onAction: () => archiveSession(serverId, session),
+    },
+    {
+      key: 'delete',
+      label: 'Delete',
+      icon: <IconTrash size={18} />,
+      tone: 'danger' as const,
+      onAction: () => setMenuOpen(true),
+    },
+  ];
+  const rightActions = [
+    {
+      key: 'pin',
+      label: pinned ? 'Unpin' : 'Pin',
+      icon: <IconPin size={18} />,
+      tone: 'accent' as const,
+      onAction: () => pinSession(serverId, session),
+    },
+  ];
+
   return (
-    <button
-      type="button"
-      className={`session-row ${active ? 'is-active' : ''}`}
-      onClick={onOpen ?? (() => controller.openSession(session.session_id))}
-      data-testid="session-row"
-    >
-      <span className="text">
-        <strong>{sessionTitle(session)}</strong>
-        <small>
-          {running ? (
-            <span className="running">
-              <span className="status-mark" /> {statusLabel(session.status)}
+    <>
+      <SwipeableRow
+        id={`session:${session.session_id}`}
+        leftActions={leftActions}
+        rightActions={rightActions}
+        onLongPress={() => {
+          haptic('open');
+          setMenuOpen(true);
+        }}
+      >
+        <div className={`session-row ${active ? 'is-active' : ''}`} data-pinned={pinned}>
+          <button
+            type="button"
+            className="session-row-open"
+            onClick={open}
+            data-testid="session-row"
+          >
+            <span className="text">
+              <strong>
+                {pinned ? <IconPin size={13} className="row-pin" /> : null}
+                {sessionTitle(session)}
+              </strong>
+              <small>
+                {running ? (
+                  <span className="running">
+                    <span className="status-mark" /> {statusLabel(session.status)}
+                  </span>
+                ) : (
+                  statusLabel(session.status)
+                )}
+                {session.working_dir
+                  ? ` · ${session.working_dir.split('/').filter(Boolean).slice(-1)[0]}`
+                  : ''}
+              </small>
             </span>
-          ) : (
-            statusLabel(session.status)
-          )}
-          {session.working_dir ? ` · ${session.working_dir.split('/').filter(Boolean).slice(-1)[0]}` : ''}
-        </small>
-      </span>
-      <span className="side">{relativeTime(session.updated_at_ms)}</span>
-    </button>
+            <span className="side">{relativeTime(session.updated_at_ms)}</span>
+          </button>
+          <button
+            type="button"
+            className="session-row-menu"
+            aria-label={`Actions for ${sessionTitle(session)}`}
+            aria-haspopup="dialog"
+            onClick={() => setMenuOpen(true)}
+          >
+            <IconMore size={18} />
+          </button>
+        </div>
+      </SwipeableRow>
+      {menuOpen ? (
+        <SessionActionsMenu
+          session={session}
+          serverId={serverId}
+          pinned={pinned}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -144,128 +319,6 @@ export function Toast({ message }: { message: string | null }) {
   );
 }
 
-export function Sheet({
-  title,
-  onClose,
-  children,
-  testId,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-  testId?: string;
-}) {
-  return (
-    <div className="modal-scrim open" onClick={onClose} data-testid={testId}>
-      <div className="modal open" role="dialog" aria-modal="true" aria-label={title} onClick={(event) => event.stopPropagation()}>
-        <div className="grab" />
-        <header className="overlay-header">
-          <div className="overlay-title">{title}</div>
-          <button className="icon-btn" aria-label="Close" onClick={onClose}>
-            <IconClose />
-          </button>
-        </header>
-        <div className="overlay-body">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-const markdown = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: true,
-  typographer: true,
-});
-
-markdown.renderer.rules.link_open = (tokens, index, options, _env, self) => {
-  tokens[index].attrSet('target', '_blank');
-  tokens[index].attrSet('rel', 'noreferrer noopener');
-  return self.renderToken(tokens, index, options);
-};
-
-export function Markdown({ text }: { text: string }) {
-  const html = useMemo(() => markdown.render(text), [text]);
-  return <div className="markdown" dangerouslySetInnerHTML={{ __html: html }} />;
-}
-
-export function Drawer({ state }: { state: AppState }) {
-  const recent = state.sessions.slice(0, 6);
-  const nav: Array<{ screen: Screen; label: string; icon: ReactNode }> = [
-    { screen: 'home', label: 'Home', icon: <Torus size={20} animated={false} /> },
-    { screen: 'sessions', label: 'Sessions', icon: <IconMore /> },
-    { screen: 'projects', label: 'Projects', icon: <IconMenu /> },
-    { screen: 'plan', label: 'Plan', icon: <IconMore /> },
-    { screen: 'activity', label: 'Activity', icon: <IconMore /> },
-    { screen: 'changes', label: 'Changes', icon: <IconMore /> },
-    { screen: 'settings', label: 'Settings', icon: <IconMore /> },
-  ];
-  useEffect(() => {
-    if (!state.drawerOpen) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') controller.openDrawer(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [state.drawerOpen]);
-  return (
-    <>
-      <div
-        className={`drawer-scrim ${state.drawerOpen ? 'open' : ''}`}
-        onClick={() => controller.openDrawer(false)}
-        aria-hidden={!state.drawerOpen}
-      />
-      <aside className={`drawer ${state.drawerOpen ? 'open' : ''}`} aria-label="Sidebar" aria-hidden={!state.drawerOpen}>
-        <div className="drawer-top">
-          <div className="drawer-brand">
-            <span className="mark">
-              jcode<span className="mark-slash">/</span>
-            </span>
-          </div>
-          <button className="icon-btn" aria-label="Close sidebar" onClick={() => controller.openDrawer(false)}>
-            <IconClose />
-          </button>
-        </div>
-        <div className="drawer-body">
-          <p className="drawer-sub">{state.server?.name ?? 'JCode Mobile'} · {state.server?.healthy ? 'harness online' : 'harness offline'}</p>
-          <nav className="drawer-nav">
-            {nav.map((item) => (
-              <button
-                key={item.screen}
-                aria-current={state.screen === item.screen ? 'page' : undefined}
-                onClick={() => controller.go(item.screen)}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
-          </nav>
-          <div className="drawer-recent">
-            <h2>Recent sessions</h2>
-            {recent.length === 0 ? <p className="drawer-empty">No sessions yet.</p> : null}
-            {recent.map((session) => (
-              <button
-                key={session.session_id}
-                className="drawer-thread"
-                onClick={() => controller.openSession(session.session_id)}
-              >
-                {sessionTitle(session)}
-                <small>{relativeTime(session.updated_at_ms)}</small>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="drawer-foot">
-          <button onClick={() => controller.go('settings')}>
-            <Torus size={18} animated={false} /> Preferences
-          </button>
-          <span className="preview">v0.3.1</span>
-        </div>
-      </aside>
-    </>
-  );
-}
-
 export function HeaderMenuButton() {
   return (
     <button className="icon-btn" aria-label="Session options" onClick={() => controller.go('settings')}>
@@ -280,23 +333,49 @@ export function useDocumentTitle(title: string) {
   }, [title]);
 }
 
-export function CopyButton({ value, label = 'Copy' }: { value: string; label?: string }) {
-  const button = useRef<HTMLButtonElement>(null);
+export function CopyButton({
+  value,
+  label = 'Copy',
+  icon = false,
+}: {
+  value: string;
+  label?: string;
+  icon?: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current != null) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  const run = async () => {
+    const ok = await copyText(value);
+    setCopied(ok);
+    haptic('select');
+    controller.setToast(ok ? 'Copied.' : 'Clipboard permission was denied.');
+    if (timer.current != null) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  if (icon) {
+    return (
+      <button
+        type="button"
+        className={`copy-icon ${copied ? 'is-copied' : ''}`}
+        aria-label={copied ? 'Copied' : label}
+        title={label}
+        onClick={() => void run()}
+      >
+        {copied ? <IconCheck size={15} /> : <IconCopy size={15} />}
+      </button>
+    );
+  }
   return (
-    <button
-      ref={button}
-      type="button"
-      className="tiny-action"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value);
-          controller.setToast('Copied.');
-        } catch {
-          controller.setToast('Clipboard permission was denied.');
-        }
-      }}
-    >
-      {label}
+    <button type="button" className={`tiny-action copy-text ${copied ? 'is-copied' : ''}`} onClick={() => void run()}>
+      {copied ? 'Copied' : label}
     </button>
   );
 }
