@@ -7,13 +7,15 @@ pub mod backend;
 pub mod config;
 pub mod journal;
 pub mod live;
+mod native_link;
 pub mod paths;
 pub mod store;
 
 pub use auth::AuthService;
 pub use backend::{
     Backend, BackendErrorKind, BackendEvent, BackendInfo, BackendRoute, BackendRuntime,
-    BackendSession, CoreError, CoreResult, SessionTurnRegistry, is_command_code_provider, now_ms,
+    BackendSession, CoreError, CoreResult, SessionTurnRegistry, is_command_code_provider,
+    is_reasoning_effort, now_ms,
 };
 pub use config::AdapterConfig;
 pub use journal::{JournalRecord, JournalReplay, JournalStats, MAX_REPLAY_LIMIT};

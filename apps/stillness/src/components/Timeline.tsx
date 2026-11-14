@@ -5,16 +5,18 @@
  * segments, tool calls (start → input → exec → done in observed order), and
  * assistant text. Every block carries a stable key and its own copy control.
  */
-import { memo, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { HistoryMessageView } from '../lib/protocol';
-import type { JournalTool, TimelineItem } from '../lib/timelineJournal';
-import { TimelineJournal } from '../lib/timelineJournal';
+import { orderedTimeline } from '../lib/timelineJournal';
+import type { JournalTool } from '../lib/timelineJournal';
 import type { LiveState } from '../lib/controller';
 import { classifyDiffLine, describeToolCall, groupHistory, looksLikeDiff } from '../lib/toolLabels';
-import { useRafValue } from './motion';
-import { RichMarkdown } from './RichMarkdown';
+import { PagedText, TEXT_PAGE_CHARS } from './PagedText';
 import { IconChevron } from './Icons';
 import { CopyButton } from './ui';
+
+const RichMarkdown = lazy(async () => ({ default: (await import('./RichMarkdown')).RichMarkdown }));
+const HISTORY_PAGE = 32;
 
 function DiffText({ text }: { text: string }) {
   const lines = text.replace(/\n$/, '').split('\n');
@@ -35,6 +37,7 @@ function DiffText({ text }: { text: string }) {
 }
 
 function parseInput(input: string): unknown {
+  if (input.length > 4096) return null;
   const value = input.trim();
   if (!value) return null;
   try {
@@ -54,12 +57,12 @@ function ToolCallCardView({
   const [open, setOpen] = useState(false);
   const parsed = useMemo(() => parseInput(tool.input), [tool.input]);
   const descriptor = useMemo(
-    () => describeToolCall(tool.name, tool.input, parsed),
+    () => describeToolCall(tool.name, tool.input.slice(0, 4096), parsed),
     [tool.name, tool.input, parsed],
   );
-  const prettyInput = parsed ? JSON.stringify(parsed, null, 2) : tool.input;
+  const prettyInput = open && parsed ? JSON.stringify(parsed, null, 2) : tool.input;
   const effectiveStatus = status ?? tool.status;
-  const copyValue = [tool.name, tool.input && `INPUT\n${tool.input}`, tool.output && `OUTPUT\n${tool.output}`, tool.error]
+  const copyValue = () => [tool.name, tool.input && `INPUT\n${tool.input}`, tool.output && `OUTPUT\n${tool.output}`, tool.error]
     .filter(Boolean)
     .join('\n\n');
 
@@ -95,7 +98,7 @@ function ToolCallCardView({
                   <span className="small-heading flush">INPUT</span>
                   <CopyButton value={prettyInput} label="Copy tool input" icon />
                 </div>
-                <pre>{prettyInput}</pre>
+                <PagedText className="tool-payload" text={prettyInput} streaming={effectiveStatus === "running"} />
               </div>
             ) : null}
             {tool.error ? (
@@ -109,10 +112,10 @@ function ToolCallCardView({
                   <span className="small-heading flush">OUTPUT</span>
                   <CopyButton value={tool.output} label="Copy tool output" icon />
                 </div>
-                {looksLikeDiff(tool.output) ? (
+                {tool.output.length <= TEXT_PAGE_CHARS && looksLikeDiff(tool.output) ? (
                   <DiffText text={tool.output} />
                 ) : (
-                  <pre>{tool.output}</pre>
+                  <PagedText className="tool-payload" text={tool.output} />
                 )}
               </div>
             ) : null}
@@ -170,9 +173,9 @@ export const ReasoningSegment = memo(function ReasoningSegment({
           <CopyButton value={text} label="Copy reasoning" icon />
         </div>
         {open ? (
-          <div className="reasoning-copy">{text}</div>
+          <PagedText className="reasoning-copy" text={text} streaming={!done} />
         ) : (
-          <p className="reasoning-preview">{text.replace(/\s+/g, ' ').slice(0, 150)}</p>
+          <p className="reasoning-preview">{text.slice(0, 240).replace(/\s+/g, ' ').slice(0, 150)}</p>
         )}
       </div>
     </div>
@@ -188,15 +191,16 @@ const AssistantBlock = memo(function AssistantBlock({
   streaming: boolean;
   testId?: string;
 }) {
-  // Batch token deltas to one render per animation frame.
-  const batched = useRafValue(text);
+  const plain = <PagedText streaming={streaming} text={text} className="chat-text" />;
   return (
     <article className="chat-message assistant-msg timeline-assistant" data-testid={testId}>
       <div className="chat-meta">
         <span>JCode {streaming ? <span className="stream-caret">streaming</span> : null}</span>
-        <CopyButton value={batched} label="Copy message" icon />
+        <CopyButton value={text} label="Copy message" icon />
       </div>
-      <RichMarkdown text={batched} />
+      {streaming || text.length > TEXT_PAGE_CHARS ? plain : (
+        <Suspense fallback={plain}><RichMarkdown text={text} /></Suspense>
+      )}
     </article>
   );
 });
@@ -208,7 +212,7 @@ const UserMessage = memo(function UserMessage({ content }: { content: string }) 
         <span>You</span>
         <CopyButton value={content} label="Copy message" icon />
       </div>
-      <div className="chat-text preserve">{content}</div>
+      <PagedText className="chat-text" text={content} />
     </article>
   );
 });
@@ -219,50 +223,67 @@ export const HistoryTimeline = memo(function HistoryTimeline({
   messages: HistoryMessageView[];
 }) {
   const entries = useMemo(() => groupHistory(messages), [messages]);
+  const [visible, setVisible] = useState(HISTORY_PAGE);
+  const anchor = useRef<{ element: Element; top: number } | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const hidden = Math.max(0, entries.length - visible);
+
+  useLayoutEffect(() => {
+    const saved = anchor.current;
+    anchor.current = null;
+    if (!saved?.element.isConnected) return;
+    const scroll = saved.element.closest('.transcript-scroll');
+    if (scroll) scroll.scrollTop += saved.element.getBoundingClientRect().top - saved.top;
+  }, [visible]);
+
+  const showEarlier = () => {
+    const element = list.current?.firstElementChild;
+    if (element) anchor.current = { element, top: element.getBoundingClientRect().top };
+    setVisible((count) => count + HISTORY_PAGE);
+  };
+
   return (
     <>
-      {entries.map((entry) => {
-        if (entry.kind === 'user') {
-          return <UserMessage key={entry.key} content={entry.content} />;
-        }
-        if (entry.kind === 'assistant') {
-          return (
-            <AssistantBlock
-              key={entry.key}
-              text={entry.content}
-              streaming={false}
-              testId="assistant-message"
-            />
-          );
-        }
-        if (entry.kind === 'tool') {
-          const message = entry.message;
-          return (
-            <div className="timeline" key={entry.key}>
-              <ToolCallCard
-                tool={{
-                  callId: message.tool_call_id ?? entry.key,
-                  name: message.tool_name ?? 'tool result',
-                  input: message.tool_input ? JSON.stringify(message.tool_input, null, 2) : '',
-                  output: message.content ?? '',
-                  error: null,
-                  status: 'done',
-                }}
-              />
-            </div>
-          );
-        }
-        return (
-          <article className="chat-message" key={entry.key}>
-            <div className="chat-meta">
-              <span>{entry.role}</span>
-              <CopyButton value={entry.content} label="Copy message" icon />
-            </div>
-            <div className="chat-text preserve">{entry.content}</div>
-          </article>
-        );
-      })}
+      {hidden > 0 ? <button type="button" className="history-more" onClick={showEarlier}>Show earlier messages</button> : null}
+      <div ref={list} className="history-items">
+        {entries.slice(hidden).map((entry) => (
+          <div className="history-item" key={entry.key}>
+            <HistoryEntry entry={entry} />
+          </div>
+        ))}
+      </div>
     </>
+  );
+});
+
+const HistoryEntry = memo(function HistoryEntry({ entry }: { entry: ReturnType<typeof groupHistory>[number] }) {
+  if (entry.kind === 'user') return <UserMessage content={entry.content} />;
+  if (entry.kind === 'assistant') {
+    return <AssistantBlock text={entry.content} streaming={false} testId="assistant-message" />;
+  }
+  if (entry.kind === 'tool') {
+    const message = entry.message;
+    return (
+      <div className="timeline">
+        <ToolCallCard tool={{
+          callId: message.tool_call_id ?? entry.key,
+          name: message.tool_name ?? 'tool result',
+          input: message.tool_input ? JSON.stringify(message.tool_input) : '',
+          output: message.content ?? '',
+          error: null,
+          status: 'done',
+        }} />
+      </div>
+    );
+  }
+  return (
+    <article className="chat-message">
+      <div className="chat-meta">
+        <span>{entry.role}</span>
+        <CopyButton value={entry.content} label="Copy message" icon />
+      </div>
+      <PagedText className="chat-text" text={entry.content} />
+    </article>
   );
 });
 
@@ -273,20 +294,9 @@ export function LiveTimeline({
   live: LiveState;
   visibility: 'compact' | 'hidden' | 'expanded';
 }) {
-  // TimelineJournal resets itself when the observed turn key changes, so the
-  // instance can live for the component's lifetime.
-  const journal = useMemo(() => new TimelineJournal(), []);
-  // Re-derives only when the live state object changes; idempotent for repeats.
-  const items: TimelineItem[] = useMemo(
-    () =>
-      journal.observe({
-        turnId: live.turnId,
-        finishedTurnId: live.finishedTurnId,
-        assistants: live.assistants,
-        reasoning: live.reasoning,
-        tools: live.tools,
-      }),
-    [journal, live],
+  const items = useMemo(
+    () => orderedTimeline(live.assistants, live.reasoning, live.tools),
+    [live.assistants, live.reasoning, live.tools],
   );
 
   if (!items.length) return null;
@@ -297,8 +307,8 @@ export function LiveTimeline({
           return (
             <ReasoningSegment
               key={item.id}
-              text={item.text}
-              done={item.done}
+              text={item.block.text}
+              done={item.block.done}
               visibility={visibility}
             />
           );
@@ -306,11 +316,12 @@ export function LiveTimeline({
         if (item.kind === 'tool') {
           return <ToolCallCard key={item.id} tool={item.tool} />;
         }
+        if (!item.block.text) return null;
         return (
           <AssistantBlock
             key={item.id}
-            text={item.text}
-            streaming={!item.done}
+            text={item.block.text}
+            streaming={!item.block.done}
             testId="live-assistant-message"
           />
         );

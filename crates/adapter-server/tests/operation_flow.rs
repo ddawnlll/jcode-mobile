@@ -84,6 +84,7 @@ impl Backend for FakeBackend {
             archived: false,
             parent_session_id: None,
             agent_label: None,
+            swarm_status: None,
         };
         self.sessions.lock().unwrap().push(session.clone());
         Ok(session)
@@ -691,7 +692,10 @@ async fn handshake_negotiates_the_highest_common_version() {
         .await,
     );
     assert_eq!(hello.negotiated_version, 3);
-    assert_eq!(hello.max_protocol_version, 3);
+    assert_eq!(
+        hello.max_protocol_version,
+        adapter_protocol::PROTOCOL_VERSION
+    );
     assert_eq!(h.conn.protocol_version(), 3);
 
     // A v2 client negotiates v2 and is not dropped.
@@ -815,6 +819,7 @@ async fn journal_replay_survives_adapter_restart_and_reports_gaps() {
             archived: false,
             parent_session_id: None,
             agent_label: None,
+            swarm_status: None,
         });
     let replay: EventsSubscribePayload = response_payload(
         &call(
@@ -975,7 +980,10 @@ async fn diagnostics_report_real_adapter_state() {
     );
     let diagnostics: DiagnosticsSnapshot =
         response_payload(&call(&h, "diagnostics.snapshot", json!({})).await);
-    assert_eq!(diagnostics.protocol_version, 3);
+    assert_eq!(
+        diagnostics.protocol_version,
+        adapter_protocol::PROTOCOL_VERSION
+    );
     assert_eq!(diagnostics.min_protocol_version, 2);
     assert_eq!(diagnostics.epoch, "epoch-test");
     assert_eq!(diagnostics.journal.events, 1);

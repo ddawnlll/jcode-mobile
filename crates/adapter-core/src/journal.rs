@@ -15,6 +15,7 @@ use crate::store::Store;
 
 /// Hard cap on one replay response. The client pages with `has_more`.
 pub const MAX_REPLAY_LIMIT: u32 = 2_000;
+const MAX_REPLAY_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct JournalRecord {
@@ -57,6 +58,20 @@ pub struct SessionIndexStats {
 
 fn corrupt(row: usize, error: impl std::fmt::Display) -> CoreError {
     CoreError::Message(format!("corrupt journal row {row}: {error}"))
+}
+
+fn journal_bounds(conn: &rusqlite::Connection, session_id: &str) -> CoreResult<(u64, u64)> {
+    let (floor, latest): (Option<i64>, Option<i64>) = conn.query_row(
+        "SELECT
+            (SELECT seq FROM event_journal WHERE session_id = ?1 ORDER BY seq LIMIT 1),
+            (SELECT seq FROM event_journal WHERE session_id = ?1 ORDER BY seq DESC LIMIT 1)",
+        params![session_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    Ok((
+        floor.unwrap_or(0).max(0) as u64,
+        latest.unwrap_or(0).max(0) as u64,
+    ))
 }
 
 impl Store {
@@ -121,15 +136,7 @@ impl Store {
 
     pub fn journal_bounds(&self, session_id: &str) -> CoreResult<(u64, u64)> {
         let conn = self.conn.lock().expect("store lock");
-        let (floor, latest): (Option<i64>, Option<i64>) = conn.query_row(
-            "SELECT MIN(seq), MAX(seq) FROM event_journal WHERE session_id = ?1",
-            params![session_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
-        Ok((
-            floor.unwrap_or(0).max(0) as u64,
-            latest.unwrap_or(0).max(0) as u64,
-        ))
+        journal_bounds(&conn, session_id)
     }
 
     pub fn replay_events(
@@ -138,15 +145,16 @@ impl Store {
         after_seq: u64,
         limit: u32,
     ) -> CoreResult<JournalReplay> {
-        let (floor_seq, latest_seq) = self.journal_bounds(session_id)?;
         let limit = limit.clamp(1, MAX_REPLAY_LIMIT);
         let conn = self.conn.lock().expect("store lock");
+        let (floor_seq, latest_seq) = journal_bounds(&conn, session_id)?;
         let mut stmt = conn.prepare(
             "SELECT seq, epoch, turn_id, operation_id, event_json, observed_at_ms
              FROM event_journal WHERE session_id = ?1 AND seq > ?2
              ORDER BY seq ASC LIMIT ?3",
         )?;
-        let rows = stmt.query_map(params![session_id, after_seq as i64, limit], |row| {
+        let sql_cursor = i64::try_from(after_seq).unwrap_or(i64::MAX);
+        let rows = stmt.query_map(params![session_id, sql_cursor, limit], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
                 row.get::<_, String>(1)?,
@@ -157,8 +165,15 @@ impl Store {
             ))
         })?;
         let mut events = Vec::new();
+        let mut bytes = 0;
         for (index, row) in rows.enumerate() {
             let (seq, epoch, turn_id, operation_id, event_json, observed_at_ms) = row?;
+            // A single large event still fits on its own page. Subsequent
+            // events wait for the next cursor instead of inflating this page.
+            if !events.is_empty() && bytes + event_json.len() > MAX_REPLAY_BYTES {
+                break;
+            }
+            bytes += event_json.len();
             let event: SessionEvent =
                 serde_json::from_str(&event_json).map_err(|error| corrupt(index, error))?;
             events.push(JournalRecord {
@@ -174,11 +189,7 @@ impl Store {
         // A gap exists only when the client asked to resume from a real point
         // and the retained floor starts later than that point's successor.
         let gap = after_seq > 0 && floor_seq > 0 && after_seq.saturating_add(1) < floor_seq;
-        let has_more = events.len() == limit as usize
-            && events
-                .last()
-                .map(|event| event.seq < latest_seq)
-                .unwrap_or(false);
+        let has_more = events.last().is_some_and(|event| event.seq < latest_seq);
         Ok(JournalReplay {
             events,
             floor_seq,
@@ -469,6 +480,7 @@ mod tests {
             archived: false,
             parent_session_id: None,
             agent_label: None,
+            swarm_status: None,
             favorite: false,
         }
     }

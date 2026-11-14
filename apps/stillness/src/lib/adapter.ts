@@ -5,11 +5,14 @@ import {
   type PairRedeemResponse,
   type ServerHelloPayload,
   type ServerInfo,
+  BYTE_PACKAGE_CHUNK,
+  BYTE_PACKAGE_LIMIT,
+  JOURNAL_WS_SUBPROTOCOL,
   LEGACY_WS_SUBPROTOCOL,
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   WS_SUBPROTOCOL,
-} from './protocol';
+} from './protocol.ts';
 
 export class AdapterRequestError extends Error {
   readonly code: string;
@@ -134,6 +137,7 @@ export class AdapterClient {
   private openPromise: Promise<void> | null = null;
   private openResolve: (() => void) | null = null;
   private openReject: ((reason: unknown) => void) | null = null;
+  private bytePackage: { buffer: Uint8Array; used: number } | null = null;
   status: ConnectionStatus = 'offline';
   server: ServerInfo | null = null;
   /** Wire version selected during the last successful hello. */
@@ -172,10 +176,10 @@ export class AdapterClient {
   async connect(): Promise<ServerHelloPayload> {
     const hello = {
       client_name: 'stillness-tauri',
-      client_version: '0.4.0',
+      client_version: '0.5.0',
       min_version: MIN_PROTOCOL_VERSION,
       max_version: PROTOCOL_VERSION,
-      supports: [WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL],
+      supports: [WS_SUBPROTOCOL, JOURNAL_WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL],
     };
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       return this.request<ServerHelloPayload>('client.hello', hello, 15_000, {}, MIN_PROTOCOL_VERSION);
@@ -213,6 +217,7 @@ export class AdapterClient {
     try {
       socket = new WebSocket(this.socketUrl(), [
         WS_SUBPROTOCOL,
+        JOURNAL_WS_SUBPROTOCOL,
         LEGACY_WS_SUBPROTOCOL,
         `token.${this.token}`,
       ]);
@@ -221,6 +226,8 @@ export class AdapterClient {
       return;
     }
     this.socket = socket;
+    socket.binaryType = 'arraybuffer';
+    this.bytePackage = null;
     socket.onopen = () => {
       this.status = 'connected';
       this.reconnectAttempt = 0;
@@ -229,11 +236,15 @@ export class AdapterClient {
       this.openReject = null;
       this.emit('connected', null);
     };
-    socket.onmessage = (message) => this.handleFrame(message.data);
+    socket.onmessage = (message) => {
+      if (this.socket === socket) this.handleFrame(message.data);
+    };
     socket.onerror = () => {
       // `onclose` is the reliable signal.
     };
     socket.onclose = (event) => {
+      if (this.socket !== socket && this.socket !== null) return;
+      this.bytePackage = null;
       this.status = 'offline';
       const rejection = new Error(
         event.code === 1008 ? 'This device was revoked by the server.' : `Connection closed (${event.code}).`,
@@ -275,13 +286,53 @@ export class AdapterClient {
   }
 
   private handleFrame(raw: unknown) {
-    if (typeof raw !== 'string') return;
+    const packet = this.bytePackage;
+    if (packet) {
+      const size = raw instanceof ArrayBuffer ? raw.byteLength : 0;
+      if (!size || size > BYTE_PACKAGE_CHUNK || packet.used + size > packet.buffer.length) {
+        this.failBytePackage();
+        return;
+      }
+      packet.buffer.set(new Uint8Array(raw as ArrayBuffer), packet.used);
+      packet.used += size;
+      if (packet.used < packet.buffer.length) return;
+      this.bytePackage = null;
+      try {
+        this.receive(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(packet.buffer)) as Envelope);
+      } catch {
+        this.failBytePackage();
+      }
+      return;
+    }
+    if (typeof raw !== 'string') {
+      if (this.negotiatedVersion >= 4) this.failBytePackage();
+      return;
+    }
     let envelope: Envelope;
     try {
       envelope = JSON.parse(raw) as Envelope;
     } catch {
       return;
     }
+    if (envelope.type === 'transport.bytes' && this.negotiatedVersion >= 4) {
+      const length = (envelope.payload as { length?: number } | null)?.length;
+      if (envelope.kind !== 'event' || envelope.v !== 4 || typeof length !== 'number'
+        || !Number.isSafeInteger(length) || length <= BYTE_PACKAGE_CHUNK || length > BYTE_PACKAGE_LIMIT) {
+        this.failBytePackage();
+        return;
+      }
+      this.bytePackage = { buffer: new Uint8Array(length), used: 0 };
+      return;
+    }
+    this.receive(envelope);
+  }
+
+  private failBytePackage() {
+    this.bytePackage = null;
+    this.socket?.close(4002, 'Invalid byte package');
+  }
+
+  private receive(envelope: Envelope) {
     if (envelope.kind === 'response') {
       const pending = envelope.reply_to ? this.pending.get(envelope.reply_to) : undefined;
       if (!pending) {
@@ -344,6 +395,7 @@ export class AdapterClient {
   }
 
   close() {
+    this.bytePackage = null;
     this.manuallyClosed = true;
     if (this.reconnectTimer != null) {
       window.clearTimeout(this.reconnectTimer);

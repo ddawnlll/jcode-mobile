@@ -4,25 +4,28 @@ use std::sync::{Arc, Mutex};
 
 use adapter_core::{CoreError, classify_backend_error};
 use adapter_protocol::{
-    DeviceInfo, Envelope, ErrorCode, ErrorPayload, LEGACY_WS_SUBPROTOCOL, MIN_PROTOCOL_VERSION,
-    PairRedeemRequest, PairRedeemResponse, WS_SUBPROTOCOL,
+    BYTE_PACKAGE_CHUNK, BYTE_PACKAGE_LIMIT, DeviceInfo, Envelope, ErrorCode, ErrorPayload,
+    JOURNAL_WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL, MIN_PROTOCOL_VERSION, PairRedeemRequest,
+    PairRedeemResponse, WS_SUBPROTOCOL,
 };
+use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use tokio::net::TcpListener;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{Semaphore, broadcast, mpsc};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 use tracing::{info, warn};
 
 use crate::dispatch::handle_request;
 use crate::events::{
-    connection_envelope, operation_envelope, session_envelope, sessions_changed_envelope,
+    connection_envelope, encode_session, operation_envelope, session_update,
+    sessions_changed_envelope,
 };
 use crate::hub::Broadcast;
 use crate::state::{AppState, ConnContext, Outbound};
@@ -187,8 +190,12 @@ async fn ws_handler(
     };
     // A v2 client offers `jcode.mobile.v2` and keeps working: the connection
     // negotiates v2 and every outbound frame is normalized to that version.
-    ws.protocols([WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL])
-        .on_upgrade(move |socket| connection_loop(state, device, socket))
+    ws.protocols([
+        WS_SUBPROTOCOL,
+        JOURNAL_WS_SUBPROTOCOL,
+        LEGACY_WS_SUBPROTOCOL,
+    ])
+    .on_upgrade(move |socket| connection_loop(state, device, socket))
 }
 
 fn origin_header_allowed(state: &AppState, headers: &HeaderMap) -> bool {
@@ -249,28 +256,19 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
         .active_connections
         .fetch_add(1, Ordering::Relaxed);
     let (mut sink, mut stream) = socket.split();
-    let (out_tx, mut out_rx) = mpsc::channel::<Outbound>(state.config.event_queue.max(64));
-    // Until `client.hello` names its range, use the lowest version the adapter
-    // speaks so no frame can claim a version the client may not understand.
+    let (out_tx, mut out_rx) = mpsc::channel::<Outbound>(64);
     let protocol_version = Arc::new(AtomicU32::new(MIN_PROTOCOL_VERSION));
     let writer_version = Arc::clone(&protocol_version);
     let writer_state = Arc::clone(&state);
-    let writer = tokio::spawn(async move {
+    let mut writer = tokio::spawn(async move {
         while let Some(outbound) = out_rx.recv().await {
-            match outbound {
+            let version = writer_version.load(Ordering::Relaxed);
+            let encoded = match outbound {
                 Outbound::Envelope(mut envelope) => {
-                    envelope.v = writer_version.load(Ordering::Relaxed);
-                    let Ok(text) = serde_json::to_string(&envelope) else {
-                        continue;
-                    };
-                    writer_state
-                        .metrics
-                        .frames_out
-                        .fetch_add(1, Ordering::Relaxed);
-                    if sink.send(Message::Text(text.into())).await.is_err() {
-                        break;
-                    }
+                    envelope.v = version;
+                    serde_json::to_string(&envelope)
                 }
+                Outbound::Session(event) => encode_session(&writer_state, &event, version),
                 Outbound::Close(code, reason) => {
                     let _ = sink
                         .send(Message::Close(Some(CloseFrame {
@@ -280,6 +278,19 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
                         .await;
                     break;
                 }
+            };
+            let Ok(encoded) = encoded else { break };
+            writer_state
+                .metrics
+                .frames_out
+                .fetch_add(1, Ordering::Relaxed);
+            let sent = tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                send_encoded(&mut sink, version, encoded),
+            )
+            .await;
+            if !matches!(sent, Ok(Ok(()))) {
+                break;
             }
         }
     });
@@ -291,20 +302,31 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
     };
     let mut broadcast_rx = state.hub.subscribe();
     let mut revocation_rx = state.revocation.subscribe();
-    let mut gap_announced = false;
+    let request_slots = Arc::new(Semaphore::new(16));
+    let mut closing = false;
 
     loop {
         tokio::select! {
+            _ = &mut writer => break,
             inbound = stream.next() => {
                 match inbound {
                     Some(Ok(Message::Text(text))) => {
                         state.metrics.frames_in.fetch_add(1, Ordering::Relaxed);
                         match serde_json::from_str::<Envelope>(text.as_str()) {
                             Ok(envelope) => {
+                                let Ok(permit) = Arc::clone(&request_slots).try_acquire_owned() else {
+                                    let response = error_envelope(
+                                        &envelope.id,
+                                        &CoreError::BackendUnavailable("too many pending mobile requests".into()),
+                                    );
+                                    if out_tx.try_send(Outbound::Envelope(response)).is_err() { break; }
+                                    continue;
+                                };
                                 let state_for_task = Arc::clone(&state);
                                 let conn_for_task = conn.clone();
                                 let outbound = out_tx.clone();
                                 tokio::spawn(async move {
+                                    let _permit = permit;
                                     let mut response = handle_request(
                                         state_for_task,
                                         conn_for_task.clone(),
@@ -321,7 +343,7 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
                                     &CoreError::InvalidInput(format!("invalid JSON envelope: {error}")),
                                 );
                                 response.v = conn.protocol_version();
-                                let _ = out_tx.send(Outbound::Envelope(response)).await;
+                                if out_tx.try_send(Outbound::Envelope(response)).is_err() { break; }
                             }
                         }
                     }
@@ -331,7 +353,7 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
                             &CoreError::InvalidInput("binary frames are not supported".into()),
                         );
                         response.v = conn.protocol_version();
-                        let _ = out_tx.send(Outbound::Envelope(response)).await;
+                        if out_tx.try_send(Outbound::Envelope(response)).is_err() { break; }
                     }
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(Message::Ping(_))) | Some(Ok(Message::Pong(_))) => {}
@@ -342,67 +364,49 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
                 }
             }
             event = broadcast_rx.recv() => {
-                match event {
-                    Ok(Broadcast::Session(event)) => {
-                        if conn.is_subscribed(&event.session_id) {
-                            let envelope = session_envelope(&state, &event);
-                            if out_tx.send(Outbound::Envelope(envelope)).await.is_err() {
-                                break;
-                            }
-                        }
+                let outbound = match event {
+                    Ok(Broadcast::Session(event)) if conn.is_subscribed(&event.session_id) => {
+                        Outbound::Session(event)
                     }
-                    Ok(Broadcast::Operation(operation)) => {
-                        if conn.is_subscribed(&operation.session_id) {
-                            let envelope = operation_envelope(&state, &operation);
-                            if out_tx.send(Outbound::Envelope(envelope)).await.is_err() {
-                                break;
-                            }
-                        }
+                    Ok(Broadcast::Operation(operation)) if conn.is_subscribed(&operation.session_id) => {
+                        Outbound::Envelope(operation_envelope(&state, &operation))
+                    }
+                    Ok(Broadcast::Runtime { session_id, runtime, at_ms })
+                        if conn.protocol_version() >= 4 && conn.is_subscribed(&session_id) =>
+                    {
+                        Outbound::Envelope(session_update(&state, session_id, "session.runtime",
+                            serde_json::json!({"runtime": runtime.as_ref(), "observed_at_ms": at_ms})))
+                    }
+                    Ok(Broadcast::Swarm { session_id, agents })
+                        if conn.protocol_version() >= 4 && conn.is_subscribed(&session_id) =>
+                    {
+                        Outbound::Envelope(session_update(&state, session_id, "session.swarm",
+                            serde_json::json!({"agents": agents.as_ref()})))
                     }
                     Ok(Broadcast::SessionsChanged) => {
-                        let envelope = sessions_changed_envelope(&state);
-                        if out_tx.send(Outbound::Envelope(envelope)).await.is_err() {
-                            break;
-                        }
+                        Outbound::Envelope(sessions_changed_envelope(&state))
                     }
                     Ok(Broadcast::Connection { connected, message }) => {
-                        let envelope = connection_envelope(&state, connected, message);
-                        if out_tx.send(Outbound::Envelope(envelope)).await.is_err() {
-                            break;
-                        }
+                        Outbound::Envelope(connection_envelope(&state, connected, message))
                     }
-                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                        if !gap_announced {
-                            gap_announced = true;
-                            state.metrics.gaps_announced.fetch_add(1, Ordering::Relaxed);
-                            let sessions: Vec<String> = conn
-                                .subscribed
-                                .lock()
-                                .expect("subscribed")
-                                .iter()
-                                .cloned()
-                                .collect();
-                            for session_id in sessions {
-                                state.hub.publish(
-                                    &session_id,
-                                    None,
-                                    None,
-                                    adapter_protocol::SessionEvent::NeedsReconcile {
-                                        reason: format!("stream_gap:{skipped}"),
-                                    },
-                                );
-                            }
-                        }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // Only this socket fell behind. Reconnect and replay from
+                        // its cursor without polluting the shared journal.
+                        state.metrics.gaps_announced.fetch_add(1, Ordering::Relaxed);
+                        break;
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
+                    _ => continue,
+                };
+                if out_tx.try_send(outbound).is_err() {
+                    state.metrics.gaps_announced.fetch_add(1, Ordering::Relaxed);
+                    break;
                 }
             }
             revoked = revocation_rx.recv() => {
                 match revoked {
                     Ok(device_id) if device_id == device.device_id => {
-                        let _ = out_tx
-                            .send(Outbound::Close(1008, "device revoked".into()))
-                            .await;
+                        closing = out_tx.try_send(Outbound::Close(1008, "device revoked".into())).is_ok();
                         break;
                     }
                     _ => {}
@@ -424,7 +428,44 @@ async fn connection_loop(state: Arc<AppState>, device: DeviceInfo, socket: WebSo
     }
     drop(conn);
     drop(out_tx);
+    if closing {
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(250), &mut writer).await;
+    }
     writer.abort();
+}
+
+/// A descriptor and its raw byte chunks are written by the same socket
+/// writer. Bytes slices share the JSON allocation and may split a UTF-8 code
+/// point. The client decodes only after the declared size has arrived.
+async fn send_encoded<S>(sink: &mut S, version: u32, text: String) -> Result<(), S::Error>
+where
+    S: Sink<Message> + Unpin,
+{
+    if version < 4 || text.len() <= BYTE_PACKAGE_CHUNK {
+        return sink.send(Message::Text(text.into())).await;
+    }
+    if text.len() > BYTE_PACKAGE_LIMIT {
+        return sink
+            .send(Message::Close(Some(CloseFrame {
+                code: 1009,
+                reason: "the adapter response is too large".into(),
+            })))
+            .await;
+    }
+    let mut bytes = Bytes::from(text.into_bytes());
+    sink.send(Message::Text(
+        format!(
+            r#"{{"v":4,"kind":"event","type":"transport.bytes","payload":{{"length":{}}}}}"#,
+            bytes.len()
+        )
+        .into(),
+    ))
+    .await?;
+    while !bytes.is_empty() {
+        let chunk = bytes.split_to(bytes.len().min(BYTE_PACKAGE_CHUNK));
+        sink.send(Message::Binary(chunk)).await?;
+    }
+    Ok(())
 }
 
 pub fn error_envelope(reply_to: &str, error: &CoreError) -> Envelope {
@@ -489,6 +530,45 @@ pub async fn serve(
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
+
+    #[tokio::test]
+    async fn byte_packages_preserve_utf8_and_keep_legacy_text_frames() {
+        let text = format!("{}İstanbul 🪶", "a".repeat(BYTE_PACKAGE_CHUNK - 1));
+        for version in [3, 4] {
+            let mut frames = Vec::new();
+            let mut sink = Box::pin(futures_util::sink::unfold(
+                &mut frames,
+                |frames, frame| async move {
+                    frames.push(frame);
+                    Ok::<_, std::convert::Infallible>(frames)
+                },
+            ));
+            send_encoded(&mut sink, version, text.clone())
+                .await
+                .unwrap();
+            drop(sink);
+            if version == 3 {
+                assert_eq!(frames, [Message::Text(text.clone().into())]);
+            } else {
+                let Message::Text(descriptor) = &frames[0] else {
+                    panic!("missing descriptor")
+                };
+                let descriptor: serde_json::Value =
+                    serde_json::from_str(descriptor.as_str()).unwrap();
+                assert_eq!(descriptor["type"], "transport.bytes");
+                assert_eq!(descriptor["payload"]["length"], text.len());
+                let mut bytes = Vec::new();
+                for frame in &frames[1..] {
+                    let Message::Binary(chunk) = frame else {
+                        panic!("expected binary chunk")
+                    };
+                    assert!(chunk.len() <= BYTE_PACKAGE_CHUNK);
+                    bytes.extend_from_slice(chunk);
+                }
+                assert_eq!(String::from_utf8(bytes).unwrap(), text);
+            }
+        }
+    }
 
     #[test]
     fn loopback_origins_are_allowed_and_remote_origins_are_not() {

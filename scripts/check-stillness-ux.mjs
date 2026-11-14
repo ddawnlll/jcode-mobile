@@ -21,7 +21,8 @@ import {
   providerChips,
   routeKey,
 } from '../apps/stillness/src/lib/modelSearch.ts';
-import { TimelineJournal } from '../apps/stillness/src/lib/timelineJournal.ts';
+import { AdapterClient } from '../apps/stillness/src/lib/adapter.ts';
+import { orderedTimeline } from '../apps/stillness/src/lib/timelineJournal.ts';
 import { confirmedSessionTitle } from '../apps/stillness/src/lib/format.ts';
 import {
   favoriteView,
@@ -121,50 +122,42 @@ check('model routes filter, group, and disambiguate', () => {
   ]);
 });
 
-check('timeline keeps observed order across reasoning and tools', () => {
-  const journal = new TimelineJournal();
-  const base = {
-    turnId: 't1',
-    finishedTurnId: null,
-    assistants: [],
-    reasoning: '',
-    tools: [],
-  };
-  let items = journal.observe({ ...base, reasoning: 'First idea' });
-  assert.deepEqual(items.map((item) => item.kind), ['reasoning']);
-
-  items = journal.observe({ ...base, reasoning: 'First idea, extended' });
-  assert.deepEqual(items.map((item) => item.kind), ['reasoning']);
-
-  items = journal.observe({
-    ...base,
-    reasoning: 'First idea, extended',
-    tools: [
-      { callId: 'c1', name: 'bash', input: '{"command":"ls"}', output: '', error: null, status: 'started' },
+check('timeline keeps wire order across reasoning, tools and assistant updates in one frame', () => {
+  const items = orderedTimeline(
+    [{ id: 'message', seq: 6, text: 'Result', done: false }],
+    [
+      { id: 'r1', seq: 1, text: 'First idea', done: true },
+      { id: 'r2', seq: 5, text: 'After the tool', done: true },
     ],
-  });
-  assert.deepEqual(items.map((item) => item.kind), ['reasoning', 'tool']);
+    [{ callId: 'c1', seq: 3, name: 'bash', input: '{}', output: 'a.ts', error: null, status: 'done' }],
+  );
+  assert.deepEqual(items.map((item) => item.kind), ['reasoning', 'tool', 'reasoning', 'assistant']);
+  assert.equal(items[2].block.text, 'After the tool');
+});
 
-  items = journal.observe({
-    ...base,
-    reasoning: 'First idea, extended. Now inspect.',
-    tools: [
-      { callId: 'c1', name: 'bash', input: '{"command":"ls"}', output: 'a.ts', error: null, status: 'done' },
-    ],
-  });
-  assert.deepEqual(items.map((item) => item.kind), ['reasoning', 'tool', 'reasoning']);
+check('v4 byte packages decode UTF-8 across frames and publish exactly once', () => {
+  const client = new AdapterClient('http://127.0.0.1', 'fixture');
+  const received = [];
+  client.on('session.swarm', (frame) => received.push(frame));
+  const frame = { v: 4, kind: 'event', type: 'session.swarm', payload: { label: '' } };
+  const headerLength = JSON.stringify(frame).length - 3;
+  frame.payload.label = 'a'.repeat(65_535 - headerLength) + 'İstanbul 🪶';
+  const bytes = new TextEncoder().encode(JSON.stringify(frame));
+  assert.equal(bytes[65_535], 0xc4, 'the UTF-8 code point must span two frames');
+  client.handleFrame(JSON.stringify({
+    v: 4, kind: 'event', type: 'transport.bytes', payload: { length: bytes.length },
+  }));
+  client.handleFrame(bytes.slice(0, 65_536).buffer);
+  assert.deepEqual(received, []);
+  client.handleFrame(bytes.slice(65_536).buffer);
+  assert.deepEqual(received, [frame]);
 
-  // A finished turn keeps the same key and therefore the order.
-  items = journal.observe({
-    turnId: null,
-    finishedTurnId: 't1',
-    assistants: [],
-    reasoning: 'First idea, extended. Now inspect.',
-    tools: [
-      { callId: 'c1', name: 'bash', input: '{"command":"ls"}', output: 'a.ts', error: null, status: 'done' },
-    ],
-  });
-  assert.deepEqual(items.map((item) => item.kind), ['reasoning', 'tool', 'reasoning']);
+  let closeCode;
+  client.socket = { close(code) { closeCode = code; } };
+  client.handleFrame(JSON.stringify({
+    v: 4, kind: 'event', type: 'transport.bytes', payload: { length: 67_108_865 },
+  }));
+  assert.equal(closeCode, 4002);
 });
 
 check('confirmed title prefers the snapshot and never merges sources', () => {

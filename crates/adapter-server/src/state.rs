@@ -448,6 +448,7 @@ fn truncate(value: &str, limit: usize) -> String {
 
 pub enum Outbound {
     Envelope(adapter_protocol::Envelope),
+    Session(Arc<crate::hub::HubEvent>),
     Close(u16, String),
 }
 
@@ -482,11 +483,11 @@ impl ConnContext {
             .insert(session_id.to_string())
     }
 
-    pub fn unsubscribe(&self, session_id: &str) {
+    pub fn unsubscribe(&self, session_id: &str) -> bool {
         self.subscribed
             .lock()
             .expect("subscribed")
-            .remove(session_id);
+            .remove(session_id)
     }
 
     pub fn protocol_version(&self) -> u32 {

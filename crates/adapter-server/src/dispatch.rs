@@ -261,6 +261,19 @@ pub async fn handle_request(
         "sessions.create" => handle_create_session(state, request).await,
         "sessions.subscribe" => handle_subscribe(state, conn, request).await,
         "sessions.snapshot" => handle_snapshot(state, conn, request).await,
+        "sessions.unsubscribe" if conn.protocol_version() >= 4 => {
+            let payload: SessionRef = match decode(&request.payload) {
+                Ok(value) => value,
+                Err(error) => return error_response(&state, &request, error),
+            };
+            if conn.unsubscribe(&payload.session_id) {
+                state
+                    .metrics
+                    .subscriptions
+                    .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            ok(&state, &request, "sessions.unsubscribe", json!({}))
+        }
         "sessions.peek" => handle_peek(state, request).await,
         "sessions.history" => handle_history(state, request).await,
         "sessions.rename" => handle_rename(state, request).await,
@@ -500,16 +513,13 @@ async fn build_snapshot(
     let seq_before = state.hub.current_seq(session_id);
     let backend = std::sync::Arc::clone(&state.backend);
     let id = session_id.to_string();
-    let (session, messages, runtime, plan) = blocking(move || {
-        let sessions = backend.list_sessions()?;
-        let session = sessions
-            .into_iter()
-            .find(|session| session.session_id == id)
-            .ok_or_else(|| CoreError::NotFound(format!("session {id}")))?;
+    let (session, messages, runtime, plan, agents) = blocking(move || {
+        let session = backend.attach_session(&id)?;
         let messages = backend.history(&id, Some(tail.clamp(1, 500)))?;
         let runtime = backend.runtime(&id).ok();
         let plan = backend.plan(&id).ok().flatten();
-        Ok((session, messages, runtime, plan))
+        let agents = backend.swarm_agents(&id);
+        Ok((session, messages, runtime, plan, agents))
     })
     .await?;
     let summary = state.summary(session)?;
@@ -557,6 +567,7 @@ async fn build_snapshot(
         session: summary,
         messages,
         runtime: runtime.map(|runtime| runtime.view(now_ms())),
+        agents,
         plan,
         context,
         active_turn: state
@@ -592,9 +603,12 @@ async fn handle_subscribe(
             .subscriptions
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    let (_, gap) = state
-        .hub
-        .replay_after(&payload.session_id, payload.after_seq.unwrap_or(0));
+    let after_seq = payload.after_seq.unwrap_or(0);
+    let gap = after_seq > 0
+        && state
+            .store
+            .journal_bounds(&payload.session_id)
+            .is_ok_and(|(floor, _)| after_seq.saturating_add(1) < floor);
     match build_snapshot(&state, &payload.session_id, payload.tail).await {
         Ok(mut snapshot) => {
             if gap {
@@ -651,9 +665,17 @@ async fn handle_events_subscribe(
         .as_deref()
         .map(|observed| observed != epoch)
         .unwrap_or(false);
-    let replay = match state
-        .store
-        .replay_events(&payload.session_id, after_seq, payload.limit)
+    let store = std::sync::Arc::clone(&state.store);
+    let backend = std::sync::Arc::clone(&state.backend);
+    let id = payload.session_id.clone();
+    let limit = payload.limit;
+    let replay = match blocking(move || {
+        // A cursor can be valid after a native link was evicted. Reattach to
+        // future events even when the durable replay is available offline.
+        let _ = backend.attach_session(&id);
+        store.replay_events(&id, after_seq, limit)
+    })
+    .await
     {
         Ok(replay) => replay,
         Err(error) => return error_response(&state, &request, error),
@@ -667,15 +689,7 @@ async fn handle_events_subscribe(
     let need_snapshot = payload.include_snapshot || resync_required;
     let snapshot = if need_snapshot {
         match build_snapshot(&state, &payload.session_id, payload.tail).await {
-            Ok(mut snapshot) => {
-                if resync_required {
-                    // A snapshot taken while the live stream moved is still
-                    // authoritative for what it contains, but the client must
-                    // treat it as a new base at `last_seq`.
-                    snapshot.stale = false;
-                }
-                Some(snapshot)
-            }
+            Ok(snapshot) => Some(snapshot),
             Err(error) => {
                 if replay.events.is_empty() && after_seq == 0 {
                     return error_response(&state, &request, error);
@@ -1438,29 +1452,34 @@ async fn handle_set_model(state: std::sync::Arc<AppState>, request: Envelope) ->
         Ok(runtime) => runtime,
         Err(error) => return error_response(&state, &request, error),
     };
-    let Some(route) = before
-        .routes
-        .iter()
-        .find(|route| route.model == payload.model)
-    else {
-        return error_response(
-            &state,
-            &request,
-            CoreError::InvalidInput(format!(
-                "model {} is not an advertised route",
-                payload.model
-            )),
-        );
-    };
-    if let Some(expected_provider) = payload.expected_provider.as_deref()
-        && !route.provider.eq_ignore_ascii_case(expected_provider)
-    {
+    let mut matches = before.routes.into_iter().filter(|route| {
+        route.model == payload.model
+            && payload
+                .expected_provider
+                .as_ref()
+                .is_none_or(|provider| route.provider.eq_ignore_ascii_case(provider))
+            && payload
+                .api_method
+                .as_ref()
+                .is_none_or(|method| &route.api_method == method)
+    });
+    let Some(route) = matches.next() else {
         return error_response(
             &state,
             &request,
             CoreError::Conflict(format!(
-                "route provider is {}, not {}",
-                route.provider, expected_provider
+                "JCode did not advertise the requested provider route for {}",
+                payload.model
+            )),
+        );
+    };
+    if matches.next().is_some() {
+        return error_response(
+            &state,
+            &request,
+            CoreError::Conflict(format!(
+                "Multiple routes match {}. Select a specific API method.",
+                payload.model
             )),
         );
     }
@@ -1473,8 +1492,7 @@ async fn handle_set_model(state: std::sync::Arc<AppState>, request: Envelope) ->
     }
     let backend = std::sync::Arc::clone(&state.backend);
     let session_id = payload.session_id.clone();
-    let model = payload.model.clone();
-    if let Err(error) = blocking(move || backend.set_model(&session_id, &model)).await {
+    if let Err(error) = blocking(move || backend.set_route(&session_id, &route)).await {
         return error_response(&state, &request, error);
     }
     let backend = std::sync::Arc::clone(&state.backend);
@@ -1512,12 +1530,11 @@ async fn handle_set_reasoning(state: std::sync::Arc<AppState>, request: Envelope
         Ok(value) => value,
         Err(error) => return error_response(&state, &request, error),
     };
-    const ALLOWED: &[&str] = &["minimal", "low", "medium", "high", "xhigh", "max"];
-    if !ALLOWED.contains(&payload.effort.as_str()) {
+    if !adapter_core::is_reasoning_effort(&payload.effort) {
         return error_response(
             &state,
             &request,
-            CoreError::InvalidInput(format!("unknown reasoning effort: {}", payload.effort)),
+            CoreError::InvalidInput("invalid reasoning effort".into()),
         );
     }
     let backend = std::sync::Arc::clone(&state.backend);
@@ -1532,16 +1549,6 @@ async fn handle_set_reasoning(state: std::sync::Arc<AppState>, request: Envelope
         Ok(runtime) => runtime,
         Err(error) => return error_response(&state, &request, error),
     };
-    if runtime.reasoning_effort.as_deref() != Some(payload.effort.as_str()) {
-        return error_response(
-            &state,
-            &request,
-            CoreError::Conflict(format!(
-                "daemon reports reasoning effort {:?} after selecting {}",
-                runtime.reasoning_effort, payload.effort
-            )),
-        );
-    }
     ok(
         &state,
         &request,
@@ -1790,12 +1797,15 @@ async fn handle_revoke(state: std::sync::Arc<AppState>, request: Envelope) -> En
 /// Handle backend events on a Tokio task. Every branch preserves the
 /// difference between "written to the socket" and "accepted by the agent".
 pub async fn handle_backend_event(state: std::sync::Arc<AppState>, event: BackendEvent) {
+    process_backend_event(state, event);
+}
+
+pub(crate) fn process_backend_event(state: std::sync::Arc<AppState>, event: BackendEvent) {
     match event {
         BackendEvent::Connected { info } => {
             tracing::info!(server = %info.server, "JCode link connected");
             state.note_jcode_contact();
             state.set_connection_message(None);
-            let _ = state.hub.subscribe().try_recv();
             crate::events::broadcast_connection(&state, true, "JCode harness connected".into());
             state.hub.sessions_changed();
         }
@@ -1834,31 +1844,44 @@ pub async fn handle_backend_event(state: std::sync::Arc<AppState>, event: Backen
                 }
             }
         }
-        BackendEvent::RequestError { code, message } => {
-            tracing::warn!(code = %code, message = %message, "JCode request error");
-            let operations = state.store.dispatching_operations().unwrap_or_default();
-            for operation in operations {
-                if let Ok(updated) = state.store.transition_operation(
+        BackendEvent::RequestError {
+            session_id,
+            code,
+            message,
+        } => {
+            tracing::warn!(session = %session_id, code = %code, message = %message, "JCode request error");
+            if let Ok(Some(operation)) = state.store.pending_operation_for_session(&session_id)
+                && let Ok(updated) = state.store.transition_operation(
                     &operation.operation_id,
                     OperationState::Dispatching,
                     OperationState::Unknown,
                     Some((&code, &message)),
                     None,
-                ) {
-                    state.hub.publish_operation(updated);
-                    state.hub.publish(
-                        &operation.session_id,
-                        operation.turn_id.clone(),
-                        Some(operation.operation_id.clone()),
-                        SessionEvent::AdapterError {
-                            code: code.clone(),
-                            message: message.clone(),
-                            retryable: false,
-                        },
-                    );
-                }
+                )
+            {
+                state.hub.publish_operation(updated);
+                state.hub.publish(
+                    &operation.session_id,
+                    operation.turn_id.clone(),
+                    Some(operation.operation_id),
+                    SessionEvent::AdapterError {
+                        code,
+                        message,
+                        retryable: false,
+                    },
+                );
             }
         }
+        BackendEvent::Runtime {
+            session_id,
+            runtime,
+        } => {
+            state.hub.publish_runtime(session_id, runtime);
+        }
+        BackendEvent::Swarm { session_id, agents } => {
+            state.hub.publish_swarm(session_id, agents);
+        }
+        BackendEvent::SessionsChanged => state.hub.sessions_changed(),
         BackendEvent::Session { session_id, event } => {
             handle_session_event(state, session_id, event);
         }
@@ -1882,7 +1905,12 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
             | SessionEvent::TurnDone { .. }
             | SessionEvent::TurnStopped { .. }
     );
-    if proves_turn && let Some(operation_id) = operation_id.as_deref() {
+    if proves_turn
+        && let Some(active) = active.as_ref()
+        && !active.observed
+        && active.status != "accepted"
+        && let Some(operation_id) = operation_id.as_deref()
+    {
         state.turns.mark_observed(&session_id, operation_id);
         if let Ok(Some(operation)) = state.store.operation(operation_id)
             && matches!(

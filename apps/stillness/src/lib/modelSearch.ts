@@ -80,15 +80,23 @@ export function disambiguation(route: ModelRouteView): string {
   return `${route.provider} · ${route.api_method} · ${route.available ? 'available' : 'unavailable'}`;
 }
 
-export function isCurrentRoute(
-  route: ModelRouteView,
+export function currentRouteKey(
+  routes: ModelRouteView[],
   runtime: RuntimeView | null | undefined,
-): boolean {
-  return Boolean(
-    runtime &&
-      runtime.model === route.model &&
-      (!runtime.provider || runtime.provider === route.provider),
-  );
+): string | null {
+  if (!runtime?.model || !runtime.provider) return null;
+  const provider = runtime.provider.toLowerCase();
+  const matching = routes.filter((route) => route.model === runtime.model
+    && route.provider.toLowerCase() === provider);
+  if (matching.length === 1) return routeKey(matching[0]);
+  const byAuth = matching.filter((route) => runtime.auth_method === 'oauth'
+    ? route.api_method.includes('oauth')
+    : runtime.auth_method === 'api_key' && route.api_method.includes('api-key'));
+  if (byAuth.length === 1) return routeKey(byAuth[0]);
+  const byAccount = runtime.account_label
+    ? byAuth.filter((route) => route.api_method.endsWith(`@${runtime.account_label}`))
+    : [];
+  return byAccount.length === 1 ? routeKey(byAccount[0]) : null;
 }
 
 /** Provider chips carry honest availability counts, never fake progress. */

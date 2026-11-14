@@ -7,7 +7,7 @@ import { controller, type AppState } from '../lib/controller';
 import {
   filterModelRoutes,
   groupByProvider,
-  isCurrentRoute,
+  currentRouteKey,
   modelRoutePool,
   providerChips,
   routeKey,
@@ -25,6 +25,7 @@ export function ModelPicker({ state }: { state: AppState }) {
     [state.models?.models, state.runtime],
   );
   const chips = useMemo(() => providerChips(pool), [pool]);
+  const activeRoute = useMemo(() => currentRouteKey(pool, state.runtime), [pool, state.runtime]);
   const filtered = useMemo(
     () => filterModelRoutes(pool, query, provider),
     [pool, provider, query],
@@ -41,26 +42,26 @@ export function ModelPicker({ state }: { state: AppState }) {
     return counts;
   }, [pool]);
 
-  const choose = async (model: string, providerName: string, key: string) => {
+  const choose = async (model: string, providerName: string, apiMethod: string, key: string) => {
     if (state.connection.status !== 'connected') {
       controller.setToast('The adapter is offline. Model changes need a live connection.');
       return;
     }
     setPending(key);
-    await controller.selectModel(model, providerName);
+    await controller.selectModel(model, providerName, apiMethod);
     setPending(null);
   };
 
   const renderRoute = (route: (typeof pool)[number]) => {
     const key = routeKey(route);
-    const selected = isCurrentRoute(route, state.runtime);
+    const selected = key === activeRoute;
     const duplicate = (duplicateModels.get(route.model) ?? 0) > 1;
     return (
       <button
         key={key}
         className={`overlay-row model-route ${selected ? 'selected' : ''}`}
         disabled={!route.available || pending != null}
-        onClick={() => void choose(route.model, route.provider, key)}
+        onClick={() => void choose(route.model, route.provider, route.api_method, key)}
         aria-label={`Set model ${route.model} on ${route.provider} via ${route.api_method}`}
       >
         <span>

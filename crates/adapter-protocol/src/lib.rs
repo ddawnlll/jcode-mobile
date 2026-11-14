@@ -1,27 +1,27 @@
-//! Mobile Adapter v3 wire contract for the Stillness client.
+//! Versioned mobile adapter wire contract for the Stillness client.
 //!
 //! This crate is deliberately independent of JCode and of the server. It
 //! defines the authenticated mobile envelope, request payloads, snapshots and
 //! stream events. JCode harness types are converted at the adapter boundary so
 //! that an upstream protocol change cannot silently reshape the client API.
 //!
-//! Version 3 keeps every v2 request and event shape intact. It adds negotiated
-//! protocol versions, a durable event journal with cursor replay, delta session
-//! sync and diagnostics. A v2 client still connects: the adapter normalizes
-//! outbound frames to the version the client negotiated and only emits v3-only
-//! message types in reply to a v3-only request.
+//! Version 4 adds runtime and swarm events and byte packages for large frames.
+//! Earlier clients continue to receive ordinary JSON envelopes.
 
 use serde::{Deserialize, Serialize};
 
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 pub const MIN_PROTOCOL_VERSION: u32 = 2;
-pub const WS_SUBPROTOCOL: &str = "jcode.mobile.v3";
+pub const WS_SUBPROTOCOL: &str = "jcode.mobile.v4";
+pub const JOURNAL_WS_SUBPROTOCOL: &str = "jcode.mobile.v3";
 pub const LEGACY_WS_SUBPROTOCOL: &str = "jcode.mobile.v2";
 pub const TOKEN_SUBPROTOCOL_PREFIX: &str = "token.";
+pub const BYTE_PACKAGE_CHUNK: usize = 64 * 1024;
+pub const BYTE_PACKAGE_LIMIT: usize = 64 * 1024 * 1024;
 
 /// Every wire version this adapter can speak. The set is intentionally small:
 /// a new version is added only with request-level conformance fixtures.
-pub const SUPPORTED_PROTOCOL_VERSIONS: &[u32] = &[MIN_PROTOCOL_VERSION, PROTOCOL_VERSION];
+pub const SUPPORTED_PROTOCOL_VERSIONS: &[u32] = &[MIN_PROTOCOL_VERSION, 3, PROTOCOL_VERSION];
 
 pub fn supports_protocol_version(version: u32) -> bool {
     SUPPORTED_PROTOCOL_VERSIONS.contains(&version)
@@ -76,6 +76,12 @@ pub const CAPABILITIES: &[&str] = &[
     "sessions.archive",
     "sessions.restore",
     "sessions.favorite",
+    "protocol.v4",
+    "events.byte_packages",
+    "runtime.live",
+    "models.set_route",
+    "swarm.live",
+    "sessions.unsubscribe",
 ];
 
 /// Bounded image attachment limits. A larger request is rejected before it can
@@ -340,6 +346,8 @@ pub struct SessionSummary {
     pub archived: bool,
     pub parent_session_id: Option<String>,
     pub agent_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub swarm_status: Option<String>,
     /// Adapter-owned favorite flag. It is not a daemon field.
     #[serde(default)]
     pub favorite: bool,
@@ -405,6 +413,8 @@ pub struct RuntimeView {
     pub provider: Option<String>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effort_options: Vec<String>,
     pub auth_method: Option<String>,
     pub account_label: Option<String>,
     pub providers: Vec<String>,
@@ -449,6 +459,8 @@ pub struct SessionSnapshotPayload {
     pub session: SessionSummary,
     pub messages: Vec<HistoryMessageView>,
     pub runtime: Option<RuntimeView>,
+    #[serde(default)]
+    pub agents: Option<Vec<SwarmAgentView>>,
     pub plan: Option<serde_json::Value>,
     pub context: Option<ContextView>,
     /// Present when this adapter still has an active turn for the session. A
@@ -479,6 +491,27 @@ fn default_tail() -> u32 {
 // ---------------------------------------------------------------------------
 // Streaming events
 // ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SwarmAgentView {
+    pub session_id: String,
+    pub parent_session_id: Option<String>,
+    pub label: Option<String>,
+    pub status: String,
+    pub model: Option<String>,
+    pub provider: Option<String>,
+    pub reasoning_effort: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeIdentity {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
+    pub effort_options: Vec<String>,
+    pub auth_method: Option<String>,
+    pub account_label: Option<String>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -732,6 +765,9 @@ pub struct SetModelRequest {
     pub model: String,
     /// Confirm the route belongs to this provider before applying it.
     pub expected_provider: Option<String>,
+    /// v4 clients select an exact catalog entry.
+    #[serde(default)]
+    pub api_method: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -1137,14 +1173,14 @@ mod tests {
     }
 
     #[test]
-    fn v2_and_v3_envelopes_are_both_accepted() {
+    fn v2_through_v4_envelopes_are_accepted() {
         for version in SUPPORTED_PROTOCOL_VERSIONS {
             let mut envelope = Envelope::request("req", "sessions.list", serde_json::json!({}));
             envelope.v = *version;
             assert_eq!(envelope.validate(), Ok(()), "version {version}");
         }
         let mut envelope = Envelope::request("req", "x", serde_json::json!({}));
-        envelope.v = 4;
+        envelope.v = 5;
         assert!(envelope.validate().is_err());
     }
 
@@ -1154,9 +1190,9 @@ mod tests {
         assert_eq!(negotiate_protocol_version(2, 2), Some(2));
         assert_eq!(negotiate_protocol_version(3, 3), Some(3));
         assert_eq!(negotiate_protocol_version(1, 3), Some(3));
-        assert_eq!(negotiate_protocol_version(2, 99), Some(3));
-        // No overlap: a client that requires v4, or one that only speaks v1.
-        assert_eq!(negotiate_protocol_version(4, 5), None);
+        assert_eq!(negotiate_protocol_version(2, 99), Some(4));
+        // No overlap: a client that requires v5, or one that only speaks v1.
+        assert_eq!(negotiate_protocol_version(5, 6), None);
         assert_eq!(negotiate_protocol_version(1, 1), None);
         assert_eq!(negotiate_protocol_version(5, 2), None);
     }

@@ -46,7 +46,10 @@ import type {
   OperationStatePayload,
   OperationView,
   Project,
+  RuntimeIdentity,
   RuntimeView,
+  SwarmAgentView,
+  Envelope,
   ServerHelloPayload,
   ServerInfo,
   SessionEventPayload,
@@ -77,6 +80,7 @@ export type Screen =
 export type Phase = 'unpaired' | 'pairing' | 'ready' | 'app' | 'loading';
 
 export interface LiveTool {
+  seq: number;
   callId: string;
   name: string;
   input: string;
@@ -86,6 +90,7 @@ export interface LiveTool {
 }
 
 export interface LiveBlock {
+  seq: number;
   id: string;
   text: string;
   done: boolean;
@@ -99,7 +104,7 @@ export interface LiveState {
   phase: string;
   startedAtMs: number | null;
   assistants: LiveBlock[];
-  reasoning: string;
+  reasoning: LiveBlock[];
   tools: LiveTool[];
   permission: { requestId: string; toolName: string; description: string } | null;
   recovery: { continuation: string; notice: string | null } | null;
@@ -163,6 +168,7 @@ export interface AppState {
   operations: Record<string, OperationView>;
   models: ModelsListPayload | null;
   runtime: RuntimeView | null;
+  agents: SwarmAgentView[] | null;
   context: ContextView | null;
   plan: unknown | null;
   activity: ActivityItem[];
@@ -190,6 +196,13 @@ export interface AppState {
   attachments: DraftAttachment[];
 }
 
+function lastWhere<T>(items: readonly T[], predicate: (item: T) => boolean): T | undefined {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (predicate(items[index])) return items[index];
+  }
+  return undefined;
+}
+
 const PREFS_KEY = 'jcode.mobile.v3.preferences';
 
 function emptyLive(): LiveState {
@@ -201,7 +214,7 @@ function emptyLive(): LiveState {
     phase: '',
     startedAtMs: null,
     assistants: [],
-    reasoning: '',
+    reasoning: [],
     tools: [],
     permission: null,
     recovery: null,
@@ -248,7 +261,14 @@ export class Controller {
   private sessionsTimer: number | null = null;
   private unsubscribers: Array<() => void> = [];
   private snapshotInFlight = false;
+  private sessionGeneration = 0;
+  private subscription: {
+    sessionId: string;
+    frames: Array<Envelope<SessionEventPayload>>;
+    overflow: boolean;
+  } | null = null;
   private refreshingSessions = false;
+  private sessionsRefreshPending = false;
   /** Stable client request ids so retrying a create cannot make a duplicate. */
   private createRequestIds = new Map<string, string>();
 
@@ -278,6 +298,7 @@ export class Controller {
       operations: {},
       models: null,
       runtime: null,
+      agents: null,
       context: null,
       plan: null,
       activity: [],
@@ -314,17 +335,17 @@ export class Controller {
   private emit(immediate = false) {
     if (immediate) {
       if (this.notifyTimer != null) {
-        window.clearTimeout(this.notifyTimer);
+        window.cancelAnimationFrame(this.notifyTimer);
         this.notifyTimer = null;
       }
       for (const listener of this.listeners) listener();
       return;
     }
     if (this.notifyTimer != null) return;
-    this.notifyTimer = window.setTimeout(() => {
+    this.notifyTimer = window.requestAnimationFrame(() => {
       this.notifyTimer = null;
       for (const listener of this.listeners) listener();
-    }, 50);
+    });
   }
 
   private setState(patch: Partial<AppState>, immediate = false) {
@@ -386,6 +407,7 @@ export class Controller {
         plan: cachedSnapshot?.plan ?? null,
         context: cachedSnapshot?.context ?? null,
         runtime: cachedSnapshot?.runtime ?? null,
+        agents: cachedSnapshot?.agents ?? null,
         pairingStage: 'connecting',
         pairingMessage: 'Restoring the saved server pairing in the background.',
         connection: { status: 'connecting', message: null },
@@ -446,11 +468,8 @@ export class Controller {
         if (last && available) {
           if (this.state.activeSessionId === last) {
             // The cached view is already on screen; only reconcile it.
-            await this.subscribeToSession(last, false);
-            void this.refreshModels(last);
-            void this.refreshPlan(last);
+            await this.subscribeToSession(last, true);
             void this.refreshActivity(last);
-            void this.refreshContext(last);
           } else {
             await this.openSession(last);
           }
@@ -512,7 +531,27 @@ export class Controller {
   private bind(client: AdapterClient) {
     this.unsubscribers.push(
       client.on('session.event', (raw) => {
-        this.onSessionEvent(raw as Parameters<Controller['onSessionEvent']>[0]);
+        this.onSessionEvent(raw as Envelope<SessionEventPayload>);
+      }),
+      client.on('session.runtime', (raw) => {
+        const frame = raw as Envelope<{ runtime: RuntimeIdentity; observed_at_ms: number }>;
+        if (frame.session_id !== this.state.activeSessionId || this.client !== client) return;
+        if (!frame.payload?.runtime) return;
+        const current = this.state.runtime;
+        this.setState({
+          runtime: {
+            providers: current?.providers ?? [],
+            routes: current?.routes ?? [],
+            ...frame.payload.runtime,
+            observed_at_ms: frame.payload.observed_at_ms,
+            source: 'jcode.model_info',
+          },
+        });
+      }),
+      client.on('session.swarm', (raw) => {
+        const frame = raw as Envelope<{ agents: SwarmAgentView[] }>;
+        if (frame.session_id !== this.state.activeSessionId || this.client !== client) return;
+        if (Array.isArray(frame.payload?.agents)) this.setState({ agents: frame.payload.agents });
       }),
       client.on('operations.state', (raw) => {
         const envelope = raw as { payload?: OperationStatePayload; session_id?: string };
@@ -521,6 +560,7 @@ export class Controller {
       client.on('server.connection', (raw) => {
         const payload = (raw as { payload?: { jcode_connected: boolean; message: string | null } }).payload;
         if (!payload) return;
+        const recovered = payload.jcode_connected && !this.state.jcodeConnected;
         this.setState({
           jcodeConnected: payload.jcode_connected,
           connection: this.state.connection.status === 'offline'
@@ -530,6 +570,9 @@ export class Controller {
                 message: payload.jcode_connected ? null : payload.message ?? 'JCode harness unavailable',
               },
         });
+        if (recovered && this.state.activeSessionId) {
+          void this.subscribeToSession(this.state.activeSessionId, true);
+        }
       }),
       client.on('sessions.changed', () => this.scheduleSessionsRefresh()),
       client.on('disconnected', (raw) => {
@@ -558,24 +601,27 @@ export class Controller {
     this.sessionsTimer = window.setTimeout(() => {
       this.sessionsTimer = null;
       void this.refreshSessions();
-    }, 350);
+    }, 32);
   }
 
   async refreshSessions() {
-    if (!this.client || !this.state.credential || this.refreshingSessions) return;
-    if (this.client.status !== 'connected') return;
-    this.refreshingSessions = true;
+    const client = this.client;
     const credential = this.state.credential;
+    if (!client || !credential || client.status !== 'connected') return;
+    if (this.refreshingSessions) {
+      this.sessionsRefreshPending = true;
+      return;
+    }
+    this.refreshingSessions = true;
     try {
-      const cached = loadSessionListCache(credential.serverId);
-      const sinceRevision = this.state.sessionRevision || cached?.revision || 0;
+      const sinceRevision = this.state.sessionRevision;
       let sessions: SessionSummary[];
       let projects: Project[];
       let source: string;
       let revision: number;
       let stale = false;
       try {
-        const delta = await this.client.request<SessionsDeltaPayload>(
+        const delta = await client.request<SessionsDeltaPayload>(
           'sessions.delta',
           { since_revision: sinceRevision, include_projects: true },
           20_000,
@@ -594,7 +640,7 @@ export class Controller {
         revision = delta.revision;
       } catch {
         // A v2 adapter has no delta request. Fall back to the full listing.
-        const payload = await this.client.request<SessionsListPayload>(
+        const payload = await client.request<SessionsListPayload>(
           'sessions.list',
           {},
           20_000,
@@ -605,6 +651,7 @@ export class Controller {
         revision = payload.revision ?? 0;
         stale = payload.stale;
       }
+      if (this.client !== client) return;
       saveSessionListCache(credential.serverId, {
         sessions,
         projects,
@@ -621,11 +668,13 @@ export class Controller {
         savedOnPhone: stale,
         sessionRevision: revision,
         activeMissing: Boolean(
-          active && !sessions.some((session) => session.session_id === active),
+          active && !stale && !sessions.some((session) => session.session_id === active)
+          && this.state.snapshot?.session.session_id !== active,
         ),
       });
     } catch (error) {
-      const cached = loadSessionListCache(this.state.credential.serverId);
+      if (this.client !== client) return;
+      const cached = loadSessionListCache(credential.serverId);
       this.setState({
         sessionsError:
           error instanceof Error
@@ -635,6 +684,10 @@ export class Controller {
       });
     } finally {
       this.refreshingSessions = false;
+      if (this.sessionsRefreshPending) {
+        this.sessionsRefreshPending = false;
+        this.scheduleSessionsRefresh();
+      }
     }
   }
 
@@ -712,7 +765,15 @@ export class Controller {
   async openSession(sessionId: string) {
     if (!this.state.credential) return;
     const serverId = this.state.credential.serverId;
-    const cached = loadSnapshotCache(serverId, sessionId);
+    const previous = this.state.activeSessionId;
+    if (previous === sessionId && this.state.snapshot && !this.state.activeMissing
+      && this.state.connection.status === 'connected' && !this.state.savedOnPhone) {
+      this.setState({ screen: 'session', drawerOpen: false }, true);
+      return;
+    }
+    const generation = ++this.sessionGeneration;
+    this.subscription = null;
+    const cached = previous === sessionId ? this.state.snapshot : loadSnapshotCache(serverId, sessionId);
     const draft = loadDraft(serverId, sessionId);
     const storedPending = loadPending(serverId, sessionId);
     this.setState(
@@ -739,6 +800,7 @@ export class Controller {
         plan: cached?.plan ?? null,
         context: cached?.context ?? null,
         runtime: cached?.runtime ?? null,
+        agents: cached?.agents ?? null,
         models: null,
         activity: loadActivityCache(serverId, sessionId)?.items ?? [],
         reconciling: false,
@@ -751,94 +813,100 @@ export class Controller {
       void this.lookupOperation(storedPending.operation_id);
     }
     if (!this.client || this.client.status !== 'connected') return;
+    const client = this.client;
+    if (previous && previous !== sessionId && client.negotiatedVersion >= 4) {
+      void client.request('sessions.unsubscribe', { session_id: previous }, 8_000).catch(() => {});
+    }
     await this.subscribeToSession(sessionId, false);
-    void this.refreshModels(sessionId);
-    void this.refreshPlan(sessionId);
-    void this.refreshActivity(sessionId);
-    void this.refreshContext(sessionId);
+    if (this.sessionGeneration === generation && this.client === client) {
+      void this.refreshActivity(sessionId);
+    }
   }
 
   private async subscribeToSession(sessionId: string, forReconnect: boolean) {
-    if (!this.client || this.client.status !== 'connected') return;
-    if (!forReconnect) this.setState({ reconciling: true });
-    // A reconnect with a real cursor uses the durable journal first. It only
-    // falls back to a full snapshot when the cursor or epoch cannot be resumed.
-    if (forReconnect && this.state.lastSeq > 0) {
-      try {
-        const replay = await this.client.request<EventsSubscribePayload>(
-          'events.subscribe',
-          {
-            session_id: sessionId,
-            after_seq: this.state.lastSeq,
-            epoch: this.state.epoch,
-            limit: 512,
-            tail: 160,
-            include_snapshot: false,
-          },
-          20_000,
-          { sessionId },
-        );
-        if (this.state.activeSessionId !== sessionId) return;
-        if (replay.resync_required) {
-          if (replay.snapshot) {
-            this.applySnapshot(replay.snapshot);
-          } else {
-            await this.subscribeWithSnapshot(sessionId);
-          }
-          return;
-        }
-        for (const replayed of replay.events) {
-          this.applySessionEvent({
-            session_id: replay.session_id,
-            epoch: replay.epoch,
-            seq: replayed.seq,
-            payload: {
-              event: replayed.event,
-              turn_id: replayed.turn_id,
-              operation_id: replayed.operation_id,
-              observed_at_ms: replayed.observed_at_ms,
-            },
-          });
-        }
-        if (this.state.activeSessionId !== sessionId) return;
-        this.setState({ epoch: replay.epoch });
-        if (replay.has_more) {
-          await this.subscribeToSession(sessionId, true);
-          return;
-        }
-        this.setState({ reconciling: false });
-        void this.ackEvents(sessionId, replay.latest_seq);
-        return;
-      } catch {
-        // A v2 adapter does not implement events.subscribe; use the snapshot.
-      }
-    }
-    await this.subscribeWithSnapshot(sessionId);
-  }
-
-  private async subscribeWithSnapshot(sessionId: string) {
-    if (!this.client || this.client.status !== 'connected') return;
+    const client = this.client;
+    if (!client || client.status !== 'connected') return;
+    const generation = this.sessionGeneration;
+    const subscription = {
+      sessionId,
+      frames: [] as Array<Envelope<SessionEventPayload>>,
+      overflow: false,
+    };
+    this.subscription = subscription;
+    const current = () => this.client === client
+      && generation === this.sessionGeneration
+      && this.state.activeSessionId === sessionId
+      && this.subscription === subscription;
+    this.setState({ reconciling: true });
     try {
-      const snapshot = await this.client.request<SessionSnapshot>(
+      if (forReconnect && this.state.lastSeq > 0 && client.negotiatedVersion >= 3) {
+        try {
+          let more = true;
+          while (more && current()) {
+            const cursor = this.state.lastSeq;
+            const replay = await client.request<EventsSubscribePayload>(
+              'events.subscribe',
+              { session_id: sessionId, after_seq: cursor, epoch: this.state.epoch, limit: 512, tail: 160 },
+              20_000,
+              { sessionId },
+            );
+            if (!current()) return;
+            if (replay.resync_required || replay.gap) {
+              if (!replay.snapshot) break;
+              this.applySnapshot(replay.snapshot);
+              if (replay.snapshot.stale) this.scheduleSnapshot(60);
+              return;
+            }
+            for (const item of replay.events) {
+              this.applySessionEvent({
+                session_id: replay.session_id,
+                epoch: replay.epoch,
+                seq: item.seq,
+                payload: item,
+              });
+            }
+            more = replay.has_more;
+            if (!more) {
+              this.setState({ reconciling: false, epoch: replay.epoch });
+              void this.ackEvents(sessionId, this.state.lastSeq);
+              // Runtime and swarm updates are live. A snapshot restores their
+              // authoritative current value after an offline interval.
+              if (client.negotiatedVersion >= 4) void this.refreshSnapshot();
+              return;
+            }
+            if (this.state.lastSeq <= cursor) break;
+          }
+        } catch {
+          // The snapshot is the recovery path if replay failed.
+        }
+      }
+      if (!current()) return;
+      const snapshot = await client.request<SessionSnapshot>(
         'sessions.subscribe',
-        {
-          session_id: sessionId,
-          tail: 160,
-          after_seq: this.state.lastSeq || null,
-        },
+        { session_id: sessionId, tail: 160, after_seq: this.state.lastSeq || null },
         35_000,
         { sessionId },
       );
-      if (this.state.activeSessionId !== sessionId) return;
-      this.applySnapshot(snapshot);
+      if (current()) {
+        this.applySnapshot(snapshot);
+        if (snapshot.stale) this.scheduleSnapshot(60);
+      }
     } catch (error) {
-      if (this.state.activeSessionId !== sessionId) return;
+      if (!current()) return;
       this.setState({
         reconciling: false,
-        sessionsError:
-          error instanceof Error ? `Session could not be restored: ${error.message}` : 'Session could not be restored.',
+        activeMissing: error instanceof AdapterRequestError && error.code === 'not_found',
+        sessionsError: error instanceof Error
+          ? `Session could not be restored: ${error.message}`
+          : 'Session could not be restored.',
         savedOnPhone: true,
       });
+    } finally {
+      if (current()) {
+        this.subscription = null;
+        for (const frame of subscription.frames) this.applySessionEvent(frame);
+        if (subscription.overflow) this.scheduleSnapshot(32);
+      }
     }
   }
 
@@ -870,8 +938,8 @@ export class Controller {
           (message) => message.role === 'user' && message.content === this.state.pending?.text,
         )
       : false;
-    const liveText = this.state.live.assistants.map((block) => block.text).join('\n\n');
-    const lastAssistant = [...snapshot.messages].reverse().find((message) => message.role === 'assistant');
+    const liveText = this.state.live.assistants.at(-1)?.text ?? '';
+    const lastAssistant = lastWhere(snapshot.messages, (message) => message.role === 'assistant');
     const includesLive = Boolean(
       liveText && lastAssistant && lastAssistant.content.includes(liveText.slice(-120)),
     );
@@ -879,7 +947,7 @@ export class Controller {
     const clearLive =
       !snapshot.stale && !restoredTurn &&
       (includesLive ||
-        Boolean(this.state.live.finishedTurnId) ||
+        (Boolean(this.state.live.finishedTurnId) && !liveText) ||
         (!this.state.live.turnId && !this.state.live.assistants.length));
     const nextLive = restoredTurn
       ? {
@@ -914,7 +982,8 @@ export class Controller {
       epoch: snapshot.epoch,
       plan: snapshot.plan ?? this.state.plan,
       context: snapshot.context ?? this.state.context,
-      runtime: snapshot.runtime ?? this.state.runtime,
+      runtime: this.latestRuntime(snapshot.runtime),
+      agents: snapshot.agents ?? this.state.agents,
       savedOnPhone: false,
       sessionsError: null,
       reconciling: snapshot.stale,
@@ -928,12 +997,21 @@ export class Controller {
     }
   }
 
-  private onSessionEvent(envelope: {
-    session_id?: string;
-    epoch?: string;
-    seq?: number;
-    payload?: SessionEventPayload;
-  }) {
+  private latestRuntime(runtime: RuntimeView | null): RuntimeView | null {
+    const current = this.state.runtime;
+    if (current && (!runtime || current.observed_at_ms > runtime.observed_at_ms)) {
+      return runtime ? { ...current, routes: runtime.routes, providers: runtime.providers } : current;
+    }
+    return runtime;
+  }
+
+  private onSessionEvent(envelope: Envelope<SessionEventPayload>) {
+    const subscription = this.subscription;
+    if (subscription && envelope.session_id === subscription.sessionId) {
+      if (subscription.frames.length < 512) subscription.frames.push(envelope);
+      else subscription.overflow = true;
+      return;
+    }
     this.applySessionEvent(envelope);
   }
 
@@ -1014,11 +1092,21 @@ export class Controller {
         break;
       }
       case 'reasoning_delta': {
-        this.patchLive({ reasoning: `${this.state.live.reasoning}${event.text}`, status: 'thinking' });
+        const reasoning = [...this.state.live.reasoning];
+        const last = reasoning.at(-1);
+        if (!last || last.done) {
+          reasoning.push({ id: `reasoning-${seq}`, seq, text: event.text, done: false });
+        } else {
+          reasoning[reasoning.length - 1] = { ...last, text: last.text + event.text };
+        }
+        this.patchLive({ reasoning, status: 'thinking' });
         break;
       }
       case 'reasoning_done': {
-        this.patchLive({ status: 'working' });
+        this.patchLive({
+          reasoning: this.state.live.reasoning.map((part) => part.done ? part : { ...part, done: true }),
+          status: 'working',
+        });
         break;
       }
       case 'tool_start': {
@@ -1134,42 +1222,32 @@ export class Controller {
 
   private appendText(text: string, messageId: string | null) {
     const id = messageId ?? 'current';
-    const assistants = [...this.state.live.assistants];
-    let block = assistants.find((item) => item.id === id);
-    if (!block) {
-      block = { id, text: '', done: false };
-      assistants.push(block);
-    }
-    block.text += text;
-    this.setState({
-      live: {
-        ...this.state.live,
-        assistants,
-        status: this.state.live.status === 'thinking' ? 'writing' : this.state.live.status === 'idle' ? 'working' : this.state.live.status,
-      },
-    });
+    const current = lastWhere(this.state.live.assistants, (block) => block.id === id && (messageId != null || !block.done));
+    this.updateText(id, (current?.text ?? '') + text, current);
   }
 
   private replaceText(text: string, messageId: string | null) {
     const id = messageId ?? 'current';
-    const assistants = [...this.state.live.assistants];
-    let block = assistants.find((item) => item.id === id);
-    if (!block) {
-      block = { id, text, done: false };
-      assistants.push(block);
-    } else {
-      block.text = text;
-    }
-    this.setState({ live: { ...this.state.live, assistants } });
+    this.updateText(id, text, lastWhere(this.state.live.assistants, (block) => block.id === id));
+  }
+
+  private updateText(id: string, text: string, previous: LiveBlock | undefined) {
+    const live = this.state.live;
+    const status = live.status === 'thinking' ? 'writing' : live.status === 'idle' ? 'working' : live.status;
+    const assistants = previous
+      ? live.assistants.map((block) => block === previous ? { ...block, text } : block)
+      : [...live.assistants, { id, seq: this.state.lastSeq, text, done: false }];
+    this.patchLive({ assistants, status });
   }
 
   private finishBlock(messageId: string | null) {
     const id = messageId ?? 'current';
+    const current = lastWhere(this.state.live.assistants, (block) => block.id === id);
     this.setState({
       live: {
         ...this.state.live,
         assistants: this.state.live.assistants.map((block) =>
-          block.id === id ? { ...block, done: true } : block,
+          block === current ? { ...block, done: true } : block,
         ),
       },
     });
@@ -1188,6 +1266,7 @@ export class Controller {
     const index = tools.findIndex((tool) => tool.callId === callId);
     if (index === -1) {
       tools.push({
+        seq: this.state.lastSeq,
         callId,
         name,
         input: initialInput + inputDelta,
@@ -1216,9 +1295,10 @@ export class Controller {
       phase: '',
       permission: null,
       startedAtMs: null,
-      assistants: this.state.live.assistants.map((block) => ({ ...block, done: true })),
+      assistants: this.state.live.assistants.map((block) => block.done ? block : { ...block, done: true }),
+      reasoning: this.state.live.reasoning.map((part) => part.done ? part : { ...part, done: true }),
     });
-    this.scheduleSnapshot(320);
+    this.scheduleSnapshot(48);
   }
 
   private scheduleSnapshot(delayMs: number) {
@@ -1233,16 +1313,19 @@ export class Controller {
     if (!this.client || this.client.status !== 'connected') return;
     const sessionId = this.state.activeSessionId;
     if (!sessionId || this.snapshotInFlight) return;
+    const generation = this.sessionGeneration;
+    const client = this.client;
     this.snapshotInFlight = true;
     this.setState({ reconciling: true });
     try {
-      const snapshot = await this.client.request<SessionSnapshot>(
+      const snapshot = await client.request<SessionSnapshot>(
         'sessions.snapshot',
         { session_id: sessionId, tail: 160, after_seq: this.state.lastSeq || null },
         30_000,
         { sessionId },
       );
-      if (this.state.activeSessionId === sessionId) {
+      if (this.client === client && this.sessionGeneration === generation && this.state.activeSessionId === sessionId
+        && (snapshot.epoch !== this.state.epoch || snapshot.last_seq >= this.state.lastSeq)) {
         this.applySnapshot(snapshot);
         if (snapshot.stale) {
           this.scheduleSnapshot(900);
@@ -1256,6 +1339,11 @@ export class Controller {
   }
 
   private applyOperation(operation: OperationView) {
+    const previous = this.state.operations[operation.operation_id];
+    if (previous && operation.state === 'dispatching'
+      && ['accepted', 'observed_in_history', 'unknown', 'rejected', 'cancelled'].includes(previous.state)) {
+      return;
+    }
     const operations = { ...this.state.operations, [operation.operation_id]: operation };
     const pending =
       this.state.pending && this.state.pending.operationId === operation.operation_id
@@ -1453,7 +1541,7 @@ export class Controller {
         { sessionId },
       );
       if (this.state.activeSessionId === sessionId) {
-        this.setState({ models, runtime: models.runtime });
+        this.setState({ models, runtime: this.latestRuntime(models.runtime) });
       }
     } catch {
       if (this.state.activeSessionId === sessionId) {
@@ -1519,17 +1607,18 @@ export class Controller {
     }
   }
 
-  async selectModel(model: string, provider: string) {
+  async selectModel(model: string, provider: string, apiMethod: string) {
     const sessionId = this.state.activeSessionId;
     if (!this.client || this.client.status !== 'connected' || !sessionId) return;
     try {
       const payload = await this.client.request<ModelsListPayload>(
         'models.set',
-        { session_id: sessionId, model, expected_provider: provider },
+        { session_id: sessionId, model, expected_provider: provider, api_method: apiMethod },
         30_000,
         { sessionId },
       );
-      this.setState({ models: payload, runtime: payload.runtime, sheet: null });
+      if (this.state.activeSessionId !== sessionId) return;
+      this.setState({ models: payload, runtime: this.latestRuntime(payload.runtime), sheet: null });
       this.setToast(`Model set to ${payload.runtime.model ?? model}.`);
     } catch (error) {
       this.setToast(error instanceof Error ? error.message : 'Model change was rejected.');
@@ -1546,8 +1635,9 @@ export class Controller {
         25_000,
         { sessionId },
       );
-      this.setState({ runtime, sheet: null });
-      this.setToast(`Reasoning effort set to ${runtime.reasoning_effort ?? effort}.`);
+      if (this.state.activeSessionId !== sessionId) return;
+      this.setState({ runtime: this.latestRuntime(runtime), sheet: null });
+      this.setToast(runtime.reasoning_effort ? `Reasoning effort set to ${runtime.reasoning_effort}.` : 'Reasoning effort cleared.');
     } catch (error) {
       this.setToast(error instanceof Error ? error.message : 'Reasoning change was rejected.');
     }

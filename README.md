@@ -44,6 +44,13 @@
 > debug-signed for sideloading. The native Linux shell builds from source.
 > There is no iOS artifact and no Play Store listing.
 
+## 0.5.0 Feather and Arrow
+
+The 0.5.0 release candidate introduces Adapter v4, a direct JCode session
+stream, live reasoning effort and sub-agent state, byte packages for large
+WebSocket responses, and a lighter transcript renderer. See the
+[Adapter v4 contract, migration, and verification](docs/ADAPTER_V4.md).
+
 ## What 0.4.0 is
 
 JCode Mobile is two processes:

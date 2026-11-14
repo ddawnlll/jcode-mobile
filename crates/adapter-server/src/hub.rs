@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use adapter_core::{JournalRecord, Store, now_ms};
-use adapter_protocol::{OperationView, SessionEvent};
+use adapter_protocol::{OperationView, RuntimeIdentity, SessionEvent, SwarmAgentView};
 use tokio::sync::broadcast;
 use tracing::error;
 
@@ -20,10 +20,22 @@ pub struct HubEvent {
 
 #[derive(Debug, Clone)]
 pub enum Broadcast {
-    Session(HubEvent),
+    Session(Arc<HubEvent>),
+    Runtime {
+        session_id: String,
+        runtime: Arc<RuntimeIdentity>,
+        at_ms: i64,
+    },
+    Swarm {
+        session_id: String,
+        agents: Arc<Vec<SwarmAgentView>>,
+    },
     Operation(OperationView),
     SessionsChanged,
-    Connection { connected: bool, message: String },
+    Connection {
+        connected: bool,
+        message: String,
+    },
 }
 
 /// Fan-in for adapter-observed events.
@@ -37,6 +49,7 @@ pub struct Hub {
     tx: broadcast::Sender<Broadcast>,
     store: Arc<Store>,
     epoch: String,
+    publication: Mutex<()>,
     append_failures: AtomicU64,
     faults: Arc<FaultInjection>,
 }
@@ -53,6 +66,7 @@ impl Hub {
             tx,
             store,
             epoch,
+            publication: Mutex::new(()),
             append_failures: AtomicU64::new(0),
             faults,
         }
@@ -76,7 +90,10 @@ impl Hub {
         turn_id: Option<String>,
         operation_id: Option<String>,
         event: SessionEvent,
-    ) -> HubEvent {
+    ) -> Arc<HubEvent> {
+        // Keep SQLite allocation and broadcast in the same order, including
+        // when a request publishes a turn boundary alongside the event pump.
+        let _guard = self.publication.lock().expect("event publication");
         let at_ms = now_ms();
         if self.faults.journal_fail {
             return self.degraded(session_id, turn_id, operation_id, at_ms, "fault injection");
@@ -90,7 +107,7 @@ impl Hub {
             at_ms,
         ) {
             Ok(record) => {
-                let event = hub_event(record);
+                let event = Arc::new(hub_event(record));
                 let _ = self.tx.send(Broadcast::Session(event.clone()));
                 event
             }
@@ -117,9 +134,9 @@ impl Hub {
         operation_id: Option<String>,
         at_ms: i64,
         reason: &str,
-    ) -> HubEvent {
+    ) -> Arc<HubEvent> {
         self.append_failures.fetch_add(1, Ordering::Relaxed);
-        let degraded = HubEvent {
+        let degraded = Arc::new(HubEvent {
             session_id: session_id.to_string(),
             seq: 0,
             turn_id,
@@ -132,7 +149,7 @@ impl Hub {
                 retryable: true,
             },
             at_ms,
-        };
+        });
         let _ = self.tx.send(Broadcast::Session(degraded.clone()));
         degraded
     }
@@ -143,6 +160,21 @@ impl Hub {
 
     pub fn sessions_changed(&self) {
         let _ = self.tx.send(Broadcast::SessionsChanged);
+    }
+
+    pub fn publish_runtime(&self, session_id: String, runtime: RuntimeIdentity) {
+        let _ = self.tx.send(Broadcast::Runtime {
+            session_id,
+            runtime: Arc::new(runtime),
+            at_ms: now_ms(),
+        });
+    }
+
+    pub fn publish_swarm(&self, session_id: String, agents: Vec<SwarmAgentView>) {
+        let _ = self.tx.send(Broadcast::Swarm {
+            session_id,
+            agents: Arc::new(agents),
+        });
     }
 
     pub fn publish_connection(&self, connected: bool, message: String) {
