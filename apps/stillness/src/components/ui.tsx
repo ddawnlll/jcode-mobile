@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   IconArchive,
   IconBack,
@@ -151,7 +151,7 @@ function SessionActionsMenu({
   );
 }
 
-export function SessionRow({
+export const SessionRow = memo(function SessionRow({
   session,
   onOpen,
   active = false,
@@ -251,7 +251,7 @@ export function SessionRow({
       ) : null}
     </>
   );
-}
+});
 
 export function TorusWork({
   label,
