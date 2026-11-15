@@ -202,15 +202,19 @@ restarted, and no session, turn or operation was sent.
 | v3 client | PASS: negotiated 3, 127 sessions, every frame at v3 |
 | v2 client | PASS: negotiated 2, 127 sessions, every frame at v2 |
 | Paired devices | PASS: v2-era device tokens preserved, and the check revoked its own devices |
+| Phone pairing from the app | PASS: the Android client paired with a printed code at 19:29:55 CET as `JCode Mobile` (`dev_f6e9…`) and connected on `jcode.mobile.v4` |
+| Real turn from the phone | PASS: one `send` from that client was accepted at 19:30:11 CET, taken by the daemon, and its tool and text events were journaled and streamed back |
 
 The raw evidence is `.staging/v0.5.0-live/adapter-v4-live-check.json` on the
 host. It is not committed: it contains live session titles and provider
 account detail.
 
-Not exercised at cutover: a real prompt turn through v4 from the live adapter.
-The live check is read-only by design, and the isolated full-stack turn is
-covered by `scripts/v3-smoke-up.sh` plus the 0.5.0 benchmark in
-`docs/evidence/v0.5.0/`.
+The cutover itself did not run a prompt turn: the live check is read-only by
+design, and the isolated full-stack turn is covered by
+`scripts/v3-smoke-up.sh` plus the 0.5.0 benchmark in
+`docs/evidence/v0.5.0/`. The phone-side turn above was run afterwards through
+the real client, which is the acceptance path the earlier check could not
+exercise.
 
 ## Rollback
 

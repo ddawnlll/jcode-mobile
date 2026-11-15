@@ -227,5 +227,7 @@ the origin had no adapter behind it. It was replaced by Adapter v4. Full record:
 | 12.9 | Older clients not broken | DONE | The same adapter negotiated v3 and v2 on demand, and every frame on each connection stayed at its negotiated version |
 | 12.10 | Rust workspace tests | DONE | `cargo test --workspace`, 0 failures |
 | 12.11 | Root typecheck and lint | DONE | `bun run typecheck`, `bun run lint` clean, including the new script |
-| 12.12 | Real prompt turn through the live v4 adapter | NOT_RUN | The live check is read-only by design and dispatches no operation. Isolated full-stack turn evidence stays in `docs/evidence/v0.5.0/` |
-| 12.13 | Phone-side run against the live v4 adapter | NOT_RUN | No device is attached to this host. The operator pairs with the printed code |
+| 12.12 | Real prompt turn through the live v4 adapter | PASS | The paired phone dispatched one `send` at 19:30:11 CET. The adapter recorded it `accepted`, the daemon took it, and its tool and text events were journaled and streamed back |
+| 12.13 | Phone-side run against the live v4 adapter | PASS | The Android client paired with a printed code at 19:29:55 CET as `JCode Mobile` and connected on `jcode.mobile.v4`. The turn above came from that connection |
+| 12.14 | Pairing rejections observable | DONE | Every attempt logs its outcome, never the code. A wrong code logs `pairing attempt rejected error=not found`, a redeemed one logs `pairing code redeemed` |
+| 12.15 | One code redeems however it is typed | DONE | Separators and case normalized on both sides. Five spellings unit-tested and a dash-less lower-case code redeemed live through the public origin |
