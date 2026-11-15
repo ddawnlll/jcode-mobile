@@ -1,5 +1,16 @@
 # Getting started
 
+> **Current release: 0.5.0, Adapter v4.** The live deployment this guide is
+> calibrated against now runs `jcode-adapter-v4` (0.5.0, protocol 4, minimum 2)
+> behind `https://dawnll.duckdns.org`. See
+> [`ADAPTER_V4_DEPLOYMENT.md`](ADAPTER_V4_DEPLOYMENT.md) for that cutover,
+> its verification and its rollback. The walkthrough below still names Adapter
+> v2 because the v2 binary is the documented rollback path. To run Adapter v4
+> instead, build `--bin jcode-adapter-v4` and also set `JCODE_SOCKET` to the
+> daemon's own native socket, because v4 opens native per-session links on it.
+> Without that variable the default is a `jcode.sock` beside
+> `JCODE_API_SOCKET`, which does not exist.
+
 JCode Mobile 0.3.1 is the Stillness 12 Tauri client paired with the Rust
 Adapter v2. The phone is the surface. The adapter and the JCode daemon do the
 work on your server.

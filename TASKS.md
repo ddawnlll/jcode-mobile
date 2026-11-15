@@ -204,3 +204,28 @@ left `NOT_RUN`; no item is promoted because another item passed.
 | 11.35 | Frame pacing / 120 Hz | NOT_RUN | Not measured |
 | 11.36 | CI workflow execution | NOT_RUN | Workflow committed; not pushed or run |
 | 11.37 | Release tag and GitHub release | NOT_RUN | `v0.4.0` tag/release not created; the website CTA depends on the released APK asset |
+
+## Phase 12 — 0.5.0 Adapter v4 on the live host (2026-11-15)
+
+The live origin `https://dawnll.duckdns.org` (Caddy → `127.0.0.1:7644`) was
+serving the pre-v4 adapter: `jcode-mobile-adapter-v2.service` running
+`target/release/jcode-adapter-v2`, `adapter_version` 0.3.1, protocol 2, single
+subprotocol `jcode.mobile.v2`. It had been stopped and disabled at 13:56 UTC, so
+the origin had no adapter behind it. It was replaced by Adapter v4. Full record:
+[`docs/ADAPTER_V4_DEPLOYMENT.md`](docs/ADAPTER_V4_DEPLOYMENT.md).
+
+| # | Task | Status | Acceptance |
+| --- | --- | --- | --- |
+| 12.1 | Build Adapter v4 for the host | DONE | `cargo build --release --locked -p adapter-server --bin jcode-adapter-v4` finished in 5m36s. The binary offers `jcode.mobile.v4`, `v3` and `v2` and banners `Adapter v4` |
+| 12.2 | Build the Stillness 0.5.0 web bundle | DONE | `vite build`: 412.58 kB raw / 121.50 kB gzip initial JS, deferred Markdown 47.26 kB gzip |
+| 12.3 | Deployment tooling for v4 | DONE | `scripts/install-adapter-v4-service.sh`: user units, no root, retires the v2 unit, prints health + pairing code, prints rollback |
+| 12.4 | Cut over the live adapter | DONE | `jcode-mobile-adapter-v4.service` active on `127.0.0.1:7644`. The v2 unit is disabled but kept for rollback |
+| 12.5 | Preserve identity and pairings | DONE | Same data dir and `server_id` `srv_124eb6…`, schema extended in place, v2-era device tokens still authenticate. No phone re-pair required |
+| 12.6 | Health on loopback and through Caddy | DONE | Both return `adapter_version` 0.5.0, `protocol_version` 4, `min_protocol_version` 2, `jcode_connected` true |
+| 12.7 | Web build on the origin | DONE | `GET /` returns the 0.5.0 Stillness build, `index-Dgm-tUk6.js` at 412,578 B |
+| 12.8 | Live v4 protocol check | DONE | `scripts/adapter-v4-live-check.ts`: v4 negotiated, 41 capabilities, 127 real sessions, snapshot with 40 messages, one `transport.bytes` response reassembled from binary frames, diagnostics clean |
+| 12.9 | Older clients not broken | DONE | The same adapter negotiated v3 and v2 on demand, and every frame on each connection stayed at its negotiated version |
+| 12.10 | Rust workspace tests | DONE | `cargo test --workspace`, 0 failures |
+| 12.11 | Root typecheck and lint | DONE | `bun run typecheck`, `bun run lint` clean, including the new script |
+| 12.12 | Real prompt turn through the live v4 adapter | NOT_RUN | The live check is read-only by design and dispatches no operation. Isolated full-stack turn evidence stays in `docs/evidence/v0.5.0/` |
+| 12.13 | Phone-side run against the live v4 adapter | NOT_RUN | No device is attached to this host. The operator pairs with the printed code |

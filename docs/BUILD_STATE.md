@@ -19,6 +19,8 @@ Updated: 2026-11-15
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
 | JCode harness API | v1.11 |
 | Runtime | Bun 1.4.4, Rust 1.96.0-nightly |
+| Live deployment | `https://dawnll.duckdns.org` → `127.0.0.1:7644`, unit `jcode-mobile-adapter-v4.service` |
+| Live adapter version | 0.5.0, protocol 4, minimum 2, cut over 2026-11-15 |
 | Repository | `https://github.com/ddawnlll/jcode-mobile` |
 
 The detailed checks and artifact sections below describe the 0.4.0 build and
@@ -27,6 +29,13 @@ are kept as history. The 0.5.0 results are in
 `docs/evidence/v0.5.0/benchmark/REPORT.md`: 75 Rust tests, 139 JavaScript tests,
 15 Stillness UX checks, 121.50 kB gzip initial JavaScript, 16.1x fewer stream
 frames, and a reassembled 200 KB binary transport package.
+
+The live host was moved from the pre-v4 adapter to Adapter v4 on 2026-11-15.
+That cutover, its checks and its rollback are recorded in
+[`ADAPTER_V4_DEPLOYMENT.md`](ADAPTER_V4_DEPLOYMENT.md). The step before it was
+Adapter v2 (`0.3.1`, protocol 2). No v3 build was ever deployed. The deployment
+reused the existing data directory, so the `server_id` and paired device tokens
+were preserved rather than re-issued.
 
 ## Components
 

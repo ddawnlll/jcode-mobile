@@ -57,6 +57,9 @@ Android package: `dev.jcode.stillness`, versionCode 5000
 | Large payload transport | 200,514 B in one descriptor plus four binary frames; client reassembled valid JSON and UTF-8 across a 64 KiB code-point boundary |
 | Full stack with pinned JCode | PASS, isolated daemon + harness bridge + native link + Adapter v3/v4, deterministic Responses provider |
 | Pairing and session browser e2e | PASS against Adapter v4 after the version assertion update |
+| Live host cutover to Adapter v4 | PASS, 2026-11-15: `https://dawnll.duckdns.org` → `127.0.0.1:7644`, unit `jcode-mobile-adapter-v4.service`, previous 0.3.1 adapter retired but kept for rollback (`docs/ADAPTER_V4_DEPLOYMENT.md`) |
+| Live deployment against the real daemon | PASS (read-only): v4 negotiated, 41 capabilities, 127 real sessions, 40-message snapshot, one byte package reassembled, v3 and v2 clients still negotiate |
+| Live real prompt turn | NOT_RUN for the live deployment. The live check pairs no prompt and dispatches no operation |
 | Android release APK | PASS, versionCode 5000, versionName 0.5.0, v2 + v3 signatures |
 | Real provider/model turn | NOT_RUN for 0.5.0 |
 | Android on-device install, real turn, frame pacing | NOT_RUN for 0.5.0 |
