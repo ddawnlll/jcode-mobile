@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/evidence/v0.4.0/android-emulator-home.png" alt="JCode Mobile 0.4.0 release APK on an Android API 36 emulator: Harness online and the session list" width="320" />
+  <img src="docs/evidence/v0.4.0/android-emulator-home.png" alt="JCode Mobile on an Android API 36 emulator: Harness online and the session list" width="320" />
 </p>
 
-<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.4.0</code></sub></p>
+<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.5.0</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/ddawnlll/jcode-mobile/check.yml?style=flat-square&label=CI" alt="CI status" /></a>
-  <a href="docs/ADAPTER_V3.md"><img src="https://img.shields.io/badge/API-Adapter_v3-2F6F52?style=flat-square" alt="Adapter v3 API" /></a>
+  <a href="docs/ADAPTER_V4.md"><img src="https://img.shields.io/badge/API-Adapter_v4-2F6F52?style=flat-square" alt="Adapter v4 API" /></a>
   <br />
   <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the site</strong></a>
 </p>
@@ -22,12 +22,12 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ANDROID / 0.4.0 / 12.1 MiB</code></sub><br /><br />
+      <sub><code>ANDROID / 0.5.0 / 12.1 MiB</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><strong>Download the APK</strong></a><br />
       <sub>Debug-signed sideload. No Play Store listing.</sub>
     </td>
     <td width="33%" align="center" valign="top">
-      <sub><code>SERVER / JCODE + ADAPTER V3</code></sub><br /><br />
+      <sub><code>SERVER / JCODE + ADAPTER V4</code></sub><br /><br />
       <a href="docs/GETTING_STARTED.md"><strong>Run the adapter</strong></a><br />
       <sub>One pairing code. Then a device token.</sub>
     </td>
@@ -39,39 +39,30 @@
   </tr>
 </table>
 
-> **0.4.0 is a development preview.** It ships Adapter v3, the Stillness 12
-> gesture and motion system, and a native Android bridge. The Android APK is
-> debug-signed for sideloading. The native Linux shell builds from source.
-> There is no iOS artifact and no Play Store listing.
+> **0.5.0 is a development preview.** It ships Adapter v4, the Stillness 12
+> renderer, and the native Android bridge. The Android APK is debug-signed for
+> sideloading. The native Linux shell builds from source. There is no iOS
+> artifact and no Play Store listing.
 
-## 0.5.0 Feather and Arrow
-
-The 0.5.0 release candidate introduces Adapter v4, a direct JCode session
-stream, live reasoning effort and sub-agent state, byte packages for large
-WebSocket responses, and a lighter transcript renderer. See the
-[Adapter v4 contract, migration, and verification](docs/ADAPTER_V4.md).
-
-## What 0.4.0 is
+## What 0.5.0 is
 
 JCode Mobile is two processes:
 
-1. **Adapter v3** is one Rust binary on your server. It speaks to JCode through
-   the pinned `jcode-sdk` and harness API, keeps a durable SQLite event journal,
-   and exposes an authenticated mobile WebSocket. Protocol 3, minimum 2: a v2
-   phone still pairs and never receives a v3 frame.
+1. **Adapter v4** is one Rust binary on your server. It opens bounded native
+   JCode session links, applies the exact model/provider/API route, keeps the
+   durable SQLite event journal, and exposes an authenticated mobile WebSocket.
+   Protocol 4, minimum 2: a v2 phone still pairs and never receives a v4 frame.
 2. **Stillness 12** is the Tauri 2 client. It paints the cached session before
-   the handshake, reconciles through journal replay or an authoritative
-   snapshot, and restores the exact server and session you left.
+   the handshake, applies stream updates once per animation frame, reconciles
+   through journal replay or an authoritative snapshot, and restores the exact
+   server and session you left.
 
-0.4.0 adds a durable journal with cursor replay and per-device acknowledgement,
-delta session sync with tombstones, authenticated diagnostics, validated inline
-image attachments, and push registration with FCM HTTP v1 delivery when
-operator credentials are configured. The client adds a finger-following drawer,
-draggable sheets, swipe actions with undo, long-press menus, pull-to-refresh, an
-interleaved conversation timeline, one-tap copy, a quick switcher, and a
-snapping reasoning-effort slider. The Android shell adds notification channels,
-WorkManager background health checks, sharesheet, pickers, downloads,
-biometric app lock, edge-to-edge insets, and predictive back.
+0.5.0 adds per-session native links, exact route selection, live runtime and
+swarm state, delta coalescing before sequence assignment, and bounded binary
+WebSocket packages for large UTF-8 payloads. The client defers Markdown, pages
+long messages and tool output, and cuts the opening JavaScript bundle from
+166.37 kB to 121.50 kB gzip. It keeps the 0.4.0 journal, validated image
+attachments, push registration, and Android shell.
 
 Nothing above is inferred from the browser surface: native Android evidence is
 tracked separately in [`docs/ANDROID_NATIVE.md`](docs/ANDROID_NATIVE.md).
@@ -87,44 +78,38 @@ Cancel. Only the explicit **Stop** control targets the current turn.
 | Web | Verification surface only; browser token in `localStorage` |
 | iOS | Not built on this host; no IPA |
 
-## Verified on the release build
+## Verified for 0.5.0
 
-<p align="center">
-  <img src="docs/evidence/v0.4.0/android-emulator-paired.png" alt="Pairing verified on the 0.4.0 release APK: device token accepted, Adapter 0.4.0, harness connected" width="300" />
-  <img src="docs/evidence/v0.4.0/ui/03-session-restored.png" alt="Session restored from the phone cache and marked saved on this phone while the socket is closed" width="300" />
-</p>
-
-The 0.4.0 release APK, installed on an API 36 arm64 emulator, paired to an
-isolated staging Adapter v3 and showed `DEVICE TOKEN ACCEPTED`, `Adapter 0.4.0`,
-and `JCode harness connected`; the session list came from the real staging
-daemon. The second capture is a browser build showing the cache-first state:
-`saved on this phone` while the socket is closed.
-
-After an emulator restart the app restored the exact session with its history.
-A real turn also completed on-device: the prompt reached the agent and a
-generated reply rendered. The adb-typed prompt was truncated to `Repl`, and the
-agent answered by asking about a REPL. That is a real accepted turn and reply,
-not a fixture, but it is not a successful task completion.
+The 0.5.0 candidate was built and tested from isolated worktrees against the
+pinned JCode daemon `0abff12c`. The full stack (daemon, harness bridge, native
+link, Adapter v3 and v4, and the web UI) ran end to end on macOS with a
+deterministic local Responses fixture. The fixture is not a model and makes no
+network calls, so the transport and UI numbers do not depend on a provider.
 
 | Check | Result |
 | --- | --- |
-| Adapter v3 Rust tests | PASS, 72 tests (28 core + 10 protocol + 17 server lib + 17 integration) |
+| Adapter v4 Rust tests | PASS, 75 tests (29 core + 10 protocol + 19 server lib + 17 integration) |
 | Rust formatting and clippy | PASS, `cargo fmt --check` and `cargo clippy -D warnings` |
-| Real-daemon adapter smoke (real agent turn) | PASS, answer `OK`, 7 journal events, replay 0 duplicates, one accepted operation |
-| Stillness browser e2e against a real daemon | PASS, 5 passed / 3 skipped with the perf spec; 4 passed / 3 skipped without it |
-| Startup measurements (Chromium web target) | PASS, first screen 27 ms online, 60 ms cached with the socket blocked, 56 ms shell to paint |
-| Android release APK static verification | PASS, versionCode 4000, minSdk 24, target 37, v2 + v3 signatures |
-| Android emulator release build | PASS, API 36 arm64: installed as versionCode 4000, launched with no fatal crash, paired, restart restored the exact session with history, one real turn accepted and answered on device |
-| Android Kotlin compile on this host | PASS, JDK 24, SDK 37, NDK 27.1 |
+| Legacy JavaScript tests | PASS, 14 suites / 139 tests |
+| Stillness UX checks | PASS, 15/15 |
+| TypeScript and ESLint | PASS |
+| Stillness production build | PASS, 121.50 kB gzip initial JavaScript |
+| Stream coalescing | PASS, 12,009 frames / 6,595,348 B to 745 frames / 780,810 B on the same 384,000-byte response |
+| Large UTF-8 payload | PASS, one descriptor + four binary frames, 200,514 B reassembled to valid JSON and UTF-8 across a 64 KiB boundary |
+| Full stack on the pinned daemon | PASS, isolated daemon + harness bridge + native link + Adapter v3/v4 |
+| Pairing and session browser e2e | PASS against Adapter v4 after the version assertion update |
+| Android release APK static verification | PASS, versionCode 5000, versionName 0.5.0, v2 + v3 signatures |
+| Real provider/model turn | NOT_RUN for 0.5.0 |
+| Android on-device install, real turn, frame pacing | NOT_RUN for 0.5.0 |
 | Physical Android device | NOT_RUN |
 | FCM delivery | PARTIAL, registration only; `not_configured`, no Firebase credentials |
 | TalkBack / VoiceOver walkthrough | NOT_RUN |
-| Battery, frame pacing, native cold start and memory | NOT_RUN |
-| Process death and airplane mode | NOT_RUN |
+| Battery, native cold start and memory | NOT_RUN |
 
-The full matrix, commands, and captures are in
-[`docs/evidence/v0.4.0/README.md`](docs/evidence/v0.4.0/README.md) and
-[`docs/BUILD_STATE.md`](docs/BUILD_STATE.md).
+The 0.4.0 on-device captures remain in
+[`docs/evidence/v0.4.0/README.md`](docs/evidence/v0.4.0/README.md). They are
+0.4.0 evidence and are not presented as a 0.5.0 device run. The full 0.5.0
+benchmark is in [`docs/evidence/v0.5.0/benchmark/REPORT.md`](docs/evidence/v0.5.0/benchmark/REPORT.md).
 
 ## The transcript is fenced
 
@@ -154,21 +139,21 @@ what the server reported: plan, context, activity, runtime, and provider.
 ## Install the Android APK
 
 ```text
-jcode-mobile-0.4.0-android-release.apk
-12,693,953 bytes (12.1 MiB)
-SHA-256 db6fadf9d305a958388859e50aa93490adc35907ba6e3cbe9f6e2f87d86ca531
+jcode-mobile-0.5.0-android-release.apk
+12,718,529 bytes (12.1 MiB)
+SHA-256 d1f5662fca569e3a0bba725b862ae7cc27c121af1861562bb821cd0c3a98f227
 package dev.jcode.stillness
-versionCode 4000, versionName 0.4.0
+versionCode 5000, versionName 0.5.0
 minSdk 24, targetSdk 37, compileSdk 37
 arm64-v8a + armeabi-v7a
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r jcode-mobile-0.4.0-android-release.apk
+adb install -r jcode-mobile-0.5.0-android-release.apk
 ```
 
-The package identifier and signing key are unchanged from 0.3.1, so the app
+The package identifier and signing key are unchanged from 0.4.0, so the app
 updates in place and keeps its device token. The APK and its `.sha256` are built
 to `artifacts/` and attached to the GitHub release once it is published.
 
@@ -177,17 +162,18 @@ to `artifacts/` and attached to the GitHub release once it is published.
 ```sh
 git clone https://github.com/ddawnlll/jcode-mobile.git
 cd jcode-mobile
-cargo build --release -p adapter-server --bin jcode-adapter-v3
+cargo build --release -p adapter-server --bin jcode-adapter-v4
 
 JCODE_ADAPTER_ALLOWED_ROOTS="$HOME/src" \
 JCODE_ADAPTER_BIND=127.0.0.1:7646 \
-./target/release/jcode-adapter-v3
+./target/release/jcode-adapter-v4
 ```
 
-`jcode-adapter-v2` is a rollback alias that runs the same versioned server, so
-existing service units keep working. The adapter prints its pairing code and the
-roots it will expose. It discovers the JCode harness socket from
-`JCODE_API_SOCKET` or the platform runtime directory. Data lives in
+`jcode-adapter-v3` and `jcode-adapter-v2` are rollback aliases that run the same
+versioned server, so existing service units keep working. The adapter prints its
+pairing code and the roots it will expose. It discovers the JCode harness socket
+from `JCODE_API_SOCKET` or the platform runtime directory. Adapter v4 also opens
+the native `JCODE_SOCKET` for the same runtime. Data lives in
 `~/.local/share/jcode-mobile-adapter-v2` unless `JCODE_ADAPTER_DATA_DIR` is set;
 the directory name is retained from v2 and its schema is extended in place.
 
@@ -204,8 +190,8 @@ Then enter `https://dawnll.example.com` in the app. The adapter does not ship a
 TLS terminator, VPN client, or SSH client for the phone.
 
 Full setup, environment variables, troubleshooting, and local staging:
-[`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md). Upgrade and rollback:
-[`docs/V0_4_0_MIGRATION.md`](docs/V0_4_0_MIGRATION.md).
+[`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md). Upgrade, rollback, and
+the v4 contract: [`docs/ADAPTER_V4.md`](docs/ADAPTER_V4.md).
 
 ## Build from source
 
@@ -234,8 +220,11 @@ when the host has no system GTK/WebKit development packages.
 
 - The Android APK is debug-signed and sideload-only. There is no Play Store
   release, release keystore, auto-update channel, or signed iOS build.
-- The release APK is ARM-only. The Android runtime checks used the arm64-v8a
-  API 36 emulator on macOS. Physical-device validation is `NOT_RUN`.
+- The 0.5.0 candidate was exercised with a deterministic local provider on
+  macOS. A real provider/model turn and on-device install, turn timing, battery,
+  and frame pacing are `NOT_RUN` for 0.5.0.
+- The release APK is ARM-only. The 0.4.0 Android runtime checks used the
+  arm64-v8a API 36 emulator on macOS. 0.5.0 on-device validation is `NOT_RUN`.
 - FCM delivery is `not_configured` without `JCODE_FCM_PROJECT_ID` and
   `JCODE_FCM_ACCESS_TOKEN`. Payloads contain no transcript content.
 - The scheduled background check is an unauthenticated `GET /health`. It reports
@@ -251,25 +240,26 @@ when the host has no system GTK/WebKit development packages.
 - Attachments accept four inline images per message, 4 MiB each. Provider
   credentials are not implemented in the mobile composer.
 - A human screen-reader pass, battery measurement, frame pacing, and native
-  cold-start measurements remain `NOT_RUN`.
+  cold-start measurements remain `NOT_RUN` for 0.5.0.
 
 ## Documentation
 
 | Read | Why |
 | --- | --- |
 | [Getting started](docs/GETTING_STARTED.md) | Adapter, TLS, pairing, Android, Linux, troubleshooting |
-| [Adapter v3](docs/ADAPTER_V3.md) | Negotiation, journal, replay, delta sync, diagnostics, attachments, push |
+| [Adapter v4](docs/ADAPTER_V4.md) | Native links, exact routes, coalescing, binary transport, migration, verification |
 | [Adapter contract](docs/ADAPTER_CONTRACT.md) | Source evidence, operation states, security boundaries |
 | [Android native](docs/ANDROID_NATIVE.md) | Kotlin bridge, commands, permission and capability matrix |
-| [Migration](docs/V0_4_0_MIGRATION.md) | 0.3.x → 0.4.0 adapter and phone upgrade, rollback |
-| [Audit](docs/V0_4_0_AUDIT.md) | Battery, privacy, permissions, accessibility, startup |
+| [Migration](docs/ADAPTER_V4.md) | 0.4.x → 0.5.0 adapter and phone upgrade, rollback |
+| [Audit](docs/V0_4_0_AUDIT.md) | Battery, privacy, permissions, accessibility and startup history |
 | [Development](docs/DEVELOPMENT.md) | Repository layout, commands, tests, release builds |
-| [Verification](docs/VERIFICATION.md) | The 0.3.1 matrix, kept as history; 0.4.0 evidence is in the index above |
+| [Verification](docs/VERIFICATION.md) | The 0.3.1 matrix, kept as history; 0.4.0 and 0.5.0 evidence are in the release notes |
 | [Build state](docs/BUILD_STATE.md) | Versions, artifacts, checksums, resumption point |
-| [Release notes](docs/V0_4_0_RELEASE_NOTES.md) | 0.4.0 scope and known limits |
+| [Release notes](docs/V0_5_0_RELEASE_NOTES.md) | 0.5.0 scope, benchmark, and known limits |
 
 Historical release notes remain in `docs/`, including
-[0.3.1](docs/V0_3_1_RELEASE_NOTES.md) and
+[0.4.0](docs/V0_4_0_RELEASE_NOTES.md),
+[0.3.1](docs/V0_3_1_RELEASE_NOTES.md), and
 [0.3.0](docs/V0_3_0_RELEASE_NOTES.md).
 
 ---

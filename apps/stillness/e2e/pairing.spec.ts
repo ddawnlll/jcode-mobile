@@ -20,7 +20,7 @@ test('pairs through the real adapter and persists the exact server', async ({ pa
 
   await expect(page.getByTestId('ready-screen')).toBeVisible({ timeout: 45_000 });
   await expect(page.getByText('DEVICE TOKEN ACCEPTED')).toBeVisible();
-  await expect(page.getByText(/Adapter 0\.4\.0/)).toBeVisible();
+  await expect(page.getByText(/Adapter 0\.5\.0/)).toBeVisible();
 
   await page.getByTestId('enter-app').click();
   await expect(page.getByTestId('home-screen')).toBeVisible();

@@ -72,7 +72,7 @@ sizes.
 | Revision | Initial JS | Initial JS, gzip | Deferred Markdown, gzip |
 | --- | ---: | ---: | ---: |
 | v0.4.0 | 512.02 kB | 166.37 kB | Included in initial JS |
-| v0.5.0 candidate | 412.58 kB | 121.50 kB | 47.26 kB |
+| v0.5.0 | 412.58 kB | 121.50 kB | 47.26 kB |
 
 The Rust native-stream fixture checks the JCode attach, exact route selection,
 message acceptance, external effort refresh and scoped swarm events. The
@@ -80,10 +80,23 @@ WebSocket and client checks cover a multibyte character on a package boundary.
 The TypeScript timeline check covers reasoning, tool, and assistant ordering
 within one rendered frame.
 
-The workspace blocks Unix sockets, so the pinned JCode executable could be
-compiled and the stream fixture exercised, while the real daemon smoke and
-browser e2e require a host with Unix socket access. The APK build/install,
-release signing and on-device frame pacing remain to be confirmed.
+On macOS 26 aarch64 with the pinned binary `0abff12c`, the full stack ran end to
+end: isolated daemon, harness bridge, native session link, Adapter v3 and v4,
+and the web UI. A deterministic local Responses fixture fed both adapters the
+same bytes, so the following comparison does not depend on a model provider.
+
+| Measurement | 0.4.0 | 0.5.0 |
+| --- | ---: | ---: |
+| 12,000 deltas / 384,000 B, session.event frames | 12,009 | 745 |
+| Same stream, WebSocket text bytes | 6,595,348 | 780,810 |
+| Same stream, first-to-last delta | 1,245 ms | 1,242 ms |
+| 200,000 B multibyte payload | one 200 KB text frame | one descriptor + four 64 KiB binary frames |
+| Reassembled JSON / UTF-8 | n/a | 1/1, 1/1 |
+
+A real provider/model turn and Android on-device frame pacing remain `NOT_RUN`.
+The APK builds and signs with the same `android/app/debug.keystore` as 0.4.0,
+and its versionCode/versionName and v2 + v3 signatures are verified. The browser
+pairing and session e2e pass against Adapter v4.
 
 ```sh
 cargo test --workspace --locked

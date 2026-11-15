@@ -1,0 +1,402 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded notify-types v2.3.0
+  Downloaded rustls-native-certs v0.8.5
+  Downloaded notify v8.2.2
+  Downloaded zstd-safe v8.3.0
+  Downloaded zstd v0.14.4
+  Downloaded objc2-core-services v0.3.2
+  Downloaded zstd-sys v2.1.3+zstd.1.5.7
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libc v0.2.191
+   Compiling cfg-if v1.0.5
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.19
+   Compiling serde_core v1.0.229
+   Compiling smallvec v1.16.5
+   Compiling serde v1.0.229
+   Compiling pin-project-lite v0.2.17
+   Compiling bytes v1.12.1
+   Compiling scopeguard v1.2.0
+   Compiling parking_lot_core v0.9.12
+   Compiling core-foundation-sys v0.8.7
+   Compiling autocfg v1.5.1
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.154
+   Compiling lock_api v0.4.14
+   Compiling num-traits v0.2.19
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.15
+   Compiling once_cell v1.21.4
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.63
+   Compiling version_check v0.9.5
+   Compiling stable_deref_trait v1.2.1
+   Compiling bitflags v2.13.2
+   Compiling futures-core v0.3.34
+   Compiling log v0.4.35
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.3
+   Compiling futures-sink v0.3.34
+   Compiling allocator-api2 v0.2.21
+   Compiling hashbrown v0.17.1
+   Compiling tracing-core v0.1.36
+   Compiling http v1.5.0
+   Compiling litemap v0.8.3
+   Compiling utf_types v1.0.0
+   Compiling slab v0.4.12
+   Compiling writeable v0.6.4
+   Compiling percent-encoding v2.3.2
+   Compiling syn v3.0.10
+   Compiling syn v2.0.119
+   Compiling utf8_iter v1.1.0
+   Compiling futures-channel v0.3.34
+   Compiling iana-time-zone v0.1.65
+   Compiling icu_properties_data v2.4.0
+   Compiling icu_normalizer_data v2.4.0
+   Compiling pkg-config v0.3.34
+   Compiling generic-array v0.14.7
+   Compiling futures-io v0.3.34
+   Compiling futures-task v0.3.34
+   Compiling jobserver v0.1.35
+   Compiling errno v0.3.14
+   Compiling parking_lot v0.12.5
+   Compiling cc v1.11.1
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.4
+   Compiling socket2 v0.6.5
+   Compiling synstructure v0.14.0
+   Compiling rand_core v0.9.5
+   Compiling option-ext v0.2.0
+   Compiling typenum v1.20.1
+   Compiling httparse v1.10.1
+   Compiling dirs-sys v0.4.1
+   Compiling http-body v1.1.0
+   Compiling ring v0.17.14
+   Compiling anyhow v1.0.104
+   Compiling tracing-attributes v0.1.31
+   Compiling zeroize v1.9.1
+   Compiling rustls-pki-types v1.16.0
+   Compiling num-integer v0.1.47
+   Compiling serde_derive v1.0.229
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling tokio-macros v2.7.2
+   Compiling zerovec-derive v0.11.7
+   Compiling displaydoc v0.2.7
+   Compiling tokio v1.54.1
+   Compiling tracing v0.1.44
+   Compiling futures-macro v0.3.34
+   Compiling zerofrom v0.1.8
+   Compiling dirs v5.0.1
+   Compiling form_urlencoded v1.2.2
+   Compiling ppv-lite86 v0.2.21
+   Compiling regex-syntax v0.8.11
+   Compiling unicode-segmentation v1.13.3
+   Compiling unicode-properties v0.1.5
+   Compiling futures-util v0.3.34
+   Compiling rand_chacha v0.9.0
+   Compiling system-configuration-sys v0.6.0
+   Compiling thiserror v2.0.21
+   Compiling rand v0.9.5
+   Compiling tower-service v0.3.3
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling thiserror-impl v2.0.21
+   Compiling getrandom v0.2.17
+   Compiling indexmap v2.14.2
+   Compiling aho-corasick v1.1.5
+   Compiling atomic-waker v1.1.2
+   Compiling untrusted v0.9.0
+   Compiling rustversion v1.0.23
+   Compiling httpdate v1.0.3
+   Compiling fnv v1.0.7
+   Compiling yoke v0.8.4
+   Compiling try-lock v0.2.5
+   Compiling want v0.3.2
+   Compiling regex-automata v0.4.18
+   Compiling digest v0.10.7
+   Compiling num-bigint v0.4.8
+   Compiling zstd-sys v2.1.3+zstd.1.5.7
+   Compiling cpufeatures v0.2.17
+   Compiling core-foundation v0.9.4
+   Compiling sync_wrapper v1.0.2
+   Compiling ahash v0.8.12
+   Compiling mime v0.3.18
+   Compiling unicase v2.10.0
+   Compiling tower-layer v0.3.3
+   Compiling ref-cast v1.0.27
+   Compiling lazy_static v1.5.1
+   Compiling rustls v0.23.46
+   Compiling mime_guess v2.0.5
+   Compiling system-configuration v0.7.0
+   Compiling tokio-util v0.7.20
+   Compiling chrono v0.4.45
+   Compiling zerovec v0.11.9
+   Compiling zerotrie v0.2.5
+   Compiling h2 v0.4.20
+   Compiling jcode-core v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling jcode-storage v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling jcode-message-types v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling rustls-webpki v0.103.17
+   Compiling jcode-logging v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling num-rational v0.4.2
+   Compiling num-iter v0.1.46
+   Compiling ref-cast-impl v1.0.27
+   Compiling num-complex v0.4.6
+   Compiling http-body-util v0.1.5
+   Compiling core-foundation v0.10.1
+   Compiling security-framework-sys v2.17.0
+   Compiling ipnet v2.12.2
+   Compiling data-encoding v2.11.1
+   Compiling base64 v0.23.1
+   Compiling subtle v2.6.1
+   Compiling vcpkg v0.2.15
+   Compiling getrandom v0.4.3
+   Compiling security-framework v3.7.0
+   Compiling num v0.4.3
+   Compiling encoding_rs v0.8.44
+   Compiling jcode-task-types v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling libsqlite3-sys v0.39.1
+   Compiling tower v0.5.3
+   Compiling jcode-usage-types v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling unicode-general-category v1.1.0
+   Compiling heck v0.5.0
+   Compiling hyper v1.12.0
+   Compiling ryu v1.0.23
+   Compiling crc32fast v1.5.5
+   Compiling tinystr v0.8.5
+   Compiling icu_locale_core v2.4.0
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.4.0
+   Compiling bit-vec v0.8.0
+   Compiling borrow-or-share v0.2.4
+   Compiling zstd-safe v8.3.0
+   Compiling rustix v1.1.6
+   Compiling bit-set v0.8.0
+   Compiling hyper-util v0.1.21
+   Compiling icu_provider v2.4.0
+   Compiling icu_normalizer v2.4.0
+   Compiling icu_properties v2.4.0
+   Compiling fluent-uri v0.4.1
+   Compiling tokio-rustls v0.26.6
+   Compiling serde_urlencoded v0.7.1
+   Compiling strum_macros v0.28.0
+   Compiling jcode-todo-policy v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling rustls-native-certs v0.8.5
+   Compiling fraction v0.15.4
+   Compiling jcode-session-types v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling jcode-applet-types v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling jcode-side-panel-types v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling webpki-roots v1.0.12
+   Compiling simdutf8 v0.1.5
+   Compiling adler2 v2.0.1
+   Compiling bytecount v0.6.9
+   Compiling num-cmp v0.1.0
+   Compiling http-range-header v0.4.2
+   Compiling base64 v0.22.1
+   Compiling multiversion_no_op v1.0.0
+   Compiling micromap v0.3.0
+   Compiling vsimd v0.8.0
+   Compiling simd-adler32 v0.3.10
+   Compiling outref v0.5.2
+   Compiling jsonschema-value v0.49.9
+   Compiling strum v0.28.0
+   Compiling referencing v0.49.9
+   Compiling miniz_oxide v0.9.1
+   Compiling tower-http v0.6.11
+   Compiling uuid-simd v0.8.0
+   Compiling hyper-rustls v0.27.10
+   Compiling fancy-regex v0.19.2
+   Compiling jcode-harness-api v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling futures-executor v0.3.34
+   Compiling regex v1.13.1
+   Compiling email_address v0.2.9
+   Compiling jcode-transport v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling jsonschema-regex v0.49.9
+   Compiling hashlink v0.12.2
+   Compiling objc2-core-foundation v0.3.2
+   Compiling fastrand v2.5.0
+   Compiling fallible-iterator v0.3.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling same-file v1.0.6
+   Compiling walkdir v2.5.0
+   Compiling tempfile v3.27.0
+   Compiling jsonschema v0.49.9
+   Compiling flate2 v1.1.11
+   Compiling futures v0.3.34
+   Compiling jcode-provider-metadata v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling uuid v1.29.2
+   Compiling adapter-protocol v0.5.0 (/Users/hootie/.jcode/scratch/bench/new/crates/adapter-protocol)
+   Compiling jcode-schema-dialect v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling objc2-core-services v0.3.2
+   Compiling sha2 v0.10.9
+   Compiling async-trait v0.1.92
+   Compiling notify-types v2.3.0
+   Compiling sha1 v0.10.7
+   Compiling reqwest v0.12.28
+   Compiling tungstenite v0.29.0
+   Compiling notify v8.2.2
+   Compiling zstd v0.14.4
+   Compiling axum-core v0.5.6
+   Compiling tokio-tungstenite v0.29.0
+   Compiling matchers v0.2.0
+   Compiling sharded-slab v0.1.7
+   Compiling serde_path_to_error v0.1.20
+   Compiling axum-macros v0.5.1
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.10
+   Compiling rusqlite v0.41.1
+   Compiling matchit v0.8.4
+   Compiling nu-ansi-term v0.50.3
+   Compiling tracing-subscriber v0.3.23
+   Compiling jcode-provider-core v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling jcode-harness-api-server v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling axum v0.8.9
+   Compiling jcode-sdk v0.1.0 (https://github.com/ddawnlll/jcode?rev=0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8#0abff12c)
+   Compiling adapter-core v0.5.0 (/Users/hootie/.jcode/scratch/bench/new/crates/adapter-core)
+   Compiling adapter-server v0.5.0 (/Users/hootie/.jcode/scratch/bench/new/crates/adapter-server)
+    Finished `test` profile [unoptimized] target(s) in 25.91s
+     Running unittests src/lib.rs (target/debug/deps/adapter_core-eeaa90ba22efd380)
+
+running 29 tests
+test backend::tests::command_code_provider_spellings_are_equivalent ... ok
+test backend::tests::other_providers_do_not_match_command_code ... ok
+test journal::tests::cursor_only_moves_forward ... ok
+test auth::tests::codes_and_tokens_never_appear_in_storage_hashes ... ok
+test journal::tests::projects_are_only_sent_on_full_sync ... ok
+test journal::tests::session_index_delta_converges ... ok
+test journal::tests::empty_index_is_reported_as_full ... ok
+test paths::tests::binary_previews_do_not_claim_text ... ok
+test journal::tests::sequence_is_per_session_and_monotonic ... ok
+test auth::tests::pairing_is_single_use_and_name_is_bounded ... ok
+test paths::tests::relative_paths_stay_under_the_root ... ok
+test paths::tests::external_symlink_is_not_traversable ... ok
+test native_link::tests::session_stream_correlates_attach_route_and_acceptance ... ok
+test paths::tests::protected_names_are_not_listed ... ok
+test paths::tests::folder_creation_is_confined_and_collision_safe ... ok
+test journal::tests::replay_reports_paging ... ok
+test journal::tests::replay_is_ordered_and_exclusive_of_cursor ... ok
+test journal::tests::journal_survives_a_reopen ... ok
+test store::tests::project_paths_are_unique_per_server ... ok
+test store::tests::dispatch_crash_becomes_unknown ... ok
+test store::tests::only_one_inflight_operation_per_session ... ok
+test store::tests::duplicate_reserve_is_idempotent_but_conflicts_are_not ... ok
+test store::tests::session_create_is_idempotent ... ok
+test store::tests::expired_pairing_code_is_rejected ... ok
+test store::tests::state_cannot_move_backwards ... ok
+test store::tests::pairing_code_is_single_use ... ok
+test store::tests::token_lookup_respects_revocation ... ok
+test journal::tests::retention_bounds_storage_and_marks_a_gap ... ok
+test journal::tests::ten_thousand_events_stay_bounded ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running unittests src/lib.rs (target/debug/deps/adapter_protocol-de06cd4e143231e2)
+
+running 10 tests
+test tests::operation_states_are_monotonic ... ok
+test tests::negotiation_picks_the_highest_common_version ... ok
+test tests::v3_capabilities_are_declared_with_corresponding_requests ... ok
+test tests::session_event_is_tagged ... ok
+test tests::v2_through_v4_envelopes_are_accepted ... ok
+test tests::wrong_version_is_rejected ... ok
+test tests::v2_client_hello_payload_still_decodes_without_v3_fields ... ok
+test tests::envelope_round_trips ... ok
+test tests::events_subscribe_fixture_round_trips ... ok
+test tests::sessions_delta_and_diagnostics_fixtures_round_trip ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/adapter_server-343f80db87d8df77)
+
+running 19 tests
+test faults::tests::delay_is_clamped ... ok
+test faults::tests::empty_value_disables_everything ... ok
+test faults::tests::rules_parse_and_are_reported ... ok
+test metrics::tests::ring_is_bounded ... ok
+test metrics::tests::empty_tracker_has_no_percentiles ... ok
+test metrics::tests::percentiles_are_computed_from_real_samples ... ok
+test push::tests::payload_contains_no_transcript_content ... ok
+test stream_batch_tests::coalescing_respects_session_message_type_and_byte_fences ... ok
+test ws::tests::loopback_origins_are_allowed_and_remote_origins_are_not ... ok
+test ws::tests::token_can_come_from_bearer_or_subprotocol ... ok
+test ws::tests::byte_packages_preserve_utf8_and_keep_legacy_text_frames ... ok
+test hub::tests::sequences_are_durable_and_per_session ... ok
+test push::tests::dedupe_is_per_device_and_key ... ok
+test hub::tests::journal_failure_is_surfaced_not_faked ... ok
+test hub::tests::replay_reports_gaps_instead_of_inventing_events ... ok
+test push::tests::registration_masks_the_token ... ok
+test push::tests::preferences_filter_targets ... ok
+test push::tests::invalid_registrations_are_rejected ... ok
+test push::tests::unconfigured_notify_is_skipped_not_claimed_as_sent ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running unittests src/main.rs (target/debug/deps/jcode_adapter_v2-a8deb787081fa70b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/jcode-adapter-v3.rs (target/debug/deps/jcode_adapter_v3-4db94750f58da9be)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/jcode-adapter-v4.rs (target/debug/deps/jcode_adapter_v4-6fd809be87a3f533)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/operation_flow.rs (target/debug/deps/operation_flow-68129f4a3263389e)
+
+running 17 tests
+test image_attachments_are_validated_and_sent_once ... ok
+test project_listing_is_adapter_owned ... ok
+test create_session_is_idempotent_per_client_request_id_but_not_across ... ok
+test invalid_image_attachments_are_rejected_before_reservation ... ok
+test diagnostics_report_real_adapter_state ... ok
+test model_selection_rejects_a_mismatched_provider ... ok
+test handshake_negotiates_the_highest_common_version ... ok
+test failed_send_is_rejected_not_accepted ... ok
+test archive_restore_and_favorite_are_authoritative ... ok
+test event_replay_reports_a_gap_beyond_retention ... ok
+test push_registration_is_scoped_and_never_echoes_the_token ... ok
+test reserve_dispatch_and_acknowledgment_are_distinct_and_monotonic ... ok
+test session_delta_is_full_then_incremental ... ok
+test snapshot_after_finished_tool_turn_includes_tool_rows_and_promotes_pending ... ok
+test stop_is_bound_to_the_expected_turn ... ok
+test unacknowledged_dispatch_becomes_unknown_and_never_resends ... ok
+test journal_replay_survives_adapter_restart_and_reports_gaps ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+   Doc-tests adapter_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adapter_protocol
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests adapter_server
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+real 30.46
+user 124.46
+sys 21.76

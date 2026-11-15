@@ -1,0 +1,4 @@
+$ bun --bun tsc --noEmit
+real 2.18
+user 6.49
+sys 0.30

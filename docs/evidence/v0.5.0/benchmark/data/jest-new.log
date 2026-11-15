@@ -1,0 +1,176 @@
+$ bun --bun jest --ci
+PASS src/core/persistence/__tests__/db.test.ts
+PASS src/core/protocol/__tests__/decode.test.ts
+PASS src/core/session/__tests__/selectors.test.ts
+PASS src/core/__tests__/controller-reliability.test.ts
+PASS src/design/__tests__/composer-images.test.ts
+PASS src/core/connection/__tests__/client.test.ts
+PASS src/features/conversation/__tests__/markdown.test.ts
+PASS src/features/welcome/__tests__/asciiTorus.test.ts
+PASS src/features/welcome/__tests__/welcome-screen.test.tsx
+PASS src/design/__tests__/controls.test.tsx
+PASS src/core/connection/__tests__/address.test.ts
+PASS src/features/conversation/__tests__/message-image.test.tsx
+PASS src/design/__tests__/composer-owner.test.ts
+PASS src/features/sessions/__tests__/retry.test.tsx
+  ● Console
+
+    console.warn
+      DrawerLayoutAndroid is deprecated and will be removed in a future release. Use 'react-native-drawer-layout' instead. See https://reactnavigation.org/docs/drawer-layout/
+
+      22 | import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+      23 |
+    > 24 | import { useTheme } from './theme';
+         | ^
+      25 | import { geometry, motion, radius, space } from './tokens';
+      26 |
+      27 | export type SheetHeadingRef = React.RefObject<React.ComponentRef<typeof View> | null>;
+
+      at key (../../../../src/jcode-mobile-app/node_modules/react-native/Libraries/Utilities/warnOnce.js:29:14)
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native/index.js:53:12)
+      at get (native)
+      at evaluate (native)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts:105:13
+      at ALLOWED_PROPS (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/utils.ts:25:27)
+      at attachHandlers (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/attachHandlers.ts:29:17)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx:11:1
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/components/Text.tsx:7:1
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/index.ts:39:1)
+      at src/design/BottomSheet.tsx:24:1
+      at src/features/sessions/SessionsScreen.tsx:18:1
+      at src/features/sessions/__tests__/retry.test.tsx:6:1
+
+    console.warn
+      ImageBackground is deprecated and will be removed in a future release. Use a View with an absolutely positioned Image instead. See https://reactnative.dev/docs/imagebackground
+
+      22 | import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+      23 |
+    > 24 | import { useTheme } from './theme';
+         | ^
+      25 | import { geometry, motion, radius, space } from './tokens';
+      26 |
+      27 | export type SheetHeadingRef = React.RefObject<React.ComponentRef<typeof View> | null>;
+
+      at key (../../../../src/jcode-mobile-app/node_modules/react-native/Libraries/Utilities/warnOnce.js:29:14)
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native/index.js:77:12)
+      at get (native)
+      at evaluate (native)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts:105:13
+      at ALLOWED_PROPS (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/utils.ts:25:27)
+      at attachHandlers (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/attachHandlers.ts:29:17)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx:11:1
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/components/Text.tsx:7:1
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/index.ts:39:1)
+      at src/design/BottomSheet.tsx:24:1
+      at src/features/sessions/SessionsScreen.tsx:18:1
+      at src/features/sessions/__tests__/retry.test.tsx:6:1
+
+    console.warn
+      InputAccessoryView is deprecated and will be removed in a future release.
+
+      22 | import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+      23 |
+    > 24 | import { useTheme } from './theme';
+         | ^
+      25 | import { geometry, motion, radius, space } from './tokens';
+      26 |
+      27 | export type SheetHeadingRef = React.RefObject<React.ComponentRef<typeof View> | null>;
+
+      at key (../../../../src/jcode-mobile-app/node_modules/react-native/Libraries/Utilities/warnOnce.js:29:14)
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native/index.js:84:12)
+      at get (native)
+      at evaluate (native)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts:105:13
+      at ALLOWED_PROPS (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/utils.ts:25:27)
+      at attachHandlers (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/attachHandlers.ts:29:17)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx:11:1
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/components/Text.tsx:7:1
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/index.ts:39:1)
+      at src/design/BottomSheet.tsx:24:1
+      at src/features/sessions/SessionsScreen.tsx:18:1
+      at src/features/sessions/__tests__/retry.test.tsx:6:1
+
+    console.warn
+      ProgressBarAndroid has been extracted from react-native core and will be removed in a future release. It can now be installed and imported from '@react-native-community/progress-bar-android' instead of 'react-native'. See https://github.com/react-native-progress-view/progress-bar-android
+
+      22 | import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+      23 |
+    > 24 | import { useTheme } from './theme';
+         | ^
+      25 | import { geometry, motion, radius, space } from './tokens';
+      26 |
+      27 | export type SheetHeadingRef = React.RefObject<React.ComponentRef<typeof View> | null>;
+
+      at key (../../../../src/jcode-mobile-app/node_modules/react-native/Libraries/Utilities/warnOnce.js:29:14)
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native/index.js:114:12)
+      at get (native)
+      at evaluate (native)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts:105:13
+      at ALLOWED_PROPS (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/utils.ts:25:27)
+      at attachHandlers (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/attachHandlers.ts:29:17)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx:11:1
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/components/Text.tsx:7:1
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/index.ts:39:1)
+      at src/design/BottomSheet.tsx:24:1
+      at src/features/sessions/SessionsScreen.tsx:18:1
+      at src/features/sessions/__tests__/retry.test.tsx:6:1
+
+    console.warn
+      SafeAreaView has been deprecated and will be removed in a future release. Please use 'react-native-safe-area-context' instead. See https://github.com/AppAndFlow/react-native-safe-area-context
+
+      22 | import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+      23 |
+    > 24 | import { useTheme } from './theme';
+         | ^
+      25 | import { geometry, motion, radius, space } from './tokens';
+      26 |
+      27 | export type SheetHeadingRef = React.RefObject<React.ComponentRef<typeof View> | null>;
+
+      at key (../../../../src/jcode-mobile-app/node_modules/react-native/Libraries/Utilities/warnOnce.js:29:14)
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native/index.js:133:12)
+      at get (native)
+      at evaluate (native)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts:105:13
+      at ALLOWED_PROPS (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/utils.ts:25:27)
+      at attachHandlers (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/attachHandlers.ts:29:17)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx:11:1
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/components/Text.tsx:7:1
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/index.ts:39:1)
+      at src/design/BottomSheet.tsx:24:1
+      at src/features/sessions/SessionsScreen.tsx:18:1
+      at src/features/sessions/__tests__/retry.test.tsx:6:1
+
+    console.warn
+      Clipboard has been extracted from react-native core and will be removed in a future release. It can now be installed and imported from '@react-native-clipboard/clipboard' instead of 'react-native'. See https://github.com/react-native-clipboard/clipboard
+
+      22 | import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+      23 |
+    > 24 | import { useTheme } from './theme';
+         | ^
+      25 | import { geometry, motion, radius, space } from './tokens';
+      26 |
+      27 | export type SheetHeadingRef = React.RefObject<React.ComponentRef<typeof View> | null>;
+
+      at key (../../../../src/jcode-mobile-app/node_modules/react-native/Libraries/Utilities/warnOnce.js:29:14)
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native/index.js:250:12)
+      at get (native)
+      at evaluate (native)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/reanimatedWrapper.ts:105:13
+      at ALLOWED_PROPS (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/utils.ts:25:27)
+      at attachHandlers (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/attachHandlers.ts:29:17)
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/handlers/gestures/GestureDetector/index.tsx:11:1
+      at ../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/components/Text.tsx:7:1
+      at require (../../../../src/jcode-mobile-app/node_modules/react-native-gesture-handler/src/index.ts:39:1)
+      at src/design/BottomSheet.tsx:24:1
+      at src/features/sessions/SessionsScreen.tsx:18:1
+      at src/features/sessions/__tests__/retry.test.tsx:6:1
+
+
+Test Suites: 14 passed, 14 total
+Tests:       139 passed, 139 total
+Snapshots:   0 total
+Time:        3.9 s
+Ran all test suites.
+real 4.23
+user 13.11
+sys 1.26
