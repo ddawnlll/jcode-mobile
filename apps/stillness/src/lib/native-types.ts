@@ -158,7 +158,7 @@ export interface ShareLaunched {
   error: string | null;
 }
 
-export type DeepLinkAction = 'open_session' | 'new_session' | 'unknown' | 'none';
+export type DeepLinkAction = 'open_session' | 'new_session' | 'sessions' | 'unknown' | 'none';
 
 export interface DeepLinkPending {
   url: string | null;

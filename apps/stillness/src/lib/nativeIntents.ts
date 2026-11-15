@@ -4,6 +4,7 @@ import type { DeepLinkPending, ShareItem } from './native-types';
 export type DeepLinkIntent =
   | { kind: 'session'; sessionId: string }
   | { kind: 'new' }
+  | { kind: 'sessions' }
   | { kind: 'none' }
   | { kind: 'unhandled'; message: string };
 
@@ -32,6 +33,7 @@ export function deepLinkIntent(
   if (!link) return { kind: 'none' };
   if (link.sessionId) return { kind: 'session', sessionId: link.sessionId };
   if (link.action === 'new_session') return { kind: 'new' };
+  if (link.action === 'sessions') return { kind: 'sessions' };
   const fromUrl = sessionIdFromUrl(link.url);
   if (fromUrl) return { kind: 'session', sessionId: fromUrl };
   if (link.action === 'open_session') {

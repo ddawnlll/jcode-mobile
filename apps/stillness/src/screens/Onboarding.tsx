@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { controller, defaultServerAddress, type AppState } from '../lib/controller';
 import { IconArrow, IconCheck, IconShield } from '../components/Icons';
 import { Torus } from '../components/Torus';
+import { parsePairingPayload } from '../lib/pairingPayload';
 
 export function WelcomeScreen({ state }: { state: AppState }) {
   return (
@@ -69,6 +70,20 @@ export function PairScreen({ state }: { state: AppState }) {
   const [code, setCode] = useState('');
   const [device, setDevice] = useState('JCode Mobile');
   const [submitting, setSubmitting] = useState(false);
+  const [pairingLink, setPairingLink] = useState('');
+  const [linkError, setLinkError] = useState('');
+
+  const importLink = () => {
+    try {
+      const payload = parsePairingPayload(pairingLink);
+      setServer(payload.server);
+      setCode(payload.code);
+      setPairingLink('');
+      setLinkError('');
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : 'Unable to read this pairing link.');
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -110,6 +125,16 @@ export function PairScreen({ state }: { state: AppState }) {
           <p className="onboard-lede">
             Start the adapter on your server. Its terminal prints a one-time pairing code.
           </p>
+          <details>
+            <summary>Use a pairing link</summary>
+            <p className="field-hint">Paste a JCode pairing link to fill the details. Camera scanning is not available yet.</p>
+            <label className="onboard-field">
+              Pairing link
+              <input value={pairingLink} onChange={(event) => setPairingLink(event.target.value)} autoComplete="off" spellCheck={false} data-testid="pair-link" />
+            </label>
+            {linkError ? <p className="pair-error" role="alert">{linkError}</p> : null}
+            <button type="button" className="onboard-secondary" onClick={importLink}>Fill pairing details</button>
+          </details>
           <form onSubmit={submit} noValidate>
             <label className="onboard-field">
               Server address

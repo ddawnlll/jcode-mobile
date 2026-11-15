@@ -18,6 +18,7 @@ import {
   installNativeBridge,
   layoutStatus,
   onNativeEvent,
+  refreshShortcuts,
   type NativeBridgeSession,
 } from '../lib/native';
 import type {
@@ -99,6 +100,10 @@ export function useNativeShell(active: boolean) {
       closeSwitcher();
       if (intent.kind === 'new') {
         controller.go('new-session');
+        return;
+      }
+      if (intent.kind === 'sessions') {
+        controller.go('sessions');
         return;
       }
       void controller.openSession(intent.sessionId);
@@ -258,6 +263,9 @@ export function useNativeShell(active: boolean) {
           return;
         }
         session = installed;
+        // Publish only generic shortcuts. Recent-session links need a
+        // server-scoped identity before they can safely be exposed.
+        void refreshShortcuts().catch(() => {});
         publishNativeShell({
           state: 'ready',
           platform: installed.platform,

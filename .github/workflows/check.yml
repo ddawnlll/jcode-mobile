@@ -30,6 +30,8 @@ jobs:
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run test
+      - name: Stillness pairing payload tests
+        run: bun test apps/stillness/e2e/pairingPayload.test.ts
       - name: Build Stillness web bundle
         run: cd apps/stillness && bun run build
       - name: Adapter contract tests

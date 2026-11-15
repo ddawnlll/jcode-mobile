@@ -9,7 +9,7 @@ use base64::Engine as _;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-use crate::push::PushKind;
+use crate::push::{PushKind, event_identity};
 use crate::state::{AppState, ConnContext};
 use crate::ws::error_envelope;
 
@@ -2126,9 +2126,10 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
     }
     state.record_usage(&session_id, &event);
     state.record_activity(&session_id, turn_id.as_deref(), &event);
-    state
+    let published = state
         .hub
         .publish(&session_id, turn_id.clone(), operation_id, event.clone());
+    let identity = event_identity(turn_id.as_deref(), published.seq);
     if let SessionEvent::SessionStatus { status, .. } = &event
         && let Some(recorded) =
             state
@@ -2144,12 +2145,12 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
         SessionEvent::TurnDone { .. } => {
             state
                 .push
-                .notify(PushKind::Turns, &session_id, turn_id.as_deref());
+                .notify(PushKind::Turns, &session_id, identity.as_deref());
         }
         SessionEvent::TurnStopped { reason, .. } if reason != "cancelled" => {
             state
                 .push
-                .notify(PushKind::Failures, &session_id, turn_id.as_deref());
+                .notify(PushKind::Failures, &session_id, identity.as_deref());
         }
         SessionEvent::PermissionRequest { request_id, .. } => {
             state
@@ -2159,7 +2160,7 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
         SessionEvent::AdapterError { .. } => {
             state
                 .push
-                .notify(PushKind::Failures, &session_id, turn_id.as_deref());
+                .notify(PushKind::Failures, &session_id, identity.as_deref());
         }
         _ => {}
     }

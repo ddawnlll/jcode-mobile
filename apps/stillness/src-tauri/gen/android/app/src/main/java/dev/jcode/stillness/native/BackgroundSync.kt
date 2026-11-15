@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
@@ -30,7 +31,9 @@ import org.json.JSONObject
 class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
         val context = applicationContext
-        NativeSettings.setOperational(context, KEY_SYNC_QUEUED, 0)
+        if (inputData.getBoolean(KEY_ONE_SHOT, false)) {
+            NativeSettings.setOperational(context, KEY_SYNC_QUEUED, 0)
+        }
         if (!NativeSettings.getBoolean(context, NativeSettings.KEY_BACKGROUND_SYNC_ENABLED)) {
             NativeSettings.setOperational(context, NativeSettings.KEY_SYNC_LAST_STATUS, "skipped")
             NativeSettings.setOperational(context, NativeSettings.KEY_SYNC_LAST_ERROR, "disabled")
@@ -83,7 +86,17 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
                 }
                 out.toString()
             }
-            val payload = JSONObject(body)
+            val payload = try {
+                JSONObject(body)
+            } catch (error: org.json.JSONException) {
+                NativeSettings.setOperational(context, NativeSettings.KEY_SYNC_LAST_STATUS, "invalid_response")
+                NativeSettings.setOperational(
+                    context,
+                    NativeSettings.KEY_SYNC_LAST_ERROR,
+                    "adapter health response was not valid JSON",
+                )
+                return Result.success()
+            }
             val connected = payload.optBoolean("jcode_connected", false)
             val protocol = payload.optString("protocol", "")
             NativeSettings.setOperational(
@@ -122,6 +135,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : Worker(context, p
         const val READ_TIMEOUT_MS = 8_000
         const val MAX_BODY_BYTES = 64 * 1024
         const val KEY_SYNC_QUEUED = "syncQueued"
+        const val KEY_ONE_SHOT = "oneShot"
     }
 }
 
@@ -130,6 +144,12 @@ object BackgroundSync {
     const val UNIQUE_ONE_SHOT = "jcode-background-sync-now"
     private const val KEY_SYNC_QUEUED = "syncQueued"
     private const val KEY_SYNC_LAST_PROTOCOL = "syncLastProtocol"
+    private const val KEY_ONE_SHOT = "oneShot"
+
+    private fun constraints() = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .setRequiresBatteryNotLow(true)
+        .build()
 
     data class BackgroundSyncStatusData(
         val enabled: Boolean,
@@ -213,11 +233,7 @@ object BackgroundSync {
                 requested.toLong(),
                 TimeUnit.MINUTES,
             )
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiresBatteryNotLow(true)
-                        .build(),
-                )
+                .setConstraints(constraints())
                 .build()
             manager.enqueueUniquePeriodicWork(
                 UNIQUE_PERIODIC,
@@ -226,6 +242,8 @@ object BackgroundSync {
             )
         } else {
             manager.cancelUniqueWork(UNIQUE_PERIODIC)
+            manager.cancelUniqueWork(UNIQUE_ONE_SHOT)
+            NativeSettings.setOperational(context, KEY_SYNC_QUEUED, 0)
         }
         NativeEvents.emit("backgroundSyncChanged", status(context))
         return status(context)
@@ -236,15 +254,18 @@ object BackgroundSync {
             NativeSettings.getBoolean(context, NativeSettings.KEY_BACKGROUND_SYNC_ENABLED),
         ) { "background sync is disabled" }
         val request = OneTimeWorkRequest.Builder(SyncWorker::class.java)
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiresBatteryNotLow(true)
-                    .build(),
-            )
+            .setConstraints(constraints())
+            .setInputData(androidx.work.Data.Builder().putBoolean(KEY_ONE_SHOT, true).build())
             .build()
-        WorkManager.getInstance(context.applicationContext)
-            .enqueueUniqueWork(UNIQUE_ONE_SHOT, ExistingWorkPolicy.REPLACE, request)
         NativeSettings.setOperational(context, KEY_SYNC_QUEUED, 1)
+        try {
+            WorkManager.getInstance(context.applicationContext)
+                .enqueueUniqueWork(UNIQUE_ONE_SHOT, ExistingWorkPolicy.REPLACE, request)
+        } catch (error: Exception) {
+            // A failed enqueue must not leave the UI claiming a probe is queued.
+            NativeSettings.setOperational(context, KEY_SYNC_QUEUED, 0)
+            throw error
+        }
         return status(context)
     }
 

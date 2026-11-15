@@ -25,6 +25,7 @@ import dev.jcode.stillness.R
 object AppShortcuts {
     const val ID_NEW_SESSION = "new-session"
     const val ID_RECENT_SESSION = "recent-session"
+    const val ID_SESSIONS = "sessions"
 
     data class ShortcutsResultData(
         val count: Int,
@@ -61,18 +62,18 @@ object AppShortcuts {
             .setIcon(icon)
             .setIntent(deepLink(context, Notifications.deepLinkForSession(null)))
             .build()
-        val recent = recentSessionId?.trim()
-        if (!recent.isNullOrEmpty()) {
-            val label = recentSessionLabel?.trim()?.takeIf { it.isNotEmpty() } ?: "Recent session"
-            shortcuts += android.content.pm.ShortcutInfo.Builder(context, ID_RECENT_SESSION)
-                .setShortLabel(label.take(24))
-                .setLongLabel(label.take(64))
-                .setIcon(icon)
-                .setIntent(deepLink(context, Notifications.deepLinkForSession(recent)))
-                .build()
-        }
+        // A session id alone is not server-scoped. Do not publish a recent
+        // shortcut until the bridge can carry and verify both identities.
+        shortcuts += android.content.pm.ShortcutInfo.Builder(context, ID_SESSIONS)
+            .setShortLabel("Sessions")
+            .setIcon(icon)
+            .setIntent(deepLink(context, Uri.parse("jcode-mobile://sessions")))
+            .build()
         val limited = shortcuts.take(manager.maxShortcutCountPerActivity.coerceAtLeast(1))
         return try {
+            // Previously published pinned shortcuts may still contain an
+            // unscoped session id and a sensitive session title.
+            manager.disableShortcuts(listOf(ID_RECENT_SESSION))
             val accepted = manager.setDynamicShortcuts(limited)
             if (!accepted) {
                 ShortcutsResultData(
