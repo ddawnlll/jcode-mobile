@@ -12,6 +12,7 @@
     "apps/stillness",
     ".staging",
     "reports",
+    "docs/evidence",
     "scripts/check-stillness-ux.mjs"
   ]
 }

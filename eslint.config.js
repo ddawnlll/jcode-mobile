@@ -16,6 +16,8 @@ module.exports = defineConfig([
       '.expo/**',
       'node_modules/**',
       'artifacts/**',
+      'reports/**',
+      'docs/evidence/**',
     ],
   },
   expoConfig,
