@@ -34,14 +34,14 @@ impl AuthService {
             _ => generate_pairing_code(),
         };
         self.store
-            .replace_pairing_code(&hash_secret(&code), CODE_TTL_MS)?;
+            .replace_pairing_code(&hash_secret(&normalize_pairing_code(&code)), CODE_TTL_MS)?;
         Ok(code)
     }
 
     pub fn redeem(&self, code: &str, device_name: &str) -> CoreResult<(String, DeviceInfo)> {
         let token = generate_token();
         let device = self.store.redeem_pairing_code(
-            &hash_secret(&code.trim().to_ascii_uppercase()),
+            &hash_secret(&normalize_pairing_code(code)),
             &hash_secret(&token),
             device_name,
         )?;
@@ -69,6 +69,26 @@ impl AuthService {
 
     pub fn devices(&self) -> CoreResult<Vec<DeviceInfo>> {
         self.store.list_devices()
+    }
+}
+
+/// The display form of a pairing code has separators, and a phone keyboard may
+/// drop them, replace them with spaces, or change the case. Normalize the code
+/// on both sides so one code redeems however it was typed. The generator only
+/// emits `A` to `Z` and `2` to `9`, so no alphanumeric character is ever
+/// removed here: everything filtered out is a separator.
+pub fn normalize_pairing_code(code: &str) -> String {
+    let normalized: String = code
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .map(|character| character.to_ascii_uppercase())
+        .collect();
+    if normalized.is_empty() {
+        // A supplied code made only of separators must not collapse to the empty
+        // string, which an empty submission would then match.
+        code.trim().to_ascii_uppercase()
+    } else {
+        normalized
     }
 }
 
@@ -129,5 +149,32 @@ mod tests {
         let (_, device) = auth.redeem("AAAA-BBBB-CCCC", &"x".repeat(200)).unwrap();
         assert!(device.name.len() <= 80);
         assert!(auth.redeem("AAAA-BBBB-CCCC", "Second").is_err());
+    }
+
+    #[test]
+    fn one_code_redeems_however_it_was_typed() {
+        // The displayed form is unchanged; every spelling of it redeems.
+        for typed in [
+            "ABCD-EFGH-JKLM",
+            "abcd-efgh-jklm",
+            "ABCDEFGHJKLM",
+            "ABCD EFGH JKLM",
+            " abcd efgh jklm ",
+        ] {
+            let auth = AuthService::new(Store::open_in_memory().unwrap());
+            let shown = auth.install_pairing_code(Some("ABCD-EFGH-JKLM")).unwrap();
+            assert_eq!(shown, "ABCD-EFGH-JKLM");
+            let (token, device) = auth.redeem(typed, "Phone").unwrap();
+            assert_eq!(token.len(), 43, "{typed} did not redeem");
+            assert_eq!(device.name, "Phone");
+        }
+    }
+
+    #[test]
+    fn a_different_code_is_still_rejected() {
+        let auth = AuthService::new(Store::open_in_memory().unwrap());
+        auth.install_pairing_code(Some("ABCD-EFGH-JKLM")).unwrap();
+        assert!(auth.redeem("JKLM-EFGH-ABCD", "Phone").is_err());
+        assert!(auth.redeem("", "Phone").is_err());
     }
 }

@@ -110,6 +110,11 @@ unchanged, and the adapter authenticates the same token. A 0.4.0 or 0.3.1 phone
 app also keeps working, because it negotiates v3 or v2 and never receives a
 frame at a version it did not negotiate.
 
+The code is displayed as `XXXX-XXXX-XXXX` and redeems however it is typed: with
+the separators, without them, with spaces, and in any case. Matching normalizes
+the code on both sides, so a phone keyboard that drops or respaces the dashes
+cannot turn a valid code into "invalid or expired".
+
 ### Diagnosing a rejected code
 
 Every pairing attempt is logged with its outcome and never with the submitted
