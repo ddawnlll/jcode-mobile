@@ -3804,3 +3804,80 @@ html[data-native-insets='on'] .undo-toast {
     height: 52px;
   }
 }
+
+.history-items {
+  display: grid;
+  gap: 12px;
+}
+
+.history-item {
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 112px;
+  min-inline-size: 0;
+}
+
+.history-more,
+.text-pages button,
+.swarm-strip button {
+  min-block-size: 44px;
+  font: inherit;
+}
+
+.history-more {
+  align-self: center;
+  margin-inline: auto;
+}
+
+.paged-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-payload {
+  font: 0.85rem/1.5 var(--mono, monospace);
+}
+
+.text-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-start: 8px;
+  font-size: 0.8rem;
+}
+
+.swarm-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 20px 8px;
+  scrollbar-width: thin;
+}
+
+.swarm-strip button {
+  display: grid;
+  gap: 2px;
+  flex: 0 0 auto;
+  align-content: center;
+  padding: 4px 12px;
+  border: 1px solid var(--line, currentColor);
+  border-radius: 12px;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+}
+
+.swarm-strip small {
+  font-size: 0.75rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .swarm-update {
+    animation: swarm-update-in 140ms ease-out;
+  }
+}
+
+@keyframes swarm-update-in {
+  from { opacity: 0.55; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}

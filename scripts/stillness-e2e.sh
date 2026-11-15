@@ -2,7 +2,7 @@
 # Real-stack Stillness 12 e2e.
 #
 # Starts an isolated JCode daemon from the pinned fork binary, a Rust Adapter
-# v3 instance, and serves the production web bundle from that adapter. It
+# v4 instance, and serves the production web bundle from that adapter. It
 # never touches the production daemon or the live adapter ports.
 #
 # Playwright Chromium is browser coverage. It is not native iOS or Android
@@ -20,7 +20,7 @@ if [ -z "${JCODE_BIN:-}" ]; then
     JCODE_BIN="$(command -v jcode || true)"
   fi
 fi
-ADAPTER_BIN="${JCODE_ADAPTER_BIN:-$ROOT/target/debug/jcode-adapter-v3}"
+ADAPTER_BIN="${JCODE_ADAPTER_BIN:-$ROOT/target/debug/jcode-adapter-v4}"
 
 mkdir -p "$STAGE"
 
@@ -30,8 +30,8 @@ if [ ! -x "$JCODE_BIN" ]; then
   exit 2
 fi
 if [ ! -x "$ADAPTER_BIN" ]; then
-  echo "building Rust Adapter v3"
-  (cd "$ROOT" && cargo build -p adapter-server --bin jcode-adapter-v3)
+  echo "building Rust Adapter v4"
+  (cd "$ROOT" && cargo build -p adapter-server --bin jcode-adapter-v4)
 fi
 
 stop_pid() {
@@ -71,7 +71,7 @@ fi
 rm -rf "$STAGE/adapter"
 rm -f "$ROOT/apps/stillness/.e2e-auth.json"
 
-echo "starting Rust Adapter v3 on 127.0.0.1:$PORT"
+echo "starting Rust Adapter v4 on 127.0.0.1:$PORT"
 # Portable detached start: setsid is Linux-only, so background the process in
 # the current shell and record its PID. Both macOS and Linux are supported.
 env \

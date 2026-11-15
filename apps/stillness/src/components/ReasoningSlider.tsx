@@ -9,11 +9,14 @@ import { controller, type AppState } from '../lib/controller';
 import { haptic } from './motion';
 import { BottomSheet } from './BottomSheet';
 
-const EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+const LEGACY_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+const NO_EFFORTS: string[] = [];
 
 export function ReasoningSlider({ state }: { state: AppState }) {
   const current = state.runtime?.reasoning_effort ?? null;
-  const initialIndex = current ? EFFORTS.indexOf(current as (typeof EFFORTS)[number]) : -1;
+  const efforts = state.runtime?.effort_options ?? ((state.protocolVersion ?? 0) >= 4 ? NO_EFFORTS : LEGACY_EFFORTS);
+  const steps = Math.max(1, efforts.length - 1);
+  const initialIndex = current ? efforts.indexOf(current) : -1;
   const [index, setIndex] = useState(initialIndex);
   const [dragging, setDragging] = useState(false);
   const [pending, setPending] = useState(false);
@@ -22,18 +25,18 @@ export function ReasoningSlider({ state }: { state: AppState }) {
   indexRef.current = index;
 
   useEffect(() => {
-    const next = current ? EFFORTS.indexOf(current as (typeof EFFORTS)[number]) : -1;
-    if (next >= 0) setIndex(next);
-  }, [current]);
+    const next = current ? efforts.indexOf(current) : -1;
+    setIndex(next);
+  }, [current, efforts]);
 
   const commit = async (next: number) => {
-    if (next < 0 || next >= EFFORTS.length) return;
+    if (next < 0 || next >= efforts.length) return;
     if (state.connection.status !== 'connected') {
       controller.setToast('The adapter is offline. Reasoning changes need a live connection.');
       return;
     }
     setPending(true);
-    await controller.setReasoning(EFFORTS[next]);
+    await controller.setReasoning(efforts[next]);
     setPending(false);
   };
 
@@ -50,7 +53,7 @@ export function ReasoningSlider({ state }: { state: AppState }) {
     if (!track) return 0;
     const rect = track.getBoundingClientRect();
     const ratio = rect.width ? (clientX - rect.left) / rect.width : 0;
-    return Math.round(Math.min(1, Math.max(0, ratio)) * (EFFORTS.length - 1));
+    return Math.round(Math.min(1, Math.max(0, ratio)) * steps);
   };
 
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -73,16 +76,16 @@ export function ReasoningSlider({ state }: { state: AppState }) {
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     let next: number | null = null;
-    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = Math.min(EFFORTS.length - 1, indexRef.current + 1);
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = Math.min(efforts.length - 1, indexRef.current + 1);
     if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = Math.max(0, indexRef.current - 1);
     if (event.key === 'Home') next = 0;
-    if (event.key === 'End') next = EFFORTS.length - 1;
+    if (event.key === 'End') next = efforts.length - 1;
     if (next == null) return;
     event.preventDefault();
     snapTo(next, true);
   };
 
-  const percent = index >= 0 ? (index / (EFFORTS.length - 1)) * 100 : 0;
+  const percent = index >= 0 ? (index / steps) * 100 : 0;
 
   return (
     <BottomSheet
@@ -90,38 +93,34 @@ export function ReasoningSlider({ state }: { state: AppState }) {
       onClose={() => controller.openSheet(null)}
       testId="reasoning-sheet"
     >
-      <p className="form-help">
-        Stops snap. Providers that do not support the chosen level reject it; the adapter re-reads
-        runtime state instead of assuming the change took effect.
-      </p>
       <div className="reason-current">
         <span>Current</span>
         <strong>{current ?? 'Not reported'}</strong>
         {pending ? <span className="model-pending">Setting…</span> : null}
       </div>
-      <div
+      {efforts.length > 0 ? <div
         className={`reason-slider ${index < 0 ? 'is-unknown' : ''} ${dragging ? 'is-dragging' : ''}`}
         role="slider"
         tabIndex={0}
         aria-label="Reasoning effort"
         aria-valuemin={0}
-        aria-valuemax={EFFORTS.length - 1}
+        aria-valuemax={efforts.length - 1}
         aria-valuenow={index >= 0 ? index : undefined}
-        aria-valuetext={index >= 0 ? EFFORTS[index] : 'Not reported'}
+        aria-valuetext={index >= 0 ? efforts[index] : 'Not reported'}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
-        onPointerCancel={endDrag}
+        onPointerCancel={() => { setDragging(false); setIndex(initialIndex); }}
         data-testid="reasoning-slider"
       >
         <div className="reason-track" ref={trackRef}>
           <span className="reason-fill" style={{ width: `${percent}%` }} />
-          {EFFORTS.map((effort, stop) => (
+          {efforts.map((effort, stop) => (
             <span
               key={effort}
               className={`reason-stop ${stop <= index ? 'is-past' : ''} ${stop === index ? 'is-current' : ''}`}
-              style={{ left: `${(stop / (EFFORTS.length - 1)) * 100}%` }}
+              style={{ left: `${(stop / steps) * 100}%` }}
               aria-hidden="true"
             />
           ))}
@@ -130,7 +129,7 @@ export function ReasoningSlider({ state }: { state: AppState }) {
           ) : null}
         </div>
         <div className="reason-labels">
-          {EFFORTS.map((effort, stop) => (
+          {efforts.map((effort, stop) => (
             <button
               key={effort}
               type="button"
@@ -144,8 +143,8 @@ export function ReasoningSlider({ state }: { state: AppState }) {
             </button>
           ))}
         </div>
-      </div>
-      {index < 0 ? (
+      </div> : <p className="form-help">No effort options for this JCode model.</p>}
+      {efforts.length > 0 && index < 0 ? (
         <p className="inspector-note">
           JCode has not reported a current effort for this session. The slider starts with no claim
           until you choose a stop.

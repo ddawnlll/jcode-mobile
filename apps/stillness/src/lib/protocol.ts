@@ -1,7 +1,10 @@
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const MIN_PROTOCOL_VERSION = 2;
-export const WS_SUBPROTOCOL = 'jcode.mobile.v3';
+export const WS_SUBPROTOCOL = 'jcode.mobile.v4';
+export const JOURNAL_WS_SUBPROTOCOL = 'jcode.mobile.v3';
 export const LEGACY_WS_SUBPROTOCOL = 'jcode.mobile.v2';
+export const BYTE_PACKAGE_CHUNK = 64 * 1024;
+export const BYTE_PACKAGE_LIMIT = 64 * 1024 * 1024;
 
 export type Kind = 'request' | 'response' | 'event';
 
@@ -75,6 +78,7 @@ export interface SessionSummary {
   archived: boolean;
   parent_session_id: string | null;
   agent_label: string | null;
+  swarm_status?: string | null;
   /// Adapter-owned favorite flag, not a daemon field.
   favorite?: boolean;
 }
@@ -116,16 +120,30 @@ export interface ModelRouteView {
   is_command_code: boolean;
 }
 
-export interface RuntimeView {
+export interface RuntimeIdentity {
   provider: string | null;
   model: string | null;
   reasoning_effort: string | null;
+  effort_options?: string[];
   auth_method: string | null;
   account_label: string | null;
+}
+
+export interface RuntimeView extends RuntimeIdentity {
   providers: string[];
   routes: ModelRouteView[];
   observed_at_ms: number;
   source: string;
+}
+
+export interface SwarmAgentView {
+  session_id: string;
+  parent_session_id: string | null;
+  label: string | null;
+  status: string;
+  model: string | null;
+  provider: string | null;
+  reasoning_effort: string | null;
 }
 
 export interface ContextView {
@@ -151,6 +169,7 @@ export interface SessionSnapshot {
   session: SessionSummary;
   messages: HistoryMessageView[];
   runtime: RuntimeView | null;
+  agents?: SwarmAgentView[] | null;
   plan: unknown | null;
   context: ContextView | null;
   active_turn?: ActiveTurnView | null;

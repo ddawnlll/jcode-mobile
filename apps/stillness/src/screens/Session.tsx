@@ -532,6 +532,35 @@ function SessionInspector({ state, plan }: { state: AppState; plan: ParsedPlan |
   );
 }
 
+function SwarmStrip({ state }: { state: AppState }) {
+  const parent = state.snapshot?.session.parent_session_id;
+  const agents = useMemo(() => state.agents ?? state.sessions
+    .filter((session) => session.parent_session_id === state.activeSessionId)
+    .map((session) => ({
+      session_id: session.session_id,
+      label: session.agent_label ?? session.title,
+      status: session.swarm_status ?? session.status,
+      model: null,
+      reasoning_effort: null,
+    })), [state.agents, state.sessions, state.activeSessionId]);
+  if (!parent && agents.length === 0) return null;
+  return (
+    <nav className="swarm-strip" aria-label="JCode sub-agents" data-testid="swarm-strip">
+      {parent ? (
+        <button type="button" onClick={() => void controller.openSession(parent)}>Parent session</button>
+      ) : null}
+      {agents.map((agent) => (
+        <button type="button" key={agent.session_id} onClick={() => void controller.openSession(agent.session_id)}>
+          <strong>{agent.label ?? agent.session_id}</strong>
+          <small key={agent.status} className="swarm-update">
+            {[agent.status, agent.model, agent.reasoning_effort].filter(Boolean).join(' · ')}
+          </small>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 export function SessionScreen({ state }: { state: AppState }) {
   const sessionKey = state.activeSessionId ?? 'none';
   const scrollStorageKey = `session:${state.credential?.serverId ?? 'none'}:${sessionKey}`;
@@ -590,16 +619,15 @@ export function SessionScreen({ state }: { state: AppState }) {
   }, [serverId, shareRevision, state.activeSessionId, state.screen]);
 
   const messageCount = state.snapshot?.messages.length ?? 0;
-  const liveText = state.live.assistants.map((block) => block.text).join('');
   useEffect(() => {
     const element = scrollRef.current;
     if (!element) return;
     if (autoFollow) {
       element.scrollTop = element.scrollHeight;
-    } else if (messageCount || liveText.length) {
+    } else if (messageCount || state.live.assistants.length || state.live.tools.length || state.live.reasoning.length) {
       setShowJump(true);
     }
-  }, [messageCount, liveText, state.pending?.state, autoFollow, scrollRef]);
+  }, [messageCount, state.live.assistants, state.live.tools, state.live.reasoning, state.pending?.state, autoFollow, scrollRef]);
 
   useEffect(() => {
     if (!renaming) return;
@@ -616,7 +644,7 @@ export function SessionScreen({ state }: { state: AppState }) {
     state.live.turnId ||
     state.live.assistants.length ||
     state.live.tools.length ||
-    state.live.reasoning ||
+    state.live.reasoning.length ||
     state.live.permission;
 
   return (
@@ -660,6 +688,7 @@ export function SessionScreen({ state }: { state: AppState }) {
         </div>
       </header>
       <ConnectionBanner state={state} />
+      <SwarmStrip state={state} />
       {state.activeMissing ? (
         <div className="missing-session" role="alert">
           <strong>This session is no longer on the server.</strong>
@@ -691,7 +720,7 @@ export function SessionScreen({ state }: { state: AppState }) {
                 </EmptyState>
               ) : null}
               {state.snapshot?.messages.length ? (
-                <HistoryTimeline messages={state.snapshot.messages} />
+                <HistoryTimeline key={sessionKey} messages={state.snapshot.messages} />
               ) : null}
               <PendingCard state={state} />
               {liveActive ? (

@@ -1,33 +1,40 @@
 # Build state
 
-Updated: 2026-11-14
+Updated: 2026-11-15
 
 ## Current line
 
 | Item | Value |
 | --- | --- |
-| Branch | `feat/adapter-v3` (release docs: `feat/release-docs`) |
-| Head | see `git log -1` on `feat/adapter-v3` (release integration) |
-| Commits since `v0.3.1` | 23 |
-| Release | `v0.4.0`, prepared; tag and GitHub release not published |
-| App version | 0.4.0 |
-| Adapter | Rust Adapter v3, protocol 3, minimum 2 |
-| Binary names | `jcode-adapter-v3` (preferred), `jcode-adapter-v2` (rollback alias) |
+| Branch | `release/0.5.0-feather-and-arrow` |
+| Head | `release/0.5.0-feather-and-arrow` (`git log -1`) |
+| Commits since `v0.3.1` | see `git log --oneline v0.3.1..HEAD` |
+| Release | `v0.5.0`, published 2026-11-15 |
+| App version | 0.5.0 |
+| Adapter | Rust Adapter v4, protocol 4, minimum 2 |
+| Binary names | `jcode-adapter-v4` (preferred), `jcode-adapter-v3` and `jcode-adapter-v2` (aliases) |
 | Client | Stillness 12, Tauri 2 |
 | Android package | `dev.jcode.stillness` |
-| Android versionCode | 4000 |
+| Android versionCode | 5000 |
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
 | JCode harness API | v1.11 |
 | Runtime | Bun 1.4.4, Rust 1.96.0-nightly |
 | Repository | `https://github.com/ddawnlll/jcode-mobile` |
 
+The detailed checks and artifact sections below describe the 0.4.0 build and
+are kept as history. The 0.5.0 results are in
+[`V0_5_0_RELEASE_NOTES.md`](V0_5_0_RELEASE_NOTES.md) and
+`docs/evidence/v0.5.0/benchmark/REPORT.md`: 75 Rust tests, 139 JavaScript tests,
+15 Stillness UX checks, 121.50 kB gzip initial JavaScript, 16.1x fewer stream
+frames, and a reassembled 200 KB binary transport package.
+
 ## Components
 
 | Component | Path | State |
 | --- | --- | --- |
-| Adapter protocol | `crates/adapter-protocol` | v3 envelopes, negotiation, 29 capabilities, 10 tests |
-| Adapter core | `crates/adapter-core` | journal, cursors, delta index, auth, paths, SDK link, 28 tests |
-| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch, diagnostics, push, 17 unit + 17 integration tests |
+| Adapter protocol | `crates/adapter-protocol` | v4 envelopes, negotiation, 10 tests |
+| Adapter core | `crates/adapter-core` | native links, journal, cursors, delta index, auth, paths, 29 tests |
+| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch, diagnostics, push, 19 unit + 17 integration tests |
 | Stillness web | `apps/stillness` | React 19, Vite 7, gestures and motion |
 | Tauri shell | `apps/stillness/src-tauri` | Desktop and Android; `native_android.rs` contract |
 | Android project | `apps/stillness/src-tauri/gen/android` | Committed, patched Tauri CLI path |
@@ -83,11 +90,11 @@ committed; the run itself has not been pushed or executed.
 
 | Artifact | Bytes | SHA-256 |
 | --- | --- | --- |
-| `artifacts/jcode-mobile-0.4.0-android-release.apk` | 12,718,529 (12.1 MiB) | `8f5467aad760371facca6603fe38e5b205d895b1fd02f5242af980fc81af9035` |
+| `artifacts/jcode-mobile-0.5.0-android-release.apk` | 12,718,529 (12.1 MiB) | `d1f5662fca569e3a0bba725b862ae7cc27c121af1861562bb821cd0c3a98f227` |
 
 ```text
 package dev.jcode.stillness
-versionCode 4000, versionName 0.4.0
+versionCode 5000, versionName 0.5.0
 minSdk 24, targetSdk 37, compileSdk 37
 native-code arm64-v8a, armeabi-v7a
 APK Signature Scheme v2 true, v3 true, Android Debug certificate
@@ -97,14 +104,12 @@ zipalign 4-byte check: successful
 The `.sha256` file beside the APK contains:
 
 ```text
-8f5467aad760371facca6603fe38e5b205d895b1fd02f5242af980fc81af9035  jcode-mobile-0.4.0-android-release.apk
+d1f5662fca569e3a0bba725b862ae7cc27c121af1861562bb821cd0c3a98f227  jcode-mobile-0.5.0-android-release.apk
 ```
 
-`shasum -a 256` over the APK reproduces that digest. Artifacts are gitignored
-and are not committed. The 0.4.0 GitHub release and tag do not exist yet, so no
-release download URL is verified here. `website/index.html` targets
-`releases/download/v0.4.0/...` and must not be deployed until that asset exists;
-see `docs/MARKETING.md`.
+`shasum -a 256` over the APK reproduces that digest. The 0.5.0 APK is signed
+with the same `android/app/debug.keystore` as 0.4.0, so it updates in place and
+keeps the device token.
 
 Historical artifacts remain in `artifacts/` and are recorded in
 [`evidence/v0.3.1/README.md`](evidence/v0.3.1/README.md) and the earlier

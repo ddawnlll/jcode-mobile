@@ -1,7 +1,8 @@
 use std::sync::Mutex;
 
 use adapter_protocol::{
-    HistoryMessageView, ModelRouteView, RuntimeView, SessionEvent, SessionSummary,
+    HistoryMessageView, ModelRouteView, RuntimeIdentity, RuntimeView, SessionEvent, SessionSummary,
+    SwarmAgentView,
 };
 use serde_json::Value;
 
@@ -28,6 +29,7 @@ pub struct BackendSession {
     pub archived: bool,
     pub parent_session_id: Option<String>,
     pub agent_label: Option<String>,
+    pub swarm_status: Option<String>,
 }
 
 impl BackendSession {
@@ -53,6 +55,7 @@ impl BackendSession {
             archived: self.archived,
             parent_session_id: self.parent_session_id,
             agent_label: self.agent_label,
+            swarm_status: self.swarm_status,
             favorite: false,
         }
     }
@@ -96,6 +99,7 @@ impl BackendRuntime {
             provider: self.provider.clone(),
             model: self.model.clone(),
             reasoning_effort: self.reasoning_effort.clone(),
+            effort_options: effort_options(self.provider.as_deref(), self.model.as_deref()),
             auth_method: self.auth_method.clone(),
             account_label: self.account_label.clone(),
             providers: self.providers.clone(),
@@ -117,6 +121,17 @@ impl BackendRuntime {
     }
 }
 
+pub(crate) fn effort_options(provider: Option<&str>, model: Option<&str>) -> Vec<String> {
+    jcode_provider_core::inferred_reasoning_efforts(provider, model)
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+pub fn is_reasoning_effort(effort: &str) -> bool {
+    effort == "swarm" || jcode_provider_core::canonical_reasoning_effort(effort).is_some()
+}
+
 #[derive(Debug, Clone)]
 pub enum BackendEvent {
     Connected {
@@ -129,9 +144,19 @@ pub enum BackendEvent {
         session_id: String,
     },
     RequestError {
+        session_id: String,
         code: String,
         message: String,
     },
+    Runtime {
+        session_id: String,
+        runtime: RuntimeIdentity,
+    },
+    Swarm {
+        session_id: String,
+        agents: Vec<SwarmAgentView>,
+    },
+    SessionsChanged,
     Session {
         session_id: String,
         event: SessionEvent,
@@ -147,6 +172,12 @@ pub trait Backend: Send + Sync {
     fn runtime(&self, session_id: &str) -> CoreResult<BackendRuntime>;
     fn list_models(&self, session_id: &str) -> CoreResult<(Vec<String>, Option<String>)>;
     fn set_model(&self, session_id: &str, model: &str) -> CoreResult<()>;
+    fn set_route(&self, session_id: &str, route: &BackendRoute) -> CoreResult<()> {
+        self.set_model(session_id, &route.model)
+    }
+    fn swarm_agents(&self, _session_id: &str) -> Option<Vec<SwarmAgentView>> {
+        None
+    }
     fn set_reasoning_effort(&self, session_id: &str, effort: &str) -> CoreResult<()>;
     fn set_context_cap(&self, session_id: &str, max_tokens: Option<u64>) -> CoreResult<()>;
     fn rename_session(&self, session_id: &str, title: Option<&str>) -> CoreResult<()>;

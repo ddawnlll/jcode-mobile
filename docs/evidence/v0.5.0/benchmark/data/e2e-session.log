@@ -1,0 +1,7 @@
+
+Running 2 tests using 1 worker
+
+  ✓  1 [pairing] › apps/stillness/e2e/pairing.spec.ts:11:2 › pairs through the real adapter and persists the exact server (455ms)
+  ✓  2 [mobile] › apps/stillness/e2e/stillness.spec.ts:15:2 › real session, draft, plan, activity, files, and preferences (10.0s)
+
+  2 passed (10.9s)

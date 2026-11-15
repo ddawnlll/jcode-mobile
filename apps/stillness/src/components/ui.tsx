@@ -40,7 +40,6 @@ import {
 
 export { BottomSheet as Sheet } from './BottomSheet';
 export { Drawer } from './GestureDrawer';
-export { RichMarkdown as Markdown } from './RichMarkdown';
 
 /** The row labels server favorites differently while the adapter is offline. */
 function useOnline(): boolean {
@@ -409,7 +408,7 @@ export function CopyButton({
   label = 'Copy',
   icon = false,
 }: {
-  value: string;
+  value: string | (() => string);
   label?: string;
   icon?: boolean;
 }) {
@@ -423,7 +422,7 @@ export function CopyButton({
   );
 
   const run = async () => {
-    const ok = await copyText(value);
+    const ok = await copyText(typeof value === "function" ? value() : value);
     setCopied(ok);
     haptic('select');
     controller.setToast(ok ? 'Copied.' : 'Clipboard permission was denied.');
