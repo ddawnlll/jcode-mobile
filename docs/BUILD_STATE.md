@@ -39,7 +39,7 @@ frames, and a reassembled 200 KB binary transport package.
 | Tauri shell | `apps/stillness/src-tauri` | Desktop and Android; `native_android.rs` contract |
 | Android project | `apps/stillness/src-tauri/gen/android` | Committed, patched Tauri CLI path |
 | Kotlin bridge | `.../java/dev/jcode/stillness/native/` | Notifications, push, background sync, share, deep links, biometrics, pickers, downloads, clipboard, layout, launchers |
-| Legacy Expo app | `src/` | 0.2.x client, not the 0.4.0 artifact |
+| Legacy Expo app | `src/` | 0.2.x client, not the 0.5.0 artifact |
 | Legacy adapter | `integration/jcode-adapter` | 0.2.x Bun adapter |
 
 ## Checks
