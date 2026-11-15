@@ -41,6 +41,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="jcode-mobile" android:host="session" />
                 <data android:scheme="jcode-mobile" android:host="new-session" />
+                <data android:scheme="jcode-mobile" android:host="sessions" />
             </intent-filter>
 
             <!-- Inbound shares: text, links, images, and files. -->

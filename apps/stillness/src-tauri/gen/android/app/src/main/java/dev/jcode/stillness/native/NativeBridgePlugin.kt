@@ -130,6 +130,10 @@ class NativeBridgePlugin(private val host: Activity) : Plugin(host) {
             values[key] = raw.get(key)
         }
         try {
+            require(
+                NativeSettings.KEY_BACKGROUND_SYNC_ENABLED !in values &&
+                    NativeSettings.KEY_BACKGROUND_SYNC_INTERVAL !in values,
+            ) { "use backgroundSyncSet to change background sync settings" }
             val stored = NativeSettings.set(host, values)
             invoke.resolveObject(mapOf("values" to stored))
         } catch (error: IllegalArgumentException) {

@@ -319,9 +319,14 @@ Inbound filters: `ACTION_SEND` for `text/plain`, `image/*`, `application/*`, and
 
 ## Shortcuts, widget, tile (#67)
 
-- Dynamic shortcuts: `new-session` always, `recent-session` when a recent
-  session id and label are supplied. Both use `jcode-mobile://` intents.
-  Verified with `dumpsys shortcut`.
+- Dynamic shortcuts: the native shell requests publication of generic
+  `new-session` and `sessions` shortcuts. Launcher limits or rate limiting can
+  prevent publication. These routes have no session title or token.
+  The old `recent-session` shortcut is disabled on refresh because its link
+  contains no server identity. A previously pinned shortcut may retain its old
+  label in the launcher until the user removes it. Last-session shortcuts remain
+  blocked on end-to-end server-scoped routing. This revision's launcher behavior
+  has not been verified on an Android device.
 - Home widget: a plain `RemoteViews` provider (`StillnessWidgetProvider`) with a
   dark 110 by 40 dp card that opens a new session. The provider is registered
   and the provider XML parses. Placement on a launcher is **not verified**,

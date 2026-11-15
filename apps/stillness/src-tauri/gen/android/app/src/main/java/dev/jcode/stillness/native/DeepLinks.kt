@@ -20,6 +20,7 @@ object DeepLinks {
 
     const val ACTION_OPEN_SESSION = "open_session"
     const val ACTION_NEW_SESSION = "new_session"
+    const val ACTION_SESSIONS = "sessions"
     const val ACTION_UNKNOWN = "unknown"
 
     data class PendingDeepLinkData(
@@ -48,6 +49,7 @@ object DeepLinks {
     fun parse(uri: Uri): PendingDeepLinkData {
         val host = uri.host?.lowercase()
         return when (host) {
+            "sessions" -> PendingDeepLinkData(uri.toString(), ACTION_SESSIONS, null)
             Notifications.DEEP_LINK_HOST_NEW_SESSION -> PendingDeepLinkData(
                 uri.toString(),
                 ACTION_NEW_SESSION,
