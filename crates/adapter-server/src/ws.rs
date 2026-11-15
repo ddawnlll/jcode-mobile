@@ -95,6 +95,10 @@ async fn pair(
 ) -> Response {
     let key = peer.ip().to_string();
     if !state.pair_attempt_allowed(&key) {
+        // Pairing failures used to be invisible in the log, which made "invalid
+        // or expired" reports impossible to tell apart from a code that never
+        // arrived. The submitted code itself is never logged.
+        warn!(peer = %key, "pairing attempt rate limited");
         return (
             StatusCode::TOO_MANY_REQUESTS,
             Json(ErrorPayload {
@@ -106,13 +110,19 @@ async fn pair(
             .into_response();
     }
     match state.auth.redeem(&payload.code, &payload.device_name) {
-        Ok((token, device)) => Json(PairRedeemResponse {
-            token,
-            device,
-            server: state.server_info(),
-        })
-        .into_response(),
+        Ok((token, device)) => {
+            info!(peer = %key, device = %device.device_id, name = %device.name, "pairing code redeemed");
+            Json(PairRedeemResponse {
+                token,
+                device,
+                server: state.server_info(),
+            })
+            .into_response()
+        }
         Err(error) => {
+            // `error` carries the store's own reason (unknown code, expired,
+            // already used) and never contains the submitted code.
+            warn!(peer = %key, error = %error, "pairing attempt rejected");
             let message = match error {
                 CoreError::NotFound(_) | CoreError::Conflict(_) => {
                     "invalid or expired pairing code".to_string()

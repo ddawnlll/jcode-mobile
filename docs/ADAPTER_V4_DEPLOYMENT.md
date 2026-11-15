@@ -110,6 +110,35 @@ unchanged, and the adapter authenticates the same token. A 0.4.0 or 0.3.1 phone
 app also keeps working, because it negotiates v3 or v2 and never receives a
 frame at a version it did not negotiate.
 
+### Diagnosing a rejected code
+
+Every pairing attempt is logged with its outcome and never with the submitted
+code:
+
+```text
+INFO pairing code redeemed peer=127.0.0.1 device=dev_… name=JCode Mobile
+WARN pairing attempt rejected peer=127.0.0.1 error=not found: pairing code
+WARN pairing attempt rejected peer=127.0.0.1 error=conflict: pairing code expired
+WARN pairing attempt rate limited peer=127.0.0.1
+```
+
+```sh
+journalctl --user -u jcode-mobile-adapter-v4.service -n 30 --no-pager |
+  grep -E "pairing"
+```
+
+Three cases are worth telling apart, because they look identical in the app: a
+code that was never issued (`not found`), a code that was replaced by a later
+restart or already redeemed (`conflict: already used`), and one that timed out
+(`conflict: expired`). Any restarted adapter invalidates the previous code, so
+only the newest printed code is live. A silent log with no `pairing` line means
+the request never reached this adapter, which points at the client address
+rather than the code.
+
+Rejections are capped at 10 attempts per minute per peer address. Because Caddy
+proxies from loopback, every public request shares one bucket, so retrying in a
+tight loop can return `too many pairing attempts; try again shortly` instead.
+
 ## Verify
 
 ```sh
