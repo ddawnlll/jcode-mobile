@@ -105,6 +105,17 @@ journalctl --user -u jcode-mobile-adapter-v4.service -n 60 --no-pager |
 systemctl --user restart jcode-mobile-adapter-v4.service   # issue a new code
 ```
 
+The same thing without the log reading, plus the remaining validity:
+
+```sh
+bash scripts/adapter-pairing-code.sh            # current code, valid or not
+bash scripts/adapter-pairing-code.sh --rotate   # restart first, then print
+```
+
+The helper reads the newest code out of the log and then checks the stored row,
+so it reports `valid, single use, 9m 59s left` instead of showing a code that has
+already expired or been replaced.
+
 Devices paired against the 0.3.1 adapter keep working: the device table is
 unchanged, and the adapter authenticates the same token. A 0.4.0 or 0.3.1 phone
 app also keeps working, because it negotiates v3 or v2 and never receives a
