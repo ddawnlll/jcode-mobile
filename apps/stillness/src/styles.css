@@ -1850,6 +1850,14 @@ pre {
   margin: 0 auto;
   padding-top: 4px;
 }
+.session-recovery-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0 24px;
+  max-width: 780px;
+  margin: 0 auto;
+}
 
 /* ------------------------------------------------------------------ */
 /* Inspector                                                           */

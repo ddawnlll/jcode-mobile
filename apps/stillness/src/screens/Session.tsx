@@ -140,7 +140,8 @@ function Composer({ state }: { state: AppState }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(0);
   const [picking, setPicking] = useState(false);
-  const hasTurn = Boolean(state.live.turnId);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const hasTurn = Boolean(state.live.turnId) || state.live.daemonRunning;
   const supportsImages = controller.hasImageAttachmentSupport();
   const attachments = state.attachments;
   const attachmentBlocked = attachments.length > 0 && !supportsImages;
@@ -402,8 +403,31 @@ function Composer({ state }: { state: AppState }) {
             ? 'This connection does not support image attachments. Remove them to send.'
             : state.pending
               ? operationLabel(state.pending.state)
-              : 'Navigation never stops a running turn.'}
+              : hasTurn && !state.live.turnId
+                ? 'The daemon is still running this session. Stop targets that turn; its identity is recovering.'
+                : 'Navigation never stops a running turn.'}
       </div>
+      <div className="session-recovery-actions" aria-label="Session recovery">
+        <button
+          type="button"
+          className="tiny-action"
+          onClick={() => void controller.refreshSnapshot()}
+          disabled={state.connection.status !== 'connected' || !state.activeSessionId}
+          data-testid="refresh-session-state"
+        >
+          <IconRefresh size={14} /> Refresh state
+        </button>
+        <button type="button" className="tiny-action" onClick={() => setRecoveryOpen(true)}>
+          Tool/task control
+        </button>
+      </div>
+      {recoveryOpen ? (
+        <Sheet title="Tool/task control" onClose={() => setRecoveryOpen(false)}>
+          <p>Force-stop for an individual tool or background task is unavailable in this app. No verified scoped action is exposed here.</p>
+          <p>Stop targets the active turn, not an individual tool or background task. Refresh state checks the session without stopping work.</p>
+          {state.connection.status !== 'connected' ? <p>Reconnect to refresh the session state.</p> : null}
+        </Sheet>
+      ) : null}
     </div>
   );
 }
@@ -753,7 +777,7 @@ export function SessionScreen({ state }: { state: AppState }) {
                       </button>
                     </div>
                   </div>
-                  <LiveTimeline live={state.live} visibility={state.reasoningVisibility} />
+                  <LiveTimeline live={state.live} visibility={state.reasoningVisibility} connected={state.connection.status === 'connected'} />
                   {state.live.error ? (
                     <p className="inline-error" role="alert">
                       {state.live.error}

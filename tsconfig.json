@@ -13,6 +13,7 @@
     ".staging",
     "reports",
     "docs/evidence",
-    "scripts/check-stillness-ux.mjs"
+    "scripts/check-stillness-ux.mjs",
+    "scripts/check-tool-status.mjs"
   ]
 }

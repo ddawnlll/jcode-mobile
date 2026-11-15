@@ -165,6 +165,14 @@ export interface ActiveTurnView {
   started_at_ms: number;
 }
 
+export interface DaemonStatusView {
+  /** `running`, `idle`, or `unknown`. */
+  status: string;
+  raw_status: string;
+  observed_at_ms: number;
+  source: string;
+}
+
 export interface SessionSnapshot {
   session: SessionSummary;
   messages: HistoryMessageView[];
@@ -173,6 +181,7 @@ export interface SessionSnapshot {
   plan: unknown | null;
   context: ContextView | null;
   active_turn?: ActiveTurnView | null;
+  daemon_status?: DaemonStatusView | null;
   epoch: string;
   last_seq: number;
   revision: number;
@@ -408,6 +417,8 @@ export interface CreateSessionResponse {
 export interface CancelTurnResponse {
   cancelled: boolean;
   turn_id: string | null;
+  already_stopped?: boolean;
+  final_state?: string;
   atomic_turn_scope: boolean;
   note: string;
 }

@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { reportedBackgroundTask, toolPresentation } from '../apps/stillness/src/lib/toolStatus.ts';
+
+const guidance = 'While this task runs, try to make progress on other useful work that does not depend on its result. If nothing independent remains, wait for completion rather than repeatedly polling. Do not duplicate the running task or change inputs it is still using.';
+const handoff = `Tool 'bash' was moved to background automatically after 3 seconds (task_id: 123456abcd).\n\n${guidance}`;
+const tool = { callId: 'call', name: 'bash', input: '', output: '', error: null, status: 'running' };
+assert.equal(toolPresentation(tool, true, true).label, 'In progress');
+assert.equal(toolPresentation(tool, false, true).label, 'Unknown / reconciling');
+assert.equal(toolPresentation(tool, true, false).label, 'Unknown / reconciling');
+assert.equal(toolPresentation({ ...tool, status: 'done' }, false, false).label, 'Completed');
+assert.equal(toolPresentation({ ...tool, status: 'failed', error: 'failed' }, false, false).label, 'Failed');
+assert.equal(toolPresentation({ ...tool, status: 'result' }, false, false).label, 'Result received');
+assert.deepEqual(toolPresentation({ ...tool, status: 'done', output: handoff }, false, false), { label: 'Moved to background', kind: 'background', taskId: '123456abcd' });
+assert.equal(reportedBackgroundTask('bash', handoff.replace('automatically after 3 seconds', 'by the user')), '123456abcd');
+assert.equal(reportedBackgroundTask('bash', handoff.replace('after 3 seconds', 'after 0.125 seconds')), '123456abcd');
+assert.equal(reportedBackgroundTask('read', handoff), null);
+assert.equal(reportedBackgroundTask('bash', handoff.replace(guidance, '')), null);
+assert.equal(reportedBackgroundTask('bash', `arbitrary output\n${handoff}`), null);
+assert.equal(toolPresentation({ ...tool, status: 'failed', output: handoff, error: 'failed' }, true, true).label, 'Failed');
+console.log('Tool lifecycle presentation checks passed');

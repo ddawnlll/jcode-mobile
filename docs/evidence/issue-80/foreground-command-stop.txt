@@ -1,0 +1,53 @@
+session session_skunk_1794778879447_f0881d772b267a00
+[event] turn_started {"kind":"turn_started","turn_id":"turn_d7c20bfbe6384c549b103693ded3a9fc","operation_id":"op_mwid06iy"}
+dispatched {"turn":"turn_d7c20bfbe6384c549b103693ded3a9fc"}
+[event] connection_phase {"kind":"connection_phase","phase":"sending request"}
+[event] connection_phase {"kind":"connection_phase","phase":"waiting for response"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"The"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" user"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" wants"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" me"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" to"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" run"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" a"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" simple"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" bash"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" command"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" and"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" then"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" report"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" back"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" with"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" LONG"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"_DONE"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"."}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" This"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" is"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" straightforward"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" -"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" I"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"'ll"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" use"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" the"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" bash"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" tool"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" to"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" execute"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" sleep"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":" "}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"6"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"0"}
+[event] reasoning_delta {"kind":"reasoning_delta","text":"."}
+[event] reasoning_done {"kind":"reasoning_done","duration_secs":null}
+[event] tool_start {"kind":"tool_start","call_id":"LM2xBLwE7zj6JIy3qzhUYyYCNT6obBsG","name":"bash"}
+[event] session_status {"kind":"session_status","status":"running","pending_soft_interrupts":null}
+during {"toolSeen":true,"toolName":"bash","active_turn":{"operation_id":"op_mwid06iy","started_at_ms":1794778879498,"status":"accepted","turn_id":"turn_d7c20bfbe6384c549b103693ded3a9fc"},"daemon_status":{"observed_at_ms":1794778884512,"raw_status":"running","source":"daemon.attach","status":"running"},"tools":0}
+[event] turn_stopped {"kind":"turn_stopped","turn_id":null,"reason":"interrupted","message":"The turn was interrupted by a cancellation request.","provider_stop_reason":null}
+[event] turn_done {"kind":"turn_done","turn_id":null}
+[event] session_status {"kind":"session_status","status":"cancelled","pending_soft_interrupts":null}
+stop1 {"already_stopped":false,"atomic_turn_scope":false,"cancelled":true,"final_state":"idle","note":"Upstream cancel is session-scoped; the adapter fenced the expected turn and blocked new dispatches until the turn settles.","turn_id":"turn_d7c20bfbe6384c549b103693ded3a9fc"}
+stop2 {"already_stopped":true,"atomic_turn_scope":false,"cancelled":false,"final_state":"idle","note":"The daemon reports this session is already idle; no cancel was sent.","turn_id":null}
+after {"active_turn":null,"daemon_status":{"observed_at_ms":1794778884567,"raw_status":"cancelled","source":"daemon.attach","status":"idle"}}
+[event] turn_started {"kind":"turn_started","turn_id":"turn_623ca40126c84b0fb6489aa86a62b112","operation_id":"op_mwid0afsb"}
+second_dispatch {"state":"dispatching","turn":"turn_623ca40126c84b0fb6489aa86a62b112"}
+second_started_event true

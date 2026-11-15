@@ -9,6 +9,7 @@ import { Suspense, lazy, memo, useEffect, useLayoutEffect, useMemo, useRef, useS
 import type { HistoryMessageView } from '../lib/protocol';
 import { orderedTimeline } from '../lib/timelineJournal';
 import type { JournalTool } from '../lib/timelineJournal';
+import { toolPresentation } from '../lib/toolStatus';
 import type { LiveState } from '../lib/controller';
 import { classifyDiffLine, describeToolCall, groupHistory, looksLikeDiff } from '../lib/toolLabels';
 import { PagedText, TEXT_PAGE_CHARS } from './PagedText';
@@ -49,10 +50,12 @@ function parseInput(input: string): unknown {
 
 function ToolCallCardView({
   tool,
-  status,
+  turnActive = false,
+  connected = false,
 }: {
   tool: JournalTool;
-  status?: string;
+  turnActive?: boolean;
+  connected?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const parsed = useMemo(() => parseInput(tool.input), [tool.input]);
@@ -61,7 +64,8 @@ function ToolCallCardView({
     [tool.name, tool.input, parsed],
   );
   const prettyInput = open && parsed ? JSON.stringify(parsed, null, 2) : tool.input;
-  const effectiveStatus = status ?? tool.status;
+  const presentation = toolPresentation(tool, turnActive, connected);
+  const effectiveStatus = presentation.kind;
   const copyValue = () => [tool.name, tool.input && `INPUT\n${tool.input}`, tool.output && `OUTPUT\n${tool.output}`, tool.error]
     .filter(Boolean)
     .join('\n\n');
@@ -83,12 +87,13 @@ function ToolCallCardView({
             {descriptor.summary ? <span className="tool-summary">{descriptor.summary}</span> : null}
             <IconChevron size={15} className={`tool-chevron ${open ? 'is-open' : ''}`} />
           </button>
-          <span className="tool-status">{effectiveStatus}</span>
+          <span className="tool-status">{presentation.label}</span>
           <CopyButton value={copyValue} label="Copy tool call" icon />
         </div>
         <div className="tool-raw">
           <code>{descriptor.raw}</code>
           {tool.input ? <span className="tool-arg-count">input observed</span> : null}
+          {presentation.taskId ? <span>Task {presentation.taskId} · current task status unknown</span> : null}
         </div>
         {open ? (
           <div className="tool-card-body">
@@ -132,7 +137,8 @@ function ToolCallCardView({
 export const ToolCallCard = memo(
   ToolCallCardView,
   (previous, next) =>
-    previous.status === next.status &&
+    previous.turnActive === next.turnActive &&
+    previous.connected === next.connected &&
     previous.tool.callId === next.tool.callId &&
     previous.tool.name === next.tool.name &&
     previous.tool.input === next.tool.input &&
@@ -271,7 +277,7 @@ const HistoryEntry = memo(function HistoryEntry({ entry }: { entry: ReturnType<t
           input: message.tool_input ? JSON.stringify(message.tool_input) : '',
           output: message.content ?? '',
           error: null,
-          status: 'done',
+          status: 'result',
         }} />
       </div>
     );
@@ -290,9 +296,11 @@ const HistoryEntry = memo(function HistoryEntry({ entry }: { entry: ReturnType<t
 export function LiveTimeline({
   live,
   visibility,
+  connected,
 }: {
   live: LiveState;
   visibility: 'compact' | 'hidden' | 'expanded';
+  connected: boolean;
 }) {
   const items = useMemo(
     () => orderedTimeline(live.assistants, live.reasoning, live.tools),
@@ -314,7 +322,14 @@ export function LiveTimeline({
           );
         }
         if (item.kind === 'tool') {
-          return <ToolCallCard key={item.id} tool={item.tool} />;
+          return (
+            <ToolCallCard
+              key={item.id}
+              tool={item.tool}
+              turnActive={Boolean(live.turnId) || live.daemonRunning}
+              connected={connected}
+            />
+          );
         }
         if (!item.block.text) return null;
         return (

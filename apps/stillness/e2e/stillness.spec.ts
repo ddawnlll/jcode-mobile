@@ -30,6 +30,13 @@ test('real session, draft, plan, activity, files, and preferences', async ({ pag
   // Draft is scoped to the session and survives navigation.
   const draft = 'Draft survives navigation and never stops a turn.';
   await page.getByTestId('composer-input').fill(draft);
+  await expect(page.getByTestId('refresh-session-state')).toBeEnabled();
+  await page.getByTestId('refresh-session-state').click();
+  await expect(page.getByTestId('composer-input')).toHaveValue(draft);
+  await page.getByRole('button', { name: 'Tool/task control' }).click();
+  await expect(page.getByText(/Force-stop for an individual tool or background task is unavailable/)).toBeVisible();
+  await expect(page.getByText(/Stop targets the active turn/)).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Back to sessions' }).click();
   await expect(page.getByTestId('sessions-screen')).toBeVisible();
   await page.getByTestId('session-row').filter({ hasText: title }).click();
@@ -161,5 +168,8 @@ test('send reports acceptance honestly and stop is the only cancellation', async
   await expect(stop).toBeVisible({ timeout: 20_000 });
   await stop.click();
   await expect(stop).toBeHidden({ timeout: 30_000 });
-  await expect(page.locator('.toast')).toContainText(/Stop sent|no active turn/i, { timeout: 20_000 });
+  await expect(page.locator('.toast')).toContainText(
+    /Stop sent|Turn stopped|already stopped|no active turn/i,
+    { timeout: 20_000 },
+  );
 });
