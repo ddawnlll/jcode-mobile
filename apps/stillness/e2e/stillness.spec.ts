@@ -30,6 +30,13 @@ test('real session, draft, plan, activity, files, and preferences', async ({ pag
   // Draft is scoped to the session and survives navigation.
   const draft = 'Draft survives navigation and never stops a turn.';
   await page.getByTestId('composer-input').fill(draft);
+  await expect(page.getByTestId('refresh-session-state')).toBeEnabled();
+  await page.getByTestId('refresh-session-state').click();
+  await expect(page.getByTestId('composer-input')).toHaveValue(draft);
+  await page.getByRole('button', { name: 'Tool/task control' }).click();
+  await expect(page.getByText(/Force-stop for an individual tool or background task is unavailable/)).toBeVisible();
+  await expect(page.getByText(/Stop targets the active turn/)).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
   await page.getByRole('button', { name: 'Back to sessions' }).click();
   await expect(page.getByTestId('sessions-screen')).toBeVisible();
   await page.getByTestId('session-row').filter({ hasText: title }).click();

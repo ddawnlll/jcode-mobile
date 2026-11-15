@@ -86,7 +86,7 @@ export interface LiveTool {
   input: string;
   output: string;
   error: string | null;
-  status: 'started' | 'running' | 'done' | 'failed';
+  status: 'started' | 'running' | 'done' | 'failed' | 'unknown';
 }
 
 export interface LiveBlock {
@@ -261,6 +261,7 @@ export class Controller {
   private sessionsTimer: number | null = null;
   private unsubscribers: Array<() => void> = [];
   private snapshotInFlight = false;
+  private stopping: { sessionId: string; turnId: string; generation: number } | null = null;
   private sessionGeneration = 0;
   private subscription: {
     sessionId: string;
@@ -944,11 +945,10 @@ export class Controller {
       liveText && lastAssistant && lastAssistant.content.includes(liveText.slice(-120)),
     );
     const restoredTurn = snapshot.active_turn ?? null;
-    const clearLive =
-      !snapshot.stale && !restoredTurn &&
-      (includesLive ||
-        (Boolean(this.state.live.finishedTurnId) && !liveText) ||
-        (!this.state.live.turnId && !this.state.live.assistants.length));
+    const idle = !snapshot.stale && !restoredTurn;
+    const unresolvedTools = this.state.live.tools.some((tool) => tool.status === 'started' || tool.status === 'running' || tool.status === 'unknown');
+    const clearLive = idle && !unresolvedTools && (includesLive ||
+      (!this.state.live.assistants.length && !this.state.live.reasoning.length && !this.state.live.tools.length));
     const nextLive = restoredTurn
       ? {
           ...(this.state.live.turnId === restoredTurn.turn_id ? this.state.live : emptyLive()),
@@ -962,7 +962,21 @@ export class Controller {
           permission: null,
         }
       : clearLive
-        ? emptyLive()
+        ? { ...emptyLive(), finishedTurnId: this.state.live.turnId ?? this.state.live.finishedTurnId }
+        : idle
+        ? {
+            ...this.state.live,
+            turnId: null,
+            finishedTurnId: this.state.live.turnId ?? this.state.live.finishedTurnId,
+            operationId: null,
+            startedAtMs: null,
+            permission: null,
+            phase: '',
+            status: 'idle',
+            needsReconcile: false,
+            tools: this.state.live.tools.map((tool) =>
+              tool.status === 'started' || tool.status === 'running' ? { ...tool, status: 'unknown' as const } : tool),
+          }
         : {
             ...this.state.live,
             needsReconcile: false,
@@ -1312,9 +1326,16 @@ export class Controller {
   async refreshSnapshot() {
     if (!this.client || this.client.status !== 'connected') return;
     const sessionId = this.state.activeSessionId;
-    if (!sessionId || this.snapshotInFlight) return;
+    if (!sessionId) return;
+    if (this.snapshotInFlight) {
+      this.scheduleSnapshot(900);
+      return;
+    }
     const generation = this.sessionGeneration;
     const client = this.client;
+    const requestedTurn = this.state.live.turnId;
+    const requestedFinishedTurn = this.state.live.finishedTurnId;
+    const requestedEpoch = this.state.epoch;
     this.snapshotInFlight = true;
     this.setState({ reconciling: true });
     try {
@@ -1325,14 +1346,21 @@ export class Controller {
         { sessionId },
       );
       if (this.client === client && this.sessionGeneration === generation && this.state.activeSessionId === sessionId
+        && this.state.live.turnId === requestedTurn
+        && this.state.live.finishedTurnId === requestedFinishedTurn
+        && this.state.epoch === requestedEpoch
         && (snapshot.epoch !== this.state.epoch || snapshot.last_seq >= this.state.lastSeq)) {
         this.applySnapshot(snapshot);
         if (snapshot.stale) {
           this.scheduleSnapshot(900);
         }
+      } else if (this.client === client && this.sessionGeneration === generation && this.state.activeSessionId === sessionId) {
+        this.scheduleSnapshot(150);
       }
     } catch (error) {
-      this.setToast(error instanceof Error ? error.message : 'Snapshot failed.');
+      if (this.client === client && this.sessionGeneration === generation && this.state.activeSessionId === sessionId) {
+        this.setToast(error instanceof Error ? error.message : 'Snapshot failed.');
+      }
     } finally {
       this.snapshotInFlight = false;
     }
@@ -1489,8 +1517,16 @@ export class Controller {
       this.setToast('There is no active turn to stop.');
       return;
     }
+    const client = this.client;
+    const generation = this.sessionGeneration;
+    if (this.stopping?.sessionId === sessionId && this.stopping.turnId === turnId
+      && this.stopping.generation === generation) return;
+    const stopping = { sessionId, turnId, generation };
+    this.stopping = stopping;
+    const current = () => this.client === client && this.sessionGeneration === generation
+      && this.state.activeSessionId === sessionId && this.state.live.turnId === turnId;
     try {
-      const response = await this.client.request<CancelTurnResponse>(
+      const response = await client.request<CancelTurnResponse>(
         'operations.cancel',
         {
           session_id: sessionId,
@@ -1500,13 +1536,22 @@ export class Controller {
         20_000,
         { sessionId, operationId: this.state.live.operationId ?? undefined },
       );
+      if (!current()) return;
       this.setToast(
         response.atomic_turn_scope
           ? 'Stop sent for this turn.'
           : 'Stop sent for the verified turn. Upstream cancellation is session-scoped.',
       );
     } catch (error) {
-      this.setToast(error instanceof Error ? error.message : 'Stop was rejected.');
+      if (!current()) return;
+      if (error instanceof AdapterRequestError && error.code === 'conflict') {
+        this.setToast('Stop conflicted with server state. Refreshing session state.');
+        await this.refreshSnapshot();
+      } else {
+        this.setToast(error instanceof Error ? error.message : 'Stop was rejected.');
+      }
+    } finally {
+      if (this.stopping === stopping) this.stopping = null;
     }
   }
 

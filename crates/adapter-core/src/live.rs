@@ -932,3 +932,40 @@ pub fn classify_backend_error(message: &str) -> BackendErrorKind {
         BackendErrorKind::Backend
     }
 }
+
+#[cfg(test)]
+mod tool_lifecycle_tests {
+    use super::*;
+
+    #[test]
+    fn native_tool_done_preserves_background_handoff_and_session_fence() {
+        let output = "Tool 'bash' was moved to background automatically after 3 seconds (task_id: 123456abcd).\n\nWhile this task runs, try to make progress on other useful work that does not depend on its result. If nothing independent remains, wait for completion rather than repeatedly polling. Do not duplicate the running task or change inputs it is still using.";
+        let event = ApiEvent::ToolDone {
+            session_id: "s1".into(),
+            call_id: "call1".into(),
+            name: "bash".into(),
+            output: output.into(),
+            error: None,
+        };
+        assert!(map_event(event.clone(), Some("s2")).is_none());
+        match map_event(event, Some("s1")) {
+            Some(BackendEvent::Session {
+                session_id,
+                event:
+                    SessionEvent::ToolDone {
+                        call_id,
+                        name,
+                        output: actual,
+                        error,
+                    },
+            }) => {
+                assert_eq!(session_id, "s1");
+                assert_eq!(call_id, "call1");
+                assert_eq!(name, "bash");
+                assert_eq!(actual, output);
+                assert_eq!(error, None);
+            }
+            other => panic!("unexpected mapped event: {other:?}"),
+        }
+    }
+}

@@ -7,6 +7,7 @@
  * so no bundler or test runner is needed.
  */
 import assert from 'node:assert/strict';
+import './check-tool-status.mjs';
 import {
   classifyDiffLine,
   describeToolCall,
