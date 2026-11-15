@@ -1,0 +1,9 @@
+sessions session_frog_1794778569811_b3cbd42c31e425c4 idle issue80 restart running turn | session_duck_1794778527603_43508e080a63503f idle issue80 live long command | session_deer_1794778358277_34d6d491c1056a1a idle issue80 live long command | session_crab_1794778336728_75a4390572c10a68 idle issue80 live long command | session_microbe_1794778110131_bd334bdaec2f2b41 idle Reply with exactly PROBE_OK and do not use tools.
+before {"active_turn":null,"daemon_status":{"observed_at_ms":1794778582189,"raw_status":"running","source":"daemon.attach","status":"running"},"messages":1}
+cancel1 {"already_stopped":false,"atomic_turn_scope":false,"cancelled":true,"final_state":"running","note":"A stop for this turn is already in flight; no second cancel was sent.","turn_id":null}
+cancel2 {"already_stopped":false,"atomic_turn_scope":false,"cancelled":true,"final_state":"running","note":"Upstream cancel is session-scoped; the adapter fenced the expected turn and blocked new dispatches until the turn settles.","turn_id":null}
+after {"active_turn":null,"daemon_status":{"observed_at_ms":1794778645386,"raw_status":"cancelled","source":"daemon.attach","status":"running"}}
+second_dispatch {"state":"dispatching","turn_id":"turn_6bec2e1e448f4a9aa93f95366248281a"}
+second_started_event true
+
+--- Command finished with exit code: 0 ---

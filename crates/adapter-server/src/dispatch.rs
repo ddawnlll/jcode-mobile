@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use adapter_core::{BackendEvent, BackendSession, CoreError, CoreResult, now_ms};
+use adapter_core::{
+    BackendEvent, BackendSession, CancelDenied, CancelTarget, CoreError, CoreResult, DaemonStatus,
+    now_ms,
+};
 use adapter_protocol::*;
 use base64::Engine as _;
 use serde::de::DeserializeOwned;
@@ -513,15 +516,33 @@ async fn build_snapshot(
     let seq_before = state.hub.current_seq(session_id);
     let backend = std::sync::Arc::clone(&state.backend);
     let id = session_id.to_string();
-    let (session, messages, runtime, plan, agents) = blocking(move || {
+    let (session, messages, runtime, plan, agents, daemon_status) = blocking(move || {
         let session = backend.attach_session(&id)?;
         let messages = backend.history(&id, Some(tail.clamp(1, 500)))?;
         let runtime = backend.runtime(&id).ok();
         let plan = backend.plan(&id).ok().flatten();
         let agents = backend.swarm_agents(&id);
-        Ok((session, messages, runtime, plan, agents))
+        let daemon_status = Some(
+            backend
+                .daemon_status(&id)
+                .unwrap_or_else(|_| DaemonStatus::unknown("daemon.probe_failed")),
+        );
+        Ok((session, messages, runtime, plan, agents, daemon_status))
     })
     .await?;
+    if let Some(status) = daemon_status.as_ref()
+        && status.status != "unknown"
+    {
+        state
+            .turns
+            .record_daemon_status(session_id, &status.raw_status, &status.source);
+        if status.is_idle() {
+            // The adapter's registry is process-local. An authoritative idle
+            // settles a turn whose terminal event was lost, so a returning
+            // client is not locked behind a stale RUNNING card.
+            state.turns.reconcile_idle(session_id);
+        }
+    }
     let summary = state.summary(session)?;
     let seq_after = state.hub.current_seq(session_id);
     let stale = seq_after != seq_before;
@@ -579,6 +600,12 @@ async fn build_snapshot(
                 status: turn.status,
                 started_at_ms: turn.started_at_ms,
             }),
+        daemon_status: daemon_status.map(|status| adapter_protocol::DaemonStatusView {
+            status: status.status,
+            raw_status: status.raw_status,
+            observed_at_ms: status.observed_at_ms,
+            source: status.source,
+        }),
         epoch: state.hub.epoch().to_string(),
         last_seq: seq_after,
         revision: seq_after,
@@ -1008,6 +1035,15 @@ async fn handle_reserve(state: std::sync::Arc<AppState>, request: Envelope) -> E
             CoreError::InvalidInput("images are only valid for a send operation".into()),
         );
     }
+    if state.turns.cancel_in_flight(&payload.session_id) {
+        return error_response(
+            &state,
+            &request,
+            CoreError::Conflict(
+                "a stop is in flight for this session; wait for it to settle".into(),
+            ),
+        );
+    }
     let attachments_json = if images.is_empty() {
         None
     } else {
@@ -1121,6 +1157,15 @@ async fn handle_dispatch(state: std::sync::Arc<AppState>, request: Envelope) -> 
             &state,
             &request,
             CoreError::Conflict("another turn is active for this session".into()),
+        );
+    }
+    if state.turns.cancel_in_flight(&operation.session_id) {
+        return error_response(
+            &state,
+            &request,
+            CoreError::Conflict(
+                "a stop is in flight for this session; wait for it to settle".into(),
+            ),
         );
     }
     let mut operation = operation;
@@ -1314,57 +1359,194 @@ async fn handle_cancel(state: std::sync::Arc<AppState>, request: Envelope) -> En
         Ok(value) => value,
         Err(error) => return error_response(&state, &request, error),
     };
-    let Some(active) = state.turns.active(&payload.session_id) else {
-        return error_response(
-            &state,
-            &request,
-            CoreError::Conflict("no active turn to stop".into()),
-        );
-    };
-    let matches_turn = payload
-        .expected_turn_id
-        .as_deref()
-        .map(|expected| expected == active.turn_id)
-        .unwrap_or(false);
-    let matches_operation = payload
-        .operation_id
-        .as_deref()
-        .map(|expected| expected == active.operation_id)
-        .unwrap_or(false);
-    // Every identifier the client supplies must agree with the live turn. A
-    // stale screen that knows a previous operation but the current turn (or
-    // the reverse) is contradictory input, not authority to cancel.
-    let turn_ok = payload.expected_turn_id.is_none() || matches_turn;
-    let operation_ok = payload.operation_id.is_none() || matches_operation;
-    if (!turn_ok || !operation_ok)
-        || (payload.expected_turn_id.is_none() && payload.operation_id.is_none())
-    {
-        return error_response(
-            &state,
-            &request,
-            CoreError::Conflict(format!(
-                "stop did not target the active turn {}",
-                active.turn_id
-            )),
-        );
-    }
-    let backend = std::sync::Arc::clone(&state.backend);
     let session_id = payload.session_id.clone();
-    match blocking(move || backend.cancel(&session_id)).await {
-        Ok(()) => ok(
+    // The adapter restarts with an empty turn registry, and a process-local
+    // active turn can outlive its terminal event. Ask the daemon before
+    // deciding: neither an empty registry nor a cached turn is proof of the
+    // daemon's current activity.
+    if let Some(status) = refresh_daemon_status(&state, &session_id).await
+        && status.is_idle()
+    {
+        state.turns.settle_idle(&session_id);
+        return ok(
             &state,
             &request,
             "operations.cancel",
             serde_json::to_value(CancelTurnResponse {
-                cancelled: true,
-                turn_id: Some(active.turn_id.clone()),
+                cancelled: false,
+                turn_id: None,
+                already_stopped: true,
+                final_state: "idle".into(),
                 atomic_turn_scope: false,
-                note: "Upstream cancel is session-scoped; the adapter verified the expected turn before issuing it."
-                    .into(),
+                note: "The daemon reports this session is already idle; no cancel was sent.".into(),
             })
             .unwrap_or_default(),
-        ),
-        Err(error) => error_response(&state, &request, error),
+        );
+    }
+    let target = match state.turns.begin_cancel(
+        &session_id,
+        payload.expected_turn_id.as_deref(),
+        payload.operation_id.as_deref(),
+        payload.allow_running_unknown,
+    ) {
+        Ok(target) => target,
+        Err(CancelDenied::InFlight(turn_id)) => {
+            return ok(
+                &state,
+                &request,
+                "operations.cancel",
+                serde_json::to_value(CancelTurnResponse {
+                    cancelled: true,
+                    turn_id,
+                    already_stopped: false,
+                    final_state: "running".into(),
+                    atomic_turn_scope: false,
+                    note: "A stop for this turn is already in flight; no second cancel was sent."
+                        .into(),
+                })
+                .unwrap_or_default(),
+            );
+        }
+        Err(CancelDenied::StaleTarget { last_turn_id }) => {
+            return error_response(
+                &state,
+                &request,
+                CoreError::Conflict(format!(
+                    "stop targeted a turn that is no longer active; no cancel was sent (current turn: {})",
+                    last_turn_id.as_deref().unwrap_or("none")
+                )),
+            );
+        }
+        Err(CancelDenied::Unknown) => {
+            return error_response(
+                &state,
+                &request,
+                CoreError::Conflict(
+                    "session activity is unknown; refresh state before stopping".into(),
+                ),
+            );
+        }
+        Err(CancelDenied::NoTarget) => {
+            return error_response(
+                &state,
+                &request,
+                CoreError::Conflict("no confirmed active turn to stop".into()),
+            );
+        }
+    };
+    let (turn_id, already_stopped) = match target {
+        CancelTarget::Known(turn_id) => (Some(turn_id), false),
+        CancelTarget::DaemonRunning => (None, false),
+        CancelTarget::AlreadyStopped => (None, true),
+    };
+    if already_stopped {
+        state.turns.settle_idle(&session_id);
+        return ok(
+            &state,
+            &request,
+            "operations.cancel",
+            serde_json::to_value(CancelTurnResponse {
+                cancelled: false,
+                turn_id: None,
+                already_stopped: true,
+                final_state: "idle".into(),
+                atomic_turn_scope: false,
+                note: "The daemon reports this session is already idle; no cancel was sent.".into(),
+            })
+            .unwrap_or_default(),
+        );
+    }
+    let backend = std::sync::Arc::clone(&state.backend);
+    let id = session_id.clone();
+    match blocking(move || backend.cancel(&id)).await {
+        Ok(()) => {
+            // Keep the cancel lease until the daemon reports a terminal event
+            // or idle. It expires on its own if that never arrives.
+            let final_state = wait_for_idle(&state, &session_id, 2_000).await;
+            ok(
+                &state,
+                &request,
+                "operations.cancel",
+                serde_json::to_value(CancelTurnResponse {
+                    cancelled: true,
+                    turn_id: turn_id.clone(),
+                    already_stopped: false,
+                    final_state,
+                    atomic_turn_scope: false,
+                    note: "Upstream cancel is session-scoped; the adapter fenced the expected turn and blocked new dispatches until the turn settles."
+                        .into(),
+                })
+                .unwrap_or_default(),
+            )
+        }
+        Err(error) => {
+            state.turns.complete_cancel(&session_id, turn_id.as_deref());
+            // A rejected cancel can mean the daemon finished the turn between
+            // the status probe and the cancel. Verify before surfacing error.
+            if let Some(status) = refresh_daemon_status(&state, &session_id).await
+                && status.is_idle()
+            {
+                state.turns.settle_idle(&session_id);
+                return ok(
+                    &state,
+                    &request,
+                    "operations.cancel",
+                    serde_json::to_value(CancelTurnResponse {
+                        cancelled: false,
+                        turn_id,
+                        already_stopped: true,
+                        final_state: "idle".into(),
+                        atomic_turn_scope: false,
+                        note: "The turn ended before the cancel reached the daemon; no second cancel was sent."
+                            .into(),
+                    })
+                    .unwrap_or_default(),
+                );
+            }
+            error_response(&state, &request, error)
+        }
+    }
+}
+
+async fn refresh_daemon_status(
+    state: &std::sync::Arc<AppState>,
+    session_id: &str,
+) -> Option<DaemonStatus> {
+    let backend = std::sync::Arc::clone(&state.backend);
+    let id = session_id.to_string();
+    let status = blocking(move || backend.daemon_status(&id)).await.ok()?;
+    state
+        .turns
+        .record_daemon_status(session_id, &status.raw_status, &status.source);
+    Some(status)
+}
+
+async fn wait_for_idle(
+    state: &std::sync::Arc<AppState>,
+    session_id: &str,
+    timeout_ms: u64,
+) -> String {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
+    loop {
+        if state.turns.active(session_id).is_none()
+            && state
+                .turns
+                .daemon_status(session_id)
+                .is_some_and(|status| status.is_idle())
+        {
+            return "idle".into();
+        }
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    match state.turns.daemon_status(session_id) {
+        Some(status) if status.is_idle() && state.turns.active(session_id).is_none() => {
+            "idle".into()
+        }
+        Some(status) if status.is_running() => "running".into(),
+        _ => "unknown".into(),
     }
 }
 
@@ -1947,6 +2129,17 @@ fn handle_session_event(state: std::sync::Arc<AppState>, session_id: String, eve
     state
         .hub
         .publish(&session_id, turn_id.clone(), operation_id, event.clone());
+    if let SessionEvent::SessionStatus { status, .. } = &event
+        && let Some(recorded) =
+            state
+                .turns
+                .record_daemon_status(&session_id, status, "daemon.event")
+        && recorded.is_idle()
+    {
+        // Terminal frames can be lost on a half-open stream. The daemon's own
+        // idle status is authoritative and settles the adapter registry.
+        state.turns.reconcile_idle(&session_id);
+    }
     match &event {
         SessionEvent::TurnDone { .. } => {
             state

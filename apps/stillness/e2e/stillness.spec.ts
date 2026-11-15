@@ -168,5 +168,8 @@ test('send reports acceptance honestly and stop is the only cancellation', async
   await expect(stop).toBeVisible({ timeout: 20_000 });
   await stop.click();
   await expect(stop).toBeHidden({ timeout: 30_000 });
-  await expect(page.locator('.toast')).toContainText(/Stop sent|no active turn/i, { timeout: 20_000 });
+  await expect(page.locator('.toast')).toContainText(
+    /Stop sent|Turn stopped|already stopped|no active turn/i,
+    { timeout: 20_000 },
+  );
 });

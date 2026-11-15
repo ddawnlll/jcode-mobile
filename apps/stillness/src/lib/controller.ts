@@ -100,6 +100,10 @@ export interface LiveState {
   turnId: string | null;
   operationId: string | null;
   finishedTurnId: string | null;
+  /** The daemon reports this session as generating, even if the adapter can
+   * no longer name the turn (for example after an adapter restart). */
+  daemonRunning: boolean;
+  daemonStatus: 'running' | 'idle' | 'unknown' | null;
   status: string;
   phase: string;
   startedAtMs: number | null;
@@ -210,6 +214,8 @@ function emptyLive(): LiveState {
     turnId: null,
     operationId: null,
     finishedTurnId: null,
+    daemonRunning: false,
+    daemonStatus: null,
     status: 'idle',
     phase: '',
     startedAtMs: null,
@@ -261,7 +267,7 @@ export class Controller {
   private sessionsTimer: number | null = null;
   private unsubscribers: Array<() => void> = [];
   private snapshotInFlight = false;
-  private stopping: { sessionId: string; turnId: string; generation: number } | null = null;
+  private stopping: { sessionId: string; turnId: string | null; generation: number } | null = null;
   private sessionGeneration = 0;
   private subscription: {
     sessionId: string;
@@ -939,16 +945,23 @@ export class Controller {
           (message) => message.role === 'user' && message.content === this.state.pending?.text,
         )
       : false;
-    const liveText = this.state.live.assistants.at(-1)?.text ?? '';
-    const lastAssistant = lastWhere(snapshot.messages, (message) => message.role === 'assistant');
-    const includesLive = Boolean(
-      liveText && lastAssistant && lastAssistant.content.includes(liveText.slice(-120)),
-    );
     const restoredTurn = snapshot.active_turn ?? null;
-    const idle = !snapshot.stale && !restoredTurn;
-    const unresolvedTools = this.state.live.tools.some((tool) => tool.status === 'started' || tool.status === 'running' || tool.status === 'unknown');
-    const clearLive = idle && !unresolvedTools && (includesLive ||
-      (!this.state.live.assistants.length && !this.state.live.reasoning.length && !this.state.live.tools.length));
+    const daemonStatus = snapshot.daemon_status?.status ?? null;
+    // `daemon_status` is the daemon's own answer, so it outranks the adapter's
+    // process-local turn registry. `unknown` never means idle.
+    const confirmedIdle = !snapshot.stale && daemonStatus === 'idle';
+    const confirmedRunning = !snapshot.stale && daemonStatus === 'running';
+    // Older adapters omit daemon_status. A fresh same-session snapshot with no
+    // active turn is then the strongest available evidence and must not leave
+    // a stale local turn blocking the composer forever.
+    const legacyIdle = !snapshot.stale && daemonStatus === null && !restoredTurn;
+    const idle = confirmedIdle || legacyIdle;
+    const unresolvedTools = (status: 'unknown'): LiveTool[] =>
+      this.state.live.tools.map((tool) =>
+        tool.status === 'started' || tool.status === 'running'
+          ? { ...tool, status }
+          : tool,
+      );
     const nextLive = restoredTurn
       ? {
           ...(this.state.live.turnId === restoredTurn.turn_id ? this.state.live : emptyLive()),
@@ -960,9 +973,9 @@ export class Controller {
           phase: '',
           needsReconcile: false,
           permission: null,
+          daemonRunning: true,
+          daemonStatus: 'running' as const,
         }
-      : clearLive
-        ? { ...emptyLive(), finishedTurnId: this.state.live.turnId ?? this.state.live.finishedTurnId }
         : idle
         ? {
             ...this.state.live,
@@ -974,13 +987,35 @@ export class Controller {
             phase: '',
             status: 'idle',
             needsReconcile: false,
-            tools: this.state.live.tools.map((tool) =>
-              tool.status === 'started' || tool.status === 'running' ? { ...tool, status: 'unknown' as const } : tool),
+            daemonRunning: false,
+            daemonStatus: confirmedIdle ? 'idle' as const : this.state.live.daemonStatus,
+            tools: unresolvedTools('unknown'),
+          }
+        : confirmedRunning
+        ? {
+            ...this.state.live,
+            // The adapter restarted and cannot name the running turn. Keep the
+            // work visible but stop claiming a turn identity the adapter will
+            // reject; Stop uses the daemon-confirmed unknown-turn path.
+            turnId: null,
+            // The daemon says this session is still running, so its previous
+            // id is not finished. Fencing it here would discard the very
+            // events that prove what the running turn is doing.
+            finishedTurnId: null,
+            operationId: null,
+            startedAtMs: null,
+            permission: null,
+            phase: '',
+            status: this.state.live.turnId ? this.state.live.status : 'running',
+            needsReconcile: false,
+            daemonRunning: true,
+            daemonStatus: 'running' as const,
           }
         : {
             ...this.state.live,
-            needsReconcile: false,
+            needsReconcile: daemonStatus === 'unknown' || snapshot.stale,
             status: snapshot.stale ? 'reconciling' : this.state.live.status,
+            daemonStatus: daemonStatus === 'unknown' ? 'unknown' as const : this.state.live.daemonStatus,
           };
     const sessions = this.state.sessions.map((session) =>
       session.session_id === snapshot.session.session_id ? snapshot.session : session,
@@ -1000,7 +1035,8 @@ export class Controller {
       agents: snapshot.agents ?? this.state.agents,
       savedOnPhone: false,
       sessionsError: null,
-      reconciling: snapshot.stale,
+      reconciling: snapshot.stale
+        || (daemonStatus === 'unknown' && Boolean(this.state.live.turnId || this.state.live.daemonRunning)),
       activeMissing: false,
       live: nextLive,
       pending: pendingInHistory ? null : this.state.pending,
@@ -1070,6 +1106,7 @@ export class Controller {
       'tool_input_delta',
       'tool_exec',
       'tool_done',
+      'session_status',
       'turn_stopped',
       'turn_done',
     ]);
@@ -1089,6 +1126,8 @@ export class Controller {
             operationId: event.operation_id,
             status: 'dispatching',
             startedAtMs: payload.observed_at_ms,
+            daemonRunning: true,
+            daemonStatus: 'running',
           },
         });
         break;
@@ -1168,7 +1207,22 @@ export class Controller {
         break;
       }
       case 'session_status': {
-        this.patchLive({ status: event.status });
+        if (event.status === 'idle' || event.status === 'closed' || event.status === 'cancelled') {
+          this.settleIdle();
+        } else if (
+          event.status === 'running'
+          || event.status === 'generating'
+          || event.status === 'tool_running'
+          || event.status === 'processing'
+        ) {
+          this.patchLive({
+            daemonRunning: true,
+            daemonStatus: 'running',
+            status: this.state.live.turnId ? this.state.live.status : 'running',
+          });
+        } else if (event.status !== 'attached') {
+          this.patchLive({ daemonStatus: 'unknown' });
+        }
         break;
       }
       case 'connection_phase': {
@@ -1309,10 +1363,40 @@ export class Controller {
       phase: '',
       permission: null,
       startedAtMs: null,
+      daemonRunning: false,
+      daemonStatus: 'idle',
       assistants: this.state.live.assistants.map((block) => block.done ? block : { ...block, done: true }),
       reasoning: this.state.live.reasoning.map((part) => part.done ? part : { ...part, done: true }),
+      // A turn ending is not evidence that an unfinished tool succeeded. Keep
+      // the card but stop claiming it is running.
+      tools: this.state.live.tools.map((tool) =>
+        tool.status === 'started' || tool.status === 'running'
+          ? { ...tool, status: 'unknown' as const }
+          : tool,
+      ),
     });
     this.scheduleSnapshot(48);
+  }
+
+  /** Apply an authoritative idle state without discarding the visible work. */
+  private settleIdle() {
+    this.patchLive({
+      turnId: null,
+      finishedTurnId: this.state.live.turnId ?? this.state.live.finishedTurnId,
+      operationId: null,
+      startedAtMs: null,
+      permission: null,
+      phase: '',
+      status: 'idle',
+      needsReconcile: false,
+      daemonRunning: false,
+      daemonStatus: 'idle',
+      tools: this.state.live.tools.map((tool) =>
+        tool.status === 'started' || tool.status === 'running'
+          ? { ...tool, status: 'unknown' as const }
+          : tool,
+      ),
+    });
   }
 
   private scheduleSnapshot(delayMs: number) {
@@ -1420,7 +1504,7 @@ export class Controller {
       this.setToast('This message is still being resolved. Do not resend it.');
       return;
     }
-    if (this.state.live.turnId) {
+    if (this.state.live.turnId || this.state.live.daemonRunning) {
       this.setToast('A turn is already running in this session.');
       return;
     }
@@ -1513,7 +1597,8 @@ export class Controller {
     if (!this.client || this.client.status !== 'connected') return;
     const sessionId = this.state.activeSessionId;
     const turnId = this.state.live.turnId;
-    if (!sessionId || !turnId) {
+    const daemonRunning = this.state.live.daemonRunning;
+    if (!sessionId || (!turnId && !daemonRunning)) {
       this.setToast('There is no active turn to stop.');
       return;
     }
@@ -1524,24 +1609,42 @@ export class Controller {
     const stopping = { sessionId, turnId, generation };
     this.stopping = stopping;
     const current = () => this.client === client && this.sessionGeneration === generation
-      && this.state.activeSessionId === sessionId && this.state.live.turnId === turnId;
+      && this.state.activeSessionId === sessionId
+      && this.state.live.turnId === turnId
+      && (turnId !== null || this.state.live.daemonRunning);
     try {
       const response = await client.request<CancelTurnResponse>(
         'operations.cancel',
         {
           session_id: sessionId,
-          operation_id: this.state.live.operationId,
+          operation_id: turnId ? this.state.live.operationId : null,
           expected_turn_id: turnId,
+          // The adapter restarted and lost the turn id, but the daemon still
+          // proves this session is generating. Let it reconcile safely.
+          allow_running_unknown: !turnId,
         },
         20_000,
         { sessionId, operationId: this.state.live.operationId ?? undefined },
       );
       if (!current()) return;
-      this.setToast(
-        response.atomic_turn_scope
-          ? 'Stop sent for this turn.'
-          : 'Stop sent for the verified turn. Upstream cancellation is session-scoped.',
-      );
+      if (response.already_stopped || response.final_state === 'idle') {
+        this.settleIdle();
+        this.setToast(
+          response.already_stopped
+            ? 'That turn had already stopped. The composer is ready.'
+            : 'Turn stopped.',
+        );
+        this.scheduleSnapshot(40);
+      } else {
+        this.setToast(
+          response.atomic_turn_scope
+            ? 'Stop sent for this turn.'
+            : 'Stop sent for the verified turn. Upstream cancellation is session-scoped.',
+        );
+        if (response.final_state === 'running' || !response.final_state) {
+          this.scheduleSnapshot(400);
+        }
+      }
     } catch (error) {
       if (!current()) return;
       if (error instanceof AdapterRequestError && error.code === 'conflict') {

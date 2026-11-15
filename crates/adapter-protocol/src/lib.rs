@@ -454,6 +454,23 @@ pub struct ActiveTurnView {
     pub started_at_ms: i64,
 }
 
+/// Authoritative session activity reported by the JCode daemon itself.
+///
+/// The adapter's own turn registry is process-local: after an adapter restart
+/// it is empty even when the daemon is still generating. A snapshot therefore
+/// carries the daemon's answer separately so a client can distinguish
+/// "confirmed idle" from "adapter has no turn, daemon state unknown".
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DaemonStatusView {
+    /// `running`, `idle`, or `unknown`.
+    pub status: String,
+    /// Raw daemon status value, for diagnostics only.
+    pub raw_status: String,
+    pub observed_at_ms: i64,
+    /// How the status was obtained, for example `daemon.attach`.
+    pub source: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionSnapshotPayload {
     pub session: SessionSummary,
@@ -467,6 +484,11 @@ pub struct SessionSnapshotPayload {
     /// returning client can show Stop without inventing completion or text.
     #[serde(default)]
     pub active_turn: Option<ActiveTurnView>,
+    /// The daemon's activity for this session at snapshot time. `None` means
+    /// the adapter could not obtain an authoritative answer; clients must not
+    /// treat that as idle.
+    #[serde(default)]
+    pub daemon_status: Option<DaemonStatusView>,
     pub epoch: String,
     pub last_seq: u64,
     pub revision: u64,
@@ -729,12 +751,24 @@ pub struct CancelTurnRequest {
     pub session_id: String,
     pub operation_id: Option<String>,
     pub expected_turn_id: Option<String>,
+    /// Allow stopping a daemon-confirmed running turn whose adapter identity is
+    /// unknown (for example immediately after an adapter restart). The adapter
+    /// still rejects a stale expected turn rather than cancelling a newer one.
+    #[serde(default)]
+    pub allow_running_unknown: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CancelTurnResponse {
     pub cancelled: bool,
     pub turn_id: Option<String>,
+    /// True when the stop was a safe no-op because the turn had already ended.
+    /// Clients should reconcile to idle instead of treating this as conflict.
+    #[serde(default)]
+    pub already_stopped: bool,
+    /// Best-known post-request state: `idle`, `running`, or `unknown`.
+    #[serde(default)]
+    pub final_state: String,
     /// The upstream harness only has session-scoped cancellation. The adapter
     /// verifies the expected turn before cancelling and reports that residual
     /// race explicitly rather than claiming atomic turn cancellation.

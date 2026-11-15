@@ -20,7 +20,7 @@ use tokio::runtime::Handle;
 use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::time::{Instant, sleep_until, timeout};
 
-use crate::backend::{BackendEvent, CoreError, CoreResult};
+use crate::backend::{BackendEvent, CoreError, CoreResult, now_ms};
 use crate::live::map_event;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -47,6 +47,13 @@ pub(crate) struct NativeLink {
     busy: Arc<AtomicBool>,
     agents: Arc<Mutex<Option<Vec<SwarmAgentView>>>>,
     catalog_changed: Arc<Notify>,
+    status: Arc<Mutex<Option<LinkStatus>>>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LinkStatus {
+    pub raw_status: String,
+    pub observed_at_ms: i64,
 }
 
 impl NativeLink {
@@ -60,6 +67,7 @@ impl NativeLink {
         let busy = Arc::new(AtomicBool::new(false));
         let agents = Arc::new(Mutex::new(None));
         let catalog_changed = Arc::new(Notify::new());
+        let status = Arc::new(Mutex::new(None));
         let connection = Connection {
             bridge: BridgeState::default(),
             target,
@@ -68,6 +76,7 @@ impl NativeLink {
             runtime_identity: None,
             last_status: None,
             catalog_changed: Arc::clone(&catalog_changed),
+            status: Arc::clone(&status),
             events,
         };
         runtime.spawn(connection.run(socket, inbox));
@@ -76,6 +85,7 @@ impl NativeLink {
             busy,
             agents,
             catalog_changed,
+            status,
         }
     }
 
@@ -125,6 +135,29 @@ impl NativeLink {
     pub(crate) fn refresh_runtime(&self) {
         self.catalog_changed.notify_one();
     }
+
+    pub(crate) fn status(&self) -> Option<LinkStatus> {
+        self.status.lock().expect("link status").clone()
+    }
+
+    /// Wait briefly for the daemon to report this session's activity at or
+    /// after `since_ms`. Attaching triggers a correlated status frame, so a
+    /// freshly restarted adapter can obtain an authoritative answer without
+    /// guessing.
+    pub(crate) fn wait_status_since(&self, since_ms: i64, timeout: Duration) -> Option<LinkStatus> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            if let Some(status) = self.status()
+                && status.observed_at_ms >= since_ms
+            {
+                return Some(status);
+            }
+            if std::time::Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
 }
 
 pub(crate) fn unavailable(message: &str) -> CoreError {
@@ -145,6 +178,7 @@ struct Connection {
     runtime_identity: Option<RuntimeIdentity>,
     last_status: Option<(String, Option<u32>)>,
     catalog_changed: Arc<Notify>,
+    status: Arc<Mutex<Option<LinkStatus>>>,
     events: mpsc::Sender<BackendEvent>,
 }
 
@@ -381,6 +415,10 @@ impl Connection {
                     status,
                     pending_soft_interrupts,
                 } if self.target.as_ref() == Some(session_id) => {
+                    *self.status.lock().expect("link status") = Some(LinkStatus {
+                        raw_status: status.clone(),
+                        observed_at_ms: now_ms(),
+                    });
                     self.busy.store(
                         !matches!(status.as_str(), "idle" | "closed" | "attached"),
                         Ordering::Relaxed,
@@ -566,6 +604,7 @@ mod tests {
             runtime_identity: None,
             last_status: None,
             catalog_changed: Arc::clone(&catalog_changed),
+            status: Arc::new(Mutex::new(None)),
             events,
         };
         let job = tokio::spawn(async move {

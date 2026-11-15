@@ -20,12 +20,20 @@ type Harness = {
   client: { status: string; request: (method: string, payload: unknown) => Promise<unknown> };
   sessionGeneration: number;
   applySnapshot: (snapshot: SessionSnapshot) => void;
+  applySessionEvent: (envelope: unknown) => void;
+  finishTurn: (turnId: string | null, status: 'done' | 'stopped') => void;
 };
 
-const snapshot = (stale = false): SessionSnapshot => ({
+const snapshot = (
+  stale = false,
+  daemon: 'idle' | 'running' | 'unknown' | null = null,
+): SessionSnapshot => ({
   session: { session_id: 'session-a', title: 'Test' },
   messages: [], active_turn: null, stale, last_seq: 5, epoch: 'epoch',
   plan: null, context: null, runtime: null, agents: null,
+  daemon_status: daemon
+    ? { status: daemon, raw_status: daemon, observed_at_ms: 10, source: 'test' }
+    : null,
 } as unknown as SessionSnapshot);
 
 function setup(request: Harness['client']['request']) {
@@ -147,5 +155,131 @@ describe('issue 80 authoritative reconciliation', () => {
     expect(h.state.live.turnId).toBe('turn-a');
     expect(h.state.reconciling).toBe(true);
     expect(h.state.toast).toBe('offline');
+  });
+
+  test('daemon idle clears a stale turn even when a tool is still marked running', () => {
+    const { h } = setup(async () => snapshot(false, 'idle'));
+    h.applySnapshot(snapshot(false, 'idle'));
+    expect(h.state.live.turnId).toBeNull();
+    expect(h.state.live.daemonRunning).toBe(false);
+    expect(h.state.live.daemonStatus).toBe('idle');
+    expect(h.state.live.tools[0].status).toBe('unknown');
+  });
+
+  test('daemon running with no adapter turn keeps Stop and blocks Send after restart', async () => {
+    const calls: string[] = [];
+    const { controller, h } = setup(async (method) => {
+      calls.push(method);
+      return snapshot(false, 'running');
+    });
+    h.applySnapshot(snapshot(false, 'running'));
+    expect(h.state.live.turnId).toBeNull();
+    expect(h.state.live.daemonRunning).toBe(true);
+    expect(h.state.live.finishedTurnId).toBeNull();
+    h.applySessionEvent({
+      session_id: 'session-a',
+      epoch: 'epoch',
+      seq: 6,
+      payload: {
+        event: { kind: 'text_delta', text: 'still running', message_id: 'm' },
+        turn_id: 'turn-a',
+        operation_id: 'op',
+        observed_at_ms: 12,
+      },
+    });
+    expect(h.state.live.assistants.at(-1)?.text).toContain('still running');
+    h.state.pending = null;
+    h.state.composerText = 'second message';
+    await controller.send();
+    expect(calls).toEqual([]);
+    expect(h.state.toast).toContain('already running');
+  });
+
+  test('daemon unknown never claims idle or releases the composer', () => {
+    const { h } = setup(async () => snapshot(false, 'unknown'));
+    h.applySnapshot(snapshot(false, 'unknown'));
+    expect(h.state.live.turnId).toBe('turn-a');
+    expect(h.state.live.daemonRunning).toBe(false);
+    expect(h.state.live.daemonStatus).toBe('unknown');
+    expect(h.state.live.needsReconcile).toBe(true);
+  });
+
+  test('stop on an already idle daemon is a no-op success that releases the composer', async () => {
+    const calls: string[] = [];
+    const { controller, h } = setup(async (method) => {
+      calls.push(method);
+      return {
+        cancelled: false,
+        turn_id: null,
+        already_stopped: true,
+        final_state: 'idle',
+        atomic_turn_scope: false,
+        note: 'already idle',
+      };
+    });
+    await controller.stop();
+    expect(calls).toEqual(['operations.cancel']);
+    expect(h.state.live.turnId).toBeNull();
+    expect(h.state.live.daemonRunning).toBe(false);
+    expect(h.state.live.tools[0].status).toBe('unknown');
+    expect(h.state.toast).toContain('already stopped');
+  });
+
+  test('stop without a turn id targets daemon-confirmed running state', async () => {
+    const calls: Array<{ method: string; payload: unknown }> = [];
+    const { controller, h } = setup(async (method, payload) => {
+      calls.push({ method, payload });
+      return {
+        cancelled: true,
+        turn_id: null,
+        already_stopped: false,
+        final_state: 'idle',
+        atomic_turn_scope: false,
+        note: 'stop accepted',
+      };
+    });
+    h.state.live = {
+      ...h.state.live,
+      turnId: null,
+      operationId: null,
+      daemonRunning: true,
+      daemonStatus: 'running',
+    };
+    await controller.stop();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe('operations.cancel');
+    expect(calls[0].payload).toMatchObject({
+      expected_turn_id: null,
+      operation_id: null,
+      allow_running_unknown: true,
+    });
+    expect(h.state.live.turnId).toBeNull();
+    expect(h.state.live.daemonRunning).toBe(false);
+  });
+
+  test('daemon idle status event settles a missed terminal and unresolved tool', () => {
+    const { h } = setup(async () => snapshot());
+    h.applySessionEvent({
+      session_id: 'session-a',
+      epoch: 'epoch',
+      seq: 6,
+      payload: {
+        event: { kind: 'session_status', status: 'idle', pending_soft_interrupts: null },
+        turn_id: 'turn-a',
+        operation_id: 'op',
+        observed_at_ms: 11,
+      },
+    });
+    expect(h.state.live.turnId).toBeNull();
+    expect(h.state.live.daemonRunning).toBe(false);
+    expect(h.state.live.tools[0].status).toBe('unknown');
+  });
+
+  test('turn terminal settles unfinished tools without marking them done', () => {
+    const { h } = setup(async () => snapshot());
+    h.finishTurn('turn-a', 'done');
+    expect(h.state.live.turnId).toBeNull();
+    expect(h.state.live.daemonRunning).toBe(false);
+    expect(h.state.live.tools[0].status).toBe('unknown');
   });
 });

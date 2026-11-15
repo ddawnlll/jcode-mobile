@@ -322,7 +322,14 @@ export function LiveTimeline({
           );
         }
         if (item.kind === 'tool') {
-          return <ToolCallCard key={item.id} tool={item.tool} turnActive={Boolean(live.turnId)} connected={connected} />;
+          return (
+            <ToolCallCard
+              key={item.id}
+              tool={item.tool}
+              turnActive={Boolean(live.turnId) || live.daemonRunning}
+              connected={connected}
+            />
+          );
         }
         if (!item.block.text) return null;
         return (

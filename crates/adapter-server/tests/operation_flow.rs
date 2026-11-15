@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use adapter_core::{
     AdapterConfig, AuthService, Backend, BackendEvent, BackendInfo, BackendRoute, BackendRuntime,
-    BackendSession, CoreError, CoreResult, Store,
+    BackendSession, CoreError, CoreResult, DaemonStatus, Store, now_ms,
 };
 use adapter_protocol::{
     CancelTurnResponse, CreateSessionResponse, DiagnosticsSnapshot, Envelope, EventsAckPayload,
@@ -29,6 +29,7 @@ struct FakeBackend {
     history: Mutex<Vec<adapter_protocol::HistoryMessageView>>,
     image_sends: Mutex<Vec<(String, String, usize)>>,
     cancels: Mutex<Vec<String>>,
+    daemon_status: Mutex<String>,
 }
 
 impl Default for FakeBackend {
@@ -41,6 +42,7 @@ impl Default for FakeBackend {
             history: Mutex::new(Vec::new()),
             image_sends: Mutex::new(Vec::new()),
             cancels: Mutex::new(Vec::new()),
+            daemon_status: Mutex::new("idle".into()),
         }
     }
 }
@@ -214,6 +216,16 @@ impl Backend for FakeBackend {
     fn cancel(&self, session_id: &str) -> CoreResult<()> {
         self.cancels.lock().unwrap().push(session_id.to_string());
         Ok(())
+    }
+
+    fn daemon_status(&self, _session_id: &str) -> CoreResult<DaemonStatus> {
+        let raw = self.daemon_status.lock().unwrap().clone();
+        Ok(DaemonStatus {
+            status: if raw == "running" { "running" } else { "idle" }.into(),
+            raw_status: raw,
+            observed_at_ms: now_ms(),
+            source: "fake".into(),
+        })
     }
 
     fn permission_response(
@@ -1167,6 +1179,7 @@ async fn stop_is_bound_to_the_expected_turn() {
         .await,
     );
     let turn_id = dispatched.operation.turn_id.expect("turn id");
+    *h.backend.daemon_status.lock().unwrap() = "running".into();
 
     // A late or stale Stop for a different turn must not cancel the live turn.
     let wrong = call(
@@ -1199,6 +1212,96 @@ async fn stop_is_bound_to_the_expected_turn() {
     assert!(cancelled.cancelled);
     assert_eq!(cancelled.turn_id.as_deref(), Some(turn_id.as_str()));
     assert!(!cancelled.atomic_turn_scope);
+    assert_eq!(h.backend.cancels.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn stop_on_an_idle_daemon_is_an_idempotent_no_op() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"idle-stop","project_id":null,"working_dir":null,"title":"idle"}),
+        )
+        .await,
+    );
+    for _ in 0..2 {
+        let stopped: CancelTurnResponse = response_payload(
+            &call(
+                &h,
+                "operations.cancel",
+                json!({
+                    "session_id": created.session.session_id,
+                    "operation_id": null,
+                    "expected_turn_id": null,
+                    "allow_running_unknown": true
+                }),
+            )
+            .await,
+        );
+        assert!(!stopped.cancelled);
+        assert!(stopped.already_stopped);
+        assert_eq!(stopped.final_state, "idle");
+    }
+    assert!(
+        h.backend.cancels.lock().unwrap().is_empty(),
+        "an already idle session must not receive a daemon cancel"
+    );
+}
+
+#[tokio::test]
+async fn snapshot_reports_daemon_running_after_adapter_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let h = harness(dir.path());
+    let created: CreateSessionResponse = response_payload(
+        &call(
+            &h,
+            "sessions.create",
+            json!({"client_request_id":"restart","project_id":null,"working_dir":null,"title":"restart"}),
+        )
+        .await,
+    );
+    let session_id = created.session.session_id;
+    *h.backend.daemon_status.lock().unwrap() = "running".into();
+
+    // No adapter turn exists in memory, but the daemon proves the session is
+    // generating. The snapshot must not report a false idle.
+    let snapshot: SessionSnapshotPayload = response_payload(
+        &call(
+            &h,
+            "sessions.subscribe",
+            json!({"session_id": session_id, "tail": 10}),
+        )
+        .await,
+    );
+    assert!(snapshot.active_turn.is_none());
+    assert_eq!(
+        snapshot
+            .daemon_status
+            .as_ref()
+            .map(|status| status.status.as_str()),
+        Some("running")
+    );
+
+    // A stop without a turn id is allowed only for that daemon-confirmed
+    // running state.
+    let stopped: CancelTurnResponse = response_payload(
+        &call(
+            &h,
+            "operations.cancel",
+            json!({
+                "session_id": session_id,
+                "operation_id": null,
+                "expected_turn_id": null,
+                "allow_running_unknown": true
+            }),
+        )
+        .await,
+    );
+    assert!(stopped.cancelled);
+    assert!(stopped.turn_id.is_none());
     assert_eq!(h.backend.cancels.lock().unwrap().len(), 1);
 }
 
