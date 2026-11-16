@@ -52,6 +52,10 @@ import {
   holdPendingShare,
   takePendingShare,
 } from '../apps/stillness/src/lib/pendingShare.ts';
+import {
+  normalizeMotionPreference,
+  resolveMotion,
+} from '../apps/stillness/src/lib/motionPrefs.ts';
 
 let checks = 0;
 function check(name, fn) {
@@ -446,6 +450,19 @@ check('pending shares are scoped to the paired server', () => {
 
   holdPendingShare({ serverId: 'srv_a', text: '', attachments: [] });
   assert.equal(hasPendingShare(), false, 'an empty share is not held');
+});
+
+check('motion preferences resolve system, explicit overrides and legacy values', () => {
+  assert.equal(resolveMotion('system', true), 'off');
+  assert.equal(resolveMotion('system', false), 'full');
+  assert.equal(resolveMotion('full', true), 'full', 'explicit Full is an opt-in');
+  assert.equal(resolveMotion('subtle', true), 'subtle');
+  assert.equal(resolveMotion('off', false), 'off');
+  assert.equal(normalizeMotionPreference('reduced'), 'off');
+  assert.equal(normalizeMotionPreference('reduce'), 'off');
+  assert.equal(normalizeMotionPreference('nonsense'), 'system');
+  assert.equal(normalizeMotionPreference(undefined), 'system');
+  assert.equal(normalizeMotionPreference('subtle'), 'subtle');
 });
 
 console.log(`\n${checks} checks passed.`);

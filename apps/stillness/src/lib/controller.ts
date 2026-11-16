@@ -58,6 +58,7 @@ import type {
   SessionSummary,
   SessionsListPayload,
 } from './protocol';
+import { normalizeMotionPreference, type MotionPreference } from './motionPrefs';
 
 export type Screen =
   | 'welcome'
@@ -182,7 +183,7 @@ export interface AppState {
   reconciling: boolean;
   composerText: string;
   theme: 'light' | 'dark' | 'system';
-  motion: 'system' | 'reduced';
+  motion: MotionPreference;
   glass: boolean;
   reasoningVisibility: 'compact' | 'hidden' | 'expanded';
   drawerOpen: boolean;
@@ -248,7 +249,12 @@ function loadPreferences(): Preferences {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     if (!raw) return fallback;
-    return { ...fallback, ...(JSON.parse(raw) as Partial<Preferences>) };
+    const parsed = JSON.parse(raw) as Partial<Preferences> & { motion?: unknown };
+    return {
+      ...fallback,
+      ...parsed,
+      motion: normalizeMotionPreference(parsed.motion),
+    };
   } catch {
     return fallback;
   }

@@ -54,8 +54,11 @@
   --font-text: 'Hanken Grotesk', 'Trebuchet MS', sans-serif;
   --font-code: 'IBM Plex Mono', 'Courier New', monospace;
   --time-quick: 115ms;
+  --time-tool: 180ms;
   --time-enter: 220ms;
+  --time-nav: 240ms;
   --time-sheet: 290ms;
+  --time-drawer: 280ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-enter: cubic-bezier(0.18, 0.78, 0.22, 1);
   --app-height: 100dvh;
@@ -2558,28 +2561,41 @@ pre {
   transform: translateY(0);
 }
 
-html[data-motion='reduced'] *,
-html[data-motion='reduced'] *::before,
-html[data-motion='reduced'] *::after {
+html[data-motion='off'] *,
+html[data-motion='off'] *::before,
+html[data-motion='off'] *::after {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
   scroll-behavior: auto !important;
 }
-html[data-motion='reduced'] .torus-live {
+html[data-motion='off'] .torus-live {
   animation: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not([data-motion='full']):not([data-motion='subtle']) *,
+  html:not([data-motion='full']):not([data-motion='subtle']) *::before,
+  html:not([data-motion='full']):not([data-motion='subtle']) *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-  .torus-live {
+  html:not([data-motion='full']):not([data-motion='subtle']) .torus-live {
     animation: none !important;
   }
+}
+
+html[data-motion='subtle'] {
+  --time-quick: 90ms;
+  --time-tool: 120ms;
+  --time-enter: 160ms;
+  --time-nav: 180ms;
+  --time-drawer: 220ms;
+  --time-sheet: 230ms;
+}
+html[data-motion='subtle'] .torus-live,
+html[data-motion='subtle'] .status-mark.is-active {
+  animation: none !important;
 }
 
 html[data-glass='on'] .drawer,
@@ -3582,8 +3598,8 @@ button {
   z-index: 29;
 }
 
-/* Reduced motion is a crossfade, never a translate or spring. */
-html[data-motion='reduced'] .screen {
+/* Subtle keeps a crossfade, never a translate or spring. Off is instant. */
+html[data-motion='subtle'] .screen {
   animation: reduced-screen 180ms linear both !important;
 }
 @keyframes reduced-screen {
@@ -3890,7 +3906,7 @@ html[data-native-insets='on'] .undo-toast {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .swarm-update {
+  .swarm-update.is-update {
     animation: swarm-update-in 140ms ease-out;
   }
 }
@@ -3985,9 +4001,9 @@ html[data-native-insets='on'] .undo-toast {
   color: var(--danger);
 }
 .tool-card-head .copy-icon {
-  width: 36px;
-  min-width: 36px;
-  height: 44px;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
   align-self: center;
 }
 .tool-chevron {
@@ -4173,4 +4189,163 @@ html[data-native-insets='on'] .undo-toast {
 .tool-diff {
   max-height: 360px;
   overflow: auto;
+}
+
+/* Code evidence stays aligned and readable at 360dp; no page-level x-scroll. */
+pre,
+code {
+  tab-size: 2;
+}
+.diff-block,
+.tool-command,
+.tool-terminal-output,
+.code-block pre {
+  max-width: 100%;
+}
+
+/* ------------------------------------------------------------------ */
+/* Semantic motion (0.6.0)                                             */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Ownership: CSS owns presence and small state transitions. The handwritten
+ * rAF spring in motion.ts owns pointer-driven drawer/sheet/row movement.
+ * Nothing drives the same transform from both engines.
+ */
+@keyframes tool-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes tool-fail {
+  0% {
+    border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  }
+  100% {
+    border-color: var(--line);
+  }
+}
+@keyframes reasoning-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes assistant-arrive {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes permission-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes jump-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 5px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.reasoning-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--accent);
+}
+.reasoning-mark .torus {
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Only an item that is genuinely live on mount arrives. Settled history and
+     replayed/reconciled items render in place with no cascade. */
+  .tool-item.is-running .tool-card,
+  .tool-item.is-started .tool-card {
+    animation: tool-arrive var(--time-tool) var(--ease-enter) both;
+  }
+  .tool-item.is-failed .tool-card {
+    animation: tool-fail 220ms var(--ease) both;
+  }
+  .reasoning-item.is-live .reasoning-block {
+    animation: reasoning-arrive var(--time-tool) var(--ease-enter) both;
+  }
+  .timeline-assistant.is-streaming {
+    animation: assistant-arrive 160ms var(--ease) both;
+  }
+  .permission-panel {
+    animation: permission-arrive var(--time-tool) var(--ease-enter) both;
+  }
+  .jump-new {
+    animation: jump-arrive 160ms var(--ease-enter) both;
+  }
+}
+
+/* A backgrounded tab or WebView must not keep a live indicator spinning. */
+html[data-app-visible='false'] .torus-live,
+html[data-app-visible='false'] .status-mark.is-active {
+  animation-play-state: paused;
+}
+.tool-card {
+  transition:
+    border-color var(--time-tool) var(--ease),
+    background-color var(--time-tool) var(--ease);
+}
+.tool-status {
+  transition: color var(--time-tool) var(--ease);
+}
+.tool-item .timeline-marker::after {
+  transition: background-color var(--time-tool) var(--ease);
+}
+
+/* Subtle keeps presence fades but removes travel and spin. */
+@keyframes subtle-fade {
+  from { opacity: 0.62; }
+  to { opacity: 1; }
+}
+html[data-motion='subtle'] .tool-item.is-running .tool-card,
+html[data-motion='subtle'] .tool-item.is-started .tool-card,
+html[data-motion='subtle'] .reasoning-item.is-live .reasoning-block,
+html[data-motion='subtle'] .permission-panel,
+html[data-motion='subtle'] .jump-new {
+  animation: subtle-fade var(--time-tool) linear both;
+}
+html[data-motion='subtle'] .tool-item.is-failed .tool-card {
+  animation: none;
+}
+html[data-motion='subtle'] .timeline-assistant.is-streaming {
+  animation: subtle-fade 120ms linear both;
+}
+
+.motion-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.motion-switch button {
+  min-width: 64px;
 }

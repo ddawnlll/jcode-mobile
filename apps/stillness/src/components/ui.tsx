@@ -424,7 +424,7 @@ export function CopyButton({
   const run = async () => {
     const ok = await copyText(typeof value === "function" ? value() : value);
     setCopied(ok);
-    haptic('select');
+    haptic(ok ? 'select' : 'warn');
     controller.setToast(ok ? 'Copied.' : 'Clipboard permission was denied.');
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setCopied(false), 1500);

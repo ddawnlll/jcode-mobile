@@ -52,6 +52,7 @@ import {
   IconWrench,
 } from './Icons';
 import { CopyButton } from './ui';
+import { Torus } from './Torus';
 
 const RichMarkdown = lazy(async () => ({ default: (await import('./RichMarkdown')).RichMarkdown }));
 const HISTORY_PAGE = 32;
@@ -250,15 +251,19 @@ function RawDetails({ tool, descriptor }: { tool: JournalTool; descriptor: ToolD
 function ToolCallCardView({
   tool,
   parsedInput,
+  onUserExpand,
   turnActive = false,
   connected = false,
 }: {
   tool: JournalTool;
   parsedInput?: unknown;
+  onUserExpand?: () => void;
   turnActive?: boolean;
   connected?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const headRef = useRef<HTMLButtonElement>(null);
+  const anchorTop = useRef<number | null>(null);
   const bodyId = useId();
   const descriptor = useMemo(
     () => describeToolCall(tool.name, tool.input, parsedInput),
@@ -308,18 +313,37 @@ function ToolCallCardView({
     || tool.error,
   );
 
+  useLayoutEffect(() => {
+    const before = anchorTop.current;
+    anchorTop.current = null;
+    if (before == null) return;
+    const head = headRef.current;
+    if (!head?.isConnected) return;
+    const scroll = head.closest('.transcript-scroll') as HTMLElement | null;
+    if (!scroll) return;
+    scroll.scrollTop += head.getBoundingClientRect().top - before;
+  }, [open]);
+
+  const toggle = () => {
+    const opening = !open;
+    if (opening) onUserExpand?.();
+    anchorTop.current = headRef.current?.getBoundingClientRect().top ?? null;
+    setOpen(opening);
+  };
+
   return (
     <div className={`timeline-item tool-item is-${effectiveStatus}`}>
       <span className="timeline-marker" aria-hidden="true" />
       <div className={`timeline-body tool-card ${effectiveStatus}`} data-testid="tool-card">
         <div className="tool-card-head">
           <button
+            ref={headRef}
             type="button"
             className="tool-expand"
             aria-expanded={open}
             aria-controls={bodyId}
             aria-label={`${open ? 'Collapse' : 'Expand'} ${descriptor.familyLabel}${descriptor.intent ? `: ${descriptor.intent}` : ''}`}
-            onClick={() => setOpen((value) => !value)}
+            onClick={toggle}
           >
             <ToolFamilyIcon family={descriptor.family} />
             <span className="tool-headings">
@@ -331,6 +355,9 @@ function ToolCallCardView({
           <span
             className={`tool-status is-${effectiveStatus}`}
             title={presentation.label}
+            role="status"
+            aria-live="polite"
+            aria-label={presentation.label}
           >
             {presentation.short}
           </span>
@@ -468,29 +495,52 @@ export const ReasoningSegment = memo(function ReasoningSegment({
   text,
   done,
   visibility,
+  onUserExpand,
 }: {
   text: string;
   done: boolean;
   visibility: 'compact' | 'hidden' | 'expanded';
+  onUserExpand?: () => void;
 }) {
   const [open, setOpen] = useState(visibility === 'expanded');
+  const headRef = useRef<HTMLButtonElement>(null);
+  const anchorTop = useRef<number | null>(null);
   useEffect(() => {
     setOpen(visibility === 'expanded');
   }, [visibility]);
+  useLayoutEffect(() => {
+    const before = anchorTop.current;
+    anchorTop.current = null;
+    if (before == null) return;
+    const head = headRef.current;
+    if (!head?.isConnected) return;
+    const scroll = head.closest('.transcript-scroll') as HTMLElement | null;
+    if (!scroll) return;
+    scroll.scrollTop += head.getBoundingClientRect().top - before;
+  }, [open]);
+  const toggle = () => {
+    if (!open) onUserExpand?.();
+    anchorTop.current = headRef.current?.getBoundingClientRect().top ?? null;
+    setOpen((value) => !value);
+  };
   if (visibility === 'hidden') return null;
   return (
-    <div className="timeline-item reasoning-item">
+    <div className={`timeline-item reasoning-item ${done ? 'is-done' : 'is-live'}`}>
       <span className="timeline-marker" aria-hidden="true" />
       <div className="timeline-body reasoning-block">
         <div className="reasoning-head">
           <button
+            ref={headRef}
             type="button"
             className="reasoning-toggle"
             aria-expanded={open}
-            onClick={() => setOpen((value) => !value)}
+            onClick={toggle}
           >
+            <span className="reasoning-mark" aria-hidden="true">
+              <Torus size={14} animated={!done} />
+            </span>
             <span>Reasoning</span>
-            <small>{done ? 'complete' : 'streaming'}</small>
+            <small role="status" aria-live="polite">{done ? 'complete' : 'thinking'}</small>
             <IconChevron size={14} className={`tool-chevron ${open ? 'is-open' : ''}`} />
           </button>
           <CopyButton value={text} label="Copy reasoning" icon />
@@ -516,7 +566,10 @@ const AssistantBlock = memo(function AssistantBlock({
 }) {
   const plain = <PagedText streaming={streaming} text={text} className="chat-text" />;
   return (
-    <article className="chat-message assistant-msg timeline-assistant" data-testid={testId}>
+    <article
+      className={`chat-message assistant-msg timeline-assistant ${streaming ? 'is-streaming' : ''}`}
+      data-testid={testId}
+    >
       <div className="chat-meta">
         <span>JCode {streaming ? <span className="stream-caret">streaming</span> : null}</span>
         <CopyButton value={text} label="Copy message" icon />
@@ -543,9 +596,11 @@ const UserMessage = memo(function UserMessage({ content }: { content: string }) 
 const HistoryToolCard = memo(function HistoryToolCard({
   message,
   fallbackId,
+  onUserExpand,
 }: {
   message: HistoryMessageView;
   fallbackId: string;
+  onUserExpand?: () => void;
 }) {
   const inputText = useMemo(() => {
     if (message.tool_input == null) return '';
@@ -567,6 +622,7 @@ const HistoryToolCard = memo(function HistoryToolCard({
           status: 'result',
         }}
         parsedInput={message.tool_input ?? undefined}
+        onUserExpand={onUserExpand}
       />
     </div>
   );
@@ -574,8 +630,10 @@ const HistoryToolCard = memo(function HistoryToolCard({
 
 export const HistoryTimeline = memo(function HistoryTimeline({
   messages,
+  onUserExpand,
 }: {
   messages: HistoryMessageView[];
+  onUserExpand?: () => void;
 }) {
   const entries = useMemo(() => groupHistory(messages), [messages]);
   const [visible, setVisible] = useState(HISTORY_PAGE);
@@ -603,7 +661,7 @@ export const HistoryTimeline = memo(function HistoryTimeline({
       <div ref={list} className="history-items">
         {entries.slice(hidden).map((entry) => (
           <div className="history-item" key={entry.key}>
-            <HistoryEntry entry={entry} />
+            <HistoryEntry entry={entry} onUserExpand={onUserExpand} />
           </div>
         ))}
       </div>
@@ -611,13 +669,19 @@ export const HistoryTimeline = memo(function HistoryTimeline({
   );
 });
 
-const HistoryEntry = memo(function HistoryEntry({ entry }: { entry: ReturnType<typeof groupHistory>[number] }) {
+const HistoryEntry = memo(function HistoryEntry({
+  entry,
+  onUserExpand,
+}: {
+  entry: ReturnType<typeof groupHistory>[number];
+  onUserExpand?: () => void;
+}) {
   if (entry.kind === 'user') return <UserMessage content={entry.content} />;
   if (entry.kind === 'assistant') {
     return <AssistantBlock text={entry.content} streaming={false} testId="assistant-message" />;
   }
   if (entry.kind === 'tool') {
-    return <HistoryToolCard message={entry.message} fallbackId={entry.key} />;
+    return <HistoryToolCard message={entry.message} fallbackId={entry.key} onUserExpand={onUserExpand} />;
   }
   return (
     <article className="chat-message">
@@ -634,10 +698,12 @@ export function LiveTimeline({
   live,
   visibility,
   connected,
+  onUserExpand,
 }: {
   live: LiveState;
   visibility: 'compact' | 'hidden' | 'expanded';
   connected: boolean;
+  onUserExpand?: () => void;
 }) {
   const items = useMemo(
     () => orderedTimeline(live.assistants, live.reasoning, live.tools),
@@ -655,6 +721,7 @@ export function LiveTimeline({
               text={item.block.text}
               done={item.block.done}
               visibility={visibility}
+              onUserExpand={onUserExpand}
             />
           );
         }
@@ -663,6 +730,7 @@ export function LiveTimeline({
             <ToolCallCard
               key={item.id}
               tool={item.tool}
+              onUserExpand={onUserExpand}
               turnActive={Boolean(live.turnId) || live.daemonRunning}
               connected={connected}
             />

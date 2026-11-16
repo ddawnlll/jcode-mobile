@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 interface TorusProps {
   size?: number;
@@ -56,8 +56,22 @@ function dots(): Dot[] {
 const generated = dots();
 
 export const Torus = memo(function Torus({ size = 88, animated = true, className = '', label }: TorusProps) {
+  const element = useRef<SVGSVGElement>(null);
+  const [onscreen, setOnscreen] = useState(true);
+  useEffect(() => {
+    if (!animated || typeof IntersectionObserver === 'undefined') return;
+    const node = element.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setOnscreen(entry.isIntersecting),
+      { rootMargin: '96px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [animated]);
   return (
     <svg
+      ref={element}
       className={`torus ${animated ? 'torus-live' : ''} ${className}`.trim()}
       width={size}
       height={size}
@@ -65,6 +79,7 @@ export const Torus = memo(function Torus({ size = 88, animated = true, className
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
+      style={animated && !onscreen ? { animationPlayState: 'paused' } : undefined}
     >
       <g fill="currentColor" stroke="none">
         {generated.map((dot, index) => (
