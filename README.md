@@ -2,7 +2,7 @@
   <img src="docs/evidence/v0.4.0/android-emulator-home.png" alt="JCode Mobile on an Android API 36 emulator: Harness online and the session list" width="320" />
 </p>
 
-<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.5.0</code></sub></p>
+<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.6.0</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
@@ -22,7 +22,7 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ANDROID / 0.5.0 / 12.1 MiB</code></sub><br /><br />
+      <sub><code>ANDROID / 0.6.0 / 12.14 MiB</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><strong>Download the APK</strong></a><br />
       <sub>Debug-signed sideload. No Play Store listing.</sub>
     </td>
@@ -39,12 +39,13 @@
   </tr>
 </table>
 
-> **0.5.0 is a development preview.** It ships Adapter v4, the Stillness 12
-> renderer, and the native Android bridge. The Android APK is debug-signed for
-> sideloading. The native Linux shell builds from source. There is no iOS
-> artifact and no Play Store listing.
+> **0.6.0 is a development preview.** It ships Adapter v4, source-backed tool
+> intent, structured command/file evidence, semantic motion and the native
+> Android bridge. The Android APK is debug-signed for sideloading. The native
+> Linux shell builds from source. There is no iOS artifact and no Play Store
+> listing.
 
-## What 0.5.0 is
+## What 0.6.0 is
 
 JCode Mobile is two processes:
 
@@ -57,12 +58,18 @@ JCode Mobile is two processes:
    through journal replay or an authoritative snapshot, and restores the exact
    server and session you left.
 
-0.5.0 adds per-session native links, exact route selection, live runtime and
-swarm state, delta coalescing before sequence assignment, and bounded binary
-WebSocket packages for large UTF-8 payloads. The client defers Markdown, pages
-long messages and tool output, and cuts the opening JavaScript bundle from
-166.37 kB to 121.50 kB gzip. It keeps the 0.4.0 journal, validated image
-attachments, push registration, and Android shell.
+0.6.0 makes the transcript explain what actually happened. JCode's required
+model-supplied `intent` is the primary tool label; file tools are filename-first;
+commands show the exact shell text, output and only source-reported exit codes;
+file mutations show requested input and JCode's authoritative diff. Motion is
+event-driven and replay-safe: active tools animate, settled history does not,
+and System/Full/Subtle/Off preferences are honored. The opening JavaScript
+bundle is 129.12 kB gzip, still below the 0.5.0-era 166.37 kB baseline.
+
+The previous 0.5.0 release added per-session native links, exact route
+selection, live runtime and swarm state, delta coalescing, bounded binary
+WebSocket packages, deferred Markdown and paged long output. 0.6.0 keeps that
+transport, journal, image attachments, push registration and Android shell.
 
 Nothing above is inferred from the browser surface: native Android evidence is
 tracked separately in [`docs/ANDROID_NATIVE.md`](docs/ANDROID_NATIVE.md).
@@ -78,38 +85,46 @@ Cancel. Only the explicit **Stop** control targets the current turn.
 | Web | Verification surface only; browser token in `localStorage` |
 | iOS | Not built on this host; no IPA |
 
-## Verified for 0.5.0
+## Verified for 0.6.0
 
-The 0.5.0 candidate was built and tested from isolated worktrees against the
+The 0.6.0 candidate was built and tested against the
 pinned JCode daemon `0abff12c`. The full stack (daemon, harness bridge, native
 link, Adapter v3 and v4, and the web UI) ran end to end on macOS with a
 deterministic local Responses fixture. The fixture is not a model and makes no
 network calls, so the transport and UI numbers do not depend on a provider.
 
+The Android candidate was installed on an API 36 arm64 emulator at 360 dp and
+exercised with a real provider turn, Stop recovery, adapter-loss reconnect and
+drawer/system-back navigation. Physical-device, TalkBack, 10k/1 MB Android and
+120 Hz checks remain `NOT_RUN` and are listed in the
+[0.6.0 release notes](docs/V0_6_0_RELEASE_NOTES.md).
+
 | Check | Result |
 | --- | --- |
-| Adapter v4 Rust tests | PASS, 75 tests (29 core + 10 protocol + 19 server lib + 17 integration) |
+| Adapter v4 Rust tests | PASS, 96 tests (42 core + 10 protocol + 25 server lib + 19 integration) |
 | Rust formatting and clippy | PASS, `cargo fmt --check` and `cargo clippy -D warnings` |
 | Legacy JavaScript tests | PASS, 14 suites / 139 tests |
-| Stillness UX checks | PASS, 15/15 |
+| Stillness UX checks | PASS, 23/23 |
+| Controller reconciliation | PASS, 16/16 |
 | TypeScript and ESLint | PASS |
-| Stillness production build | PASS, 121.50 kB gzip initial JavaScript |
+| Stillness production build | PASS, 129.12 kB gzip initial JavaScript / 13.09 kB gzip CSS |
 | Stream coalescing | PASS, 12,009 frames / 6,595,348 B to 745 frames / 780,810 B on the same 384,000-byte response |
 | Large UTF-8 payload | PASS, one descriptor + four binary frames, 200,514 B reassembled to valid JSON and UTF-8 across a 64 KiB boundary |
 | Full stack on the pinned daemon | PASS, isolated daemon + harness bridge + native link + Adapter v3/v4 |
-| Pairing and session browser e2e | PASS against Adapter v4 after the version assertion update |
-| Android release APK static verification | PASS, versionCode 5000, versionName 0.5.0, v2 + v3 signatures |
-| Real provider/model turn | NOT_RUN for 0.5.0 |
-| Android on-device install, real turn, frame pacing | NOT_RUN for 0.5.0 |
-| Physical Android device | NOT_RUN |
+| Pairing and session browser e2e | PASS, 5 passed / 3 skipped against isolated Adapter v4 |
+| Android release APK static verification | PASS, versionCode 6000, versionName 0.6.0, v2 + v3 signatures |
+| Android emulator install and real provider tool turn | PASS, API 36 arm64, 360 dp, gpt-5.6-luna |
+| Android Stop recovery and adapter-loss reconnect | PASS with documented delay; composer recovered |
+| Android drawer tap, system back and focus restore | PASS |
+| Android emulator frame timing | MEASURED, p50 53 ms / p95 69 ms / p99 85 ms on software-rendered emulator; not a physical-device claim |
+| Physical Android device, TalkBack, 10k/1 MB Android, 120 Hz | NOT_RUN |
 | FCM delivery | PARTIAL, registration only; `not_configured`, no Firebase credentials |
-| TalkBack / VoiceOver walkthrough | NOT_RUN |
-| Battery, native cold start and memory | NOT_RUN |
+| Battery and physical-device cold start | NOT_RUN; emulator cold start 579 ms |
 
 The 0.4.0 on-device captures remain in
 [`docs/evidence/v0.4.0/README.md`](docs/evidence/v0.4.0/README.md). They are
-0.4.0 evidence and are not presented as a 0.5.0 device run. The full 0.5.0
-benchmark is in [`docs/evidence/v0.5.0/benchmark/REPORT.md`](docs/evidence/v0.5.0/benchmark/REPORT.md).
+0.4.0 evidence and are not presented as a 0.6.0 device run. The full 0.5.0
+benchmark remains in [`docs/evidence/v0.5.0/benchmark/REPORT.md`](docs/evidence/v0.5.0/benchmark/REPORT.md).
 
 ## The transcript is fenced
 
@@ -139,18 +154,18 @@ what the server reported: plan, context, activity, runtime, and provider.
 ## Install the Android APK
 
 ```text
-jcode-mobile-0.5.0-android-release.apk
-12,718,529 bytes (12.1 MiB)
-SHA-256 d1f5662fca569e3a0bba725b862ae7cc27c121af1861562bb821cd0c3a98f227
+jcode-mobile-0.6.0-android-release.apk
+12,726,721 bytes (12.14 MiB)
+SHA-256 2d76b6793960df4070c21cd3960d3dc374e38c9821102a32565d8a4e3c0f3941
 package dev.jcode.stillness
-versionCode 5000, versionName 0.5.0
+versionCode 6000, versionName 0.6.0
 minSdk 24, targetSdk 37, compileSdk 37
 arm64-v8a + armeabi-v7a
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r jcode-mobile-0.5.0-android-release.apk
+adb install -r jcode-mobile-0.6.0-android-release.apk
 ```
 
 The package identifier and signing key are unchanged from 0.4.0, so the app
@@ -251,13 +266,17 @@ when the host has no system GTK/WebKit development packages.
 | [Adapter contract](docs/ADAPTER_CONTRACT.md) | Source evidence, operation states, security boundaries |
 | [Android native](docs/ANDROID_NATIVE.md) | Kotlin bridge, commands, permission and capability matrix |
 | [Migration](docs/ADAPTER_V4.md) | 0.4.x → 0.5.0 adapter and phone upgrade, rollback |
+| [Tool presentation](docs/TOOL_PRESENTATION.md) | Source intent, files, commands, diff and output provenance |
+| [Motion](docs/MOTION.md) | Animation ownership, tokens, replay rules and bundle impact |
+| [Accessibility](docs/ACCESSIBILITY.md) | Motion preferences, focus, live regions and TalkBack status |
 | [Audit](docs/V0_4_0_AUDIT.md) | Battery, privacy, permissions, accessibility and startup history |
 | [Development](docs/DEVELOPMENT.md) | Repository layout, commands, tests, release builds |
 | [Verification](docs/VERIFICATION.md) | The 0.3.1 matrix, kept as history; 0.4.0 and 0.5.0 evidence are in the release notes |
 | [Build state](docs/BUILD_STATE.md) | Versions, artifacts, checksums, resumption point |
-| [Release notes](docs/V0_5_0_RELEASE_NOTES.md) | 0.5.0 scope, benchmark, and known limits |
+| [Release notes](docs/V0_6_0_RELEASE_NOTES.md) | 0.6.0 scope, Android evidence, artifact and known limits |
 
 Historical release notes remain in `docs/`, including
+[0.5.0](docs/V0_5_0_RELEASE_NOTES.md),
 [0.4.0](docs/V0_4_0_RELEASE_NOTES.md),
 [0.3.1](docs/V0_3_1_RELEASE_NOTES.md), and
 [0.3.0](docs/V0_3_0_RELEASE_NOTES.md).

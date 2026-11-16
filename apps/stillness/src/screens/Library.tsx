@@ -753,15 +753,15 @@ export function SettingsScreen({ state }: { state: AppState }) {
             <h2 className="pref-title">About</h2>
             <div className="pref-row">
               <div>
-                Adapter<small>Rust Adapter v4 · {state.server?.adapter_version ?? '0.5.0'}</small>
+                Adapter<small>Rust Adapter v4 · {state.server?.adapter_version ?? '0.6.0'}</small>
               </div>
               <span className="note-sub">{state.server?.server_id?.slice(0, 18) ?? '—'}</span>
             </div>
             <div className="pref-row">
               <div>
-                Stillness 12<small>JCode Mobile 0.5.0</small>
+                Stillness 12<small>JCode Mobile 0.6.0</small>
               </div>
-              <span className="note-sub">v0.5.0</span>
+              <span className="note-sub">v0.6.0</span>
             </div>
             <div className="pref-row">
               <div>

@@ -271,7 +271,7 @@ export function Drawer({ state }: { state: AppState }) {
           <button onClick={() => controller.go('settings')}>
             <Torus size={18} animated={false} /> Preferences
           </button>
-          <span className="preview">v0.5.0</span>
+          <span className="preview">v0.6.0</span>
         </div>
       </aside>
       {!open ? (

@@ -1,30 +1,34 @@
 # Build state
 
-Updated: 2026-11-15
+Updated: 2026-11-16
 
 ## Current line
 
 | Item | Value |
 | --- | --- |
-| Branch | `release/0.5.0-feather-and-arrow` |
-| Head | `release/0.5.0-feather-and-arrow` (`git log -1`) |
+| Branch | `release/0.6.0` |
+| Head | `release/0.6.0` (`git log -1`) |
 | Commits since `v0.3.1` | see `git log --oneline v0.3.1..HEAD` |
-| Release | `v0.5.0`, published 2026-11-15 |
-| App version | 0.5.0 |
+| Release | `v0.6.0`, prepared 2026-11-16 |
+| App version | 0.6.0 |
 | Adapter | Rust Adapter v4, protocol 4, minimum 2 |
 | Binary names | `jcode-adapter-v4` (preferred), `jcode-adapter-v3` and `jcode-adapter-v2` (aliases) |
 | Client | Stillness 12, Tauri 2 |
 | Android package | `dev.jcode.stillness` |
-| Android versionCode | 5000 |
+| Android versionCode | 6000 |
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
 | JCode harness API | v1.11 |
 | Runtime | Bun 1.4.4, Rust 1.96.0-nightly |
 | Live deployment | `https://dawnll.duckdns.org` → `127.0.0.1:7644`, unit `jcode-mobile-adapter-v4.service` |
-| Live adapter version | 0.5.0, protocol 4, minimum 2, cut over 2026-11-15 |
+| Live adapter version | 0.5.0, protocol 4, minimum 2; unchanged by this client release |
 | Repository | `https://github.com/ddawnlll/jcode-mobile` |
 
 The detailed checks and artifact sections below describe the 0.4.0 build and
-are kept as history. The 0.5.0 results are in
+are kept as history. The 0.6.0 results are in
+[`V0_6_0_RELEASE_NOTES.md`](V0_6_0_RELEASE_NOTES.md): 96 Rust tests, 139
+JavaScript tests, 23 Stillness UX checks, 16 reconciliation tests, 129.11 kB
+gzip initial JavaScript, an API 36 emulator real-provider tool turn, Stop
+recovery and adapter-loss reconnect. The 0.5.0 results remain in
 [`V0_5_0_RELEASE_NOTES.md`](V0_5_0_RELEASE_NOTES.md) and
 `docs/evidence/v0.5.0/benchmark/REPORT.md`: 75 Rust tests, 139 JavaScript tests,
 15 Stillness UX checks, 121.50 kB gzip initial JavaScript, 16.1x fewer stream
@@ -42,13 +46,13 @@ were preserved rather than re-issued.
 | Component | Path | State |
 | --- | --- | --- |
 | Adapter protocol | `crates/adapter-protocol` | v4 envelopes, negotiation, 10 tests |
-| Adapter core | `crates/adapter-core` | native links, journal, cursors, delta index, auth, paths, 29 tests |
-| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch, diagnostics, push, 19 unit + 17 integration tests |
-| Stillness web | `apps/stillness` | React 19, Vite 7, gestures and motion |
+| Adapter core | `crates/adapter-core` | native links, journal, cursors, delta index, auth, paths, 42 tests |
+| Adapter server | `crates/adapter-server` | Axum, WebSocket, dispatch, diagnostics, push, 25 unit + 19 integration tests |
+| Stillness web | `apps/stillness` | React 19, Vite 7, intent-first tools, gestures and semantic motion |
 | Tauri shell | `apps/stillness/src-tauri` | Desktop and Android; `native_android.rs` contract |
 | Android project | `apps/stillness/src-tauri/gen/android` | Committed, patched Tauri CLI path |
 | Kotlin bridge | `.../java/dev/jcode/stillness/native/` | Notifications, push, background sync, share, deep links, biometrics, pickers, downloads, clipboard, layout, launchers |
-| Legacy Expo app | `src/` | 0.2.x client, not the 0.5.0 artifact |
+| Legacy Expo app | `src/` | 0.2.x client, not the 0.6.0 artifact |
 | Legacy adapter | `integration/jcode-adapter` | 0.2.x Bun adapter |
 
 ## Checks

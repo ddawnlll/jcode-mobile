@@ -95,3 +95,18 @@ TypeScript stripping:
 - exit-code footers, missing exit codes, attached diffs, ANSI stripping,
   truncation markers and 100 KB+ payload preservation;
 - background handoff detection remains in `scripts/check-tool-status.mjs`.
+
+## Android evidence (0.6.0)
+
+On the API 36 arm64 emulator at 360 dp, a real provider turn
+(`gpt-5.6-luna`) produced:
+
+- collapsed intent `Print final E2E proof and OS`, family `Run command`, exact
+  command `printf 'final-e2e\n' && uname -s`, and `RESULT`;
+- expanded output `final-e2e` / `Darwin` with `Exit not reported`;
+- filename-first restored cards (`tool-proof.txt · Write file · …`) with
+  neutral `RESULT` rather than green `Completed`;
+- no duplicate live/history cards after the idle snapshot and after an adapter
+  restart.
+
+Physical-device and TalkBack rendering remain `NOT_RUN`.
