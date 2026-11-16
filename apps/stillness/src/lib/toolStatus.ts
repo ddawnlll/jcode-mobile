@@ -20,7 +20,7 @@ export function toolPresentation(tool: JournalTool, turnActive: boolean, connect
   if (tool.status === 'done') return { label: 'Completed', short: 'Completed', kind: 'done', taskId: null };
   // Historical records lack the native error bit, so a result alone is not
   // evidence that the call succeeded.
-  if (tool.status === 'result') return { label: 'Result received', short: 'Result', kind: 'done', taskId: null };
+  if (tool.status === 'result') return { label: 'Result received', short: 'Result', kind: 'result', taskId: null };
   if (!connected || !turnActive) return { label: 'Unknown / reconciling', short: 'Reconciling', kind: 'unknown', taskId: null };
   // The controller also marks streamed input as running before tool_exec, so
   // this status does not prove that execution has begun.

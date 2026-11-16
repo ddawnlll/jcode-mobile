@@ -13,7 +13,11 @@ export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 
 export function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  if (document.documentElement.dataset.motion === 'reduced') return true;
+  const effective = document.documentElement.dataset.motion;
+  if (effective === 'off') return true;
+  // An explicit Full/Subtle choice overrides the OS signal. Before the app
+  // shell resolves the preference, fall back to the OS.
+  if (effective === 'full' || effective === 'subtle') return false;
   return typeof window.matchMedia === 'function' && window.matchMedia(REDUCED_MOTION_QUERY).matches;
 }
 
