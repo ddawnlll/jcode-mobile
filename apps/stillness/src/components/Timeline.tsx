@@ -289,11 +289,12 @@ function ToolCallCardView({
       ? descriptor.basename
       : descriptor.familyLabel);
   const secondaryParts: string[] = [];
-  if (descriptor.intentPreview) secondaryParts.push(descriptor.familyLabel);
   if (FILE_FAMILIES.has(descriptor.family) && descriptor.basename) {
-    if (descriptor.intentPreview) secondaryParts.push(descriptor.basename);
+    secondaryParts.push(descriptor.basename);
+    if (descriptor.intentPreview) secondaryParts.push(descriptor.familyLabel);
     if (descriptor.directoryHint) secondaryParts.push(descriptor.directoryHint);
   } else if (descriptor.summary && descriptor.summary !== primary) {
+    if (descriptor.intentPreview) secondaryParts.push(descriptor.familyLabel);
     secondaryParts.push(descriptor.summary);
   }
   if (presentation.taskId) secondaryParts.push(`task ${presentation.taskId}`);

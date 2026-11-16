@@ -2912,6 +2912,9 @@ button {
 .tool-item.is-background .timeline-marker::after {
   background: var(--quiet);
 }
+.tool-item.is-result .timeline-marker::after {
+  background: var(--line-strong);
+}
 .timeline-body {
   min-width: 0;
 }
@@ -3996,6 +3999,9 @@ html[data-native-insets='on'] .undo-toast {
 }
 .tool-status.is-done {
   color: var(--success);
+}
+.tool-status.is-result {
+  color: var(--quiet);
 }
 .tool-status.is-failed {
   color: var(--danger);
