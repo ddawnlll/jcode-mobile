@@ -1,12 +1,13 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { controller, type AppState } from './lib/controller';
 import { sessionTitle } from './lib/format';
+import { resolveMotion } from './lib/motionPrefs';
 import { Torus } from './components/Torus';
 import { Drawer, Toast } from './components/ui';
 import {
   IconActivity,
+  IconFolder,
   IconList,
-  IconMenu,
   IconPlus,
   IconSettings,
   IconServer,
@@ -73,7 +74,7 @@ function Rail({ state }: { state: AppState }) {
   const nav: Array<{ screen: 'home' | 'sessions' | 'projects' | 'settings'; label: string; icon: React.ReactNode }> = [
     { screen: 'home', label: 'Home', icon: <Torus size={18} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },
-    { screen: 'projects', label: 'Projects', icon: <IconMenu /> },
+    { screen: 'projects', label: 'Projects', icon: <IconFolder /> },
     { screen: 'settings', label: 'Preferences', icon: <IconSettings /> },
   ];
   return (
@@ -176,18 +177,32 @@ export default function App() {
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
     const apply = () => {
       const resolved = state.theme === 'system' ? (media.matches ? 'dark' : 'light') : state.theme;
       document.documentElement.dataset.theme = resolved;
-      const reduced =
-        state.motion === 'reduced' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      document.documentElement.dataset.motion = reduced ? 'reduced' : 'full';
+      document.documentElement.dataset.motion = resolveMotion(state.motion, reduce.matches);
+      document.documentElement.dataset.motionPreference = state.motion;
       document.documentElement.dataset.glass = state.glass ? 'on' : 'off';
     };
     apply();
     media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
+    reduce.addEventListener('change', apply);
+    return () => {
+      media.removeEventListener('change', apply);
+      reduce.removeEventListener('change', apply);
+    };
   }, [state.theme, state.motion, state.glass]);
+
+  useEffect(() => {
+    const apply = () => {
+      document.documentElement.dataset.appVisible =
+        document.visibilityState === 'visible' ? 'true' : 'false';
+    };
+    apply();
+    document.addEventListener('visibilitychange', apply);
+    return () => document.removeEventListener('visibilitychange', apply);
+  }, []);
 
   useEffect(() => {
     const viewport = window.visualViewport;

@@ -164,6 +164,15 @@ export function IconList(props: IconProps) {
   );
 }
 
+export function IconChecklist(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 6.5l1.5 1.5L8 5.5M4 12.5l1.5 1.5L8 11.5M4 18.5l1.5 1.5L8 17.5" />
+      <path d="M11 7h9M11 13h9M11 19h9" />
+    </svg>
+  );
+}
+
 export function IconActivity(props: IconProps) {
   return (
     <svg {...base(props)}>

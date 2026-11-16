@@ -93,6 +93,21 @@ test('real session, draft, plan, activity, files, and preferences', async ({ pag
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.getByTestId('theme-light').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+  // Motion preference applies immediately and honors an explicit override.
+  await page.getByTestId('motion-subtle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'subtle');
+  await page.getByTestId('motion-off').click();
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'off');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByTestId('motion-system').click();
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'off');
+  await page.getByTestId('motion-full').click();
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'full');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.getByTestId('motion-system').click();
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'full');
+
   await expect(page.getByText('localStorage (web preview)')).toBeVisible();
 });
 

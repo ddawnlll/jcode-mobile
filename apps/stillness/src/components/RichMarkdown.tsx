@@ -12,7 +12,7 @@
  */
 import MarkdownIt from 'markdown-it';
 import { memo, useMemo, useState } from 'react';
-import { copyText } from './motion';
+import { copyText, haptic } from './motion';
 import { classifyDiffLine } from '../lib/toolLabels';
 
 function escapeHtml(value: string): string {
@@ -119,6 +119,7 @@ export const RichMarkdown = memo(
       const block = button.closest('.code-block');
       const code = block?.querySelector('code')?.textContent ?? '';
       const ok = await copyText(code);
+      haptic(ok ? 'select' : 'warn');
       setStatus(ok ? 'Code copied.' : 'Clipboard permission was denied.');
       button.textContent = ok ? 'Copied' : 'Blocked';
       button.classList.toggle('is-copied', ok);

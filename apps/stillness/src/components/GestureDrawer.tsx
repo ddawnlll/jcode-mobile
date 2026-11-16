@@ -10,6 +10,7 @@ import { controller, type AppState, type Screen } from '../lib/controller';
 import { relativeTime, sessionTitle } from '../lib/format';
 import {
   IconActivity,
+  IconChecklist,
   IconClose,
   IconEdit,
   IconFolder,
@@ -18,7 +19,7 @@ import {
 } from './Icons';
 import { Torus } from './Torus';
 import { useAxisDrag, useBackGuard } from './gestures';
-import { clamp, resistance, spring, SPRING } from './motion';
+import { clamp, haptic, resistance, spring, SPRING } from './motion';
 import { useSessionPrefs, visibleSessions } from '../lib/sessionPrefs';
 
 const SAFE_WIDTH = 310;
@@ -33,6 +34,7 @@ export function Drawer({ state }: { state: AppState }) {
   const dragStartRef = useRef(0);
   const releaseVelocityRef = useRef(0);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const didDrag = useRef(false);
   const [dragging, setDragging] = useState(false);
   const prefs = useSessionPrefs(state.credential?.serverId ?? null);
   const online = state.connection.status === 'connected';
@@ -65,6 +67,10 @@ export function Drawer({ state }: { state: AppState }) {
       onFrame: paint,
       onRest: (value) => {
         paint(value);
+        if (didDrag.current) {
+          didDrag.current = false;
+          haptic(value > -(widthRef.current || SAFE_WIDTH) + 0.5 ? 'open' : 'select');
+        }
         if (value <= -(widthRef.current || SAFE_WIDTH) + 0.5) {
           const element = drawerRef.current;
           if (element) element.style.visibility = 'hidden';
@@ -108,6 +114,7 @@ export function Drawer({ state }: { state: AppState }) {
     },
     onStart: () => {
       springRef.current?.cancel();
+      didDrag.current = true;
       dragStartRef.current = xRef.current;
       setDragging(true);
     },
@@ -139,6 +146,7 @@ export function Drawer({ state }: { state: AppState }) {
     shouldStart: () => !open,
     onStart: () => {
       springRef.current?.cancel();
+      didDrag.current = true;
       widthRef.current = drawerRef.current?.offsetWidth || widthRef.current;
       dragStartRef.current = -widthRef.current;
       setDragging(true);
@@ -190,7 +198,7 @@ export function Drawer({ state }: { state: AppState }) {
     { screen: 'home', label: 'Home', icon: <Torus size={20} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },
     { screen: 'projects', label: 'Projects', icon: <IconFolder /> },
-    { screen: 'plan', label: 'Plan', icon: <IconList /> },
+    { screen: 'plan', label: 'Plan', icon: <IconChecklist /> },
     { screen: 'activity', label: 'Activity', icon: <IconActivity /> },
     { screen: 'changes', label: 'Changes', icon: <IconEdit /> },
     { screen: 'settings', label: 'Settings', icon: <IconSettings /> },

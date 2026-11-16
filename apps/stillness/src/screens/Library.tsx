@@ -624,11 +624,23 @@ export function SettingsScreen({ state }: { state: AppState }) {
             </div>
             <div className="pref-row">
               <div>
-                Motion<small>Reduced motion is a first-class setting.</small>
+                Motion
+                <small>
+                  System follows the device. Subtle keeps fades without travel or spin.
+                  Off removes nonessential motion.
+                </small>
               </div>
-              <div className="seg-switch" role="group" aria-label="Motion">
-                <button aria-pressed={state.motion === 'system'} onClick={() => controller.setMotion('system')}>System</button>
-                <button aria-pressed={state.motion === 'reduced'} onClick={() => controller.setMotion('reduced')}>Reduce</button>
+              <div className="seg-switch motion-switch" role="group" aria-label="Motion">
+                {(['system', 'full', 'subtle', 'off'] as const).map((value) => (
+                  <button
+                    key={value}
+                    aria-pressed={state.motion === value}
+                    onClick={() => controller.setMotion(value)}
+                    data-testid={`motion-${value}`}
+                  >
+                    {value}
+                  </button>
+                ))}
               </div>
             </div>
           </section>

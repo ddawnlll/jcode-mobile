@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controller, type AppState, type LiveState } from '../lib/controller';
 import {
   IconArrowUp,
@@ -35,7 +35,7 @@ import { HistoryTimeline, LiveTimeline } from '../components/Timeline';
 import { ModelPicker } from '../components/ModelPicker';
 import { ReasoningSlider } from '../components/ReasoningSlider';
 import { openSwitcher } from '../components/QuickSwitcher';
-import { useScrollMemory, savedScrollOffset } from '../components/motion';
+import { prefersReducedMotion, useScrollMemory, savedScrollOffset } from '../components/motion';
 import { pickImages, isNativeBridgeError } from '../lib/native';
 import {
   attachmentErrorMessage,
@@ -70,7 +70,7 @@ function Elapsed({ since }: { since: number | null }) {
   }, [since]);
   if (!since) return null;
   const seconds = now ? Math.max(0, Math.floor((now - since) / 1000)) : 0;
-  return <span className="thinking-time">observed {seconds}s</span>;
+  return <span className="thinking-time" aria-hidden="true">observed {seconds}s</span>;
 }
 
 function PendingCard({ state }: { state: AppState }) {
@@ -556,6 +556,34 @@ function SessionInspector({ state, plan }: { state: AppState; plan: ParsedPlan |
   );
 }
 
+type SwarmAgent = {
+  session_id: string;
+  label: string | null;
+  status: string | null;
+  model: string | null;
+  reasoning_effort: string | null;
+};
+
+function SwarmAgentPill({ agent }: { agent: SwarmAgent }) {
+  const previous = useRef(agent.status);
+  const [pulse, setPulse] = useState(false);
+  useEffect(() => {
+    if (previous.current === agent.status) return;
+    previous.current = agent.status;
+    setPulse(true);
+    const timer = window.setTimeout(() => setPulse(false), 220);
+    return () => window.clearTimeout(timer);
+  }, [agent.status]);
+  return (
+    <button type="button" onClick={() => void controller.openSession(agent.session_id)}>
+      <strong>{agent.label ?? agent.session_id}</strong>
+      <small className={`swarm-update ${pulse ? 'is-update' : ''}`}>
+        {[agent.status, agent.model, agent.reasoning_effort].filter(Boolean).join(' · ')}
+      </small>
+    </button>
+  );
+}
+
 function SwarmStrip({ state }: { state: AppState }) {
   const parent = state.snapshot?.session.parent_session_id;
   const agents = useMemo(() => state.agents ?? state.sessions
@@ -574,12 +602,7 @@ function SwarmStrip({ state }: { state: AppState }) {
         <button type="button" onClick={() => void controller.openSession(parent)}>Parent session</button>
       ) : null}
       {agents.map((agent) => (
-        <button type="button" key={agent.session_id} onClick={() => void controller.openSession(agent.session_id)}>
-          <strong>{agent.label ?? agent.session_id}</strong>
-          <small key={agent.status} className="swarm-update">
-            {[agent.status, agent.model, agent.reasoning_effort].filter(Boolean).join(' · ')}
-          </small>
-        </button>
+        <SwarmAgentPill key={agent.session_id} agent={agent} />
       ))}
     </nav>
   );
@@ -604,17 +627,51 @@ export function SessionScreen({ state }: { state: AppState }) {
   const serverId = state.credential?.serverId ?? null;
 
   useEffect(() => {
-    setAutoFollow(true);
     setShowJump(false);
-    if (savedScrollOffset(scrollStorageKey) != null) return;
+    if (savedScrollOffset(scrollStorageKey) == null) {
+      setAutoFollow(true);
+      const raf = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const element = scrollRef.current;
+          if (element) element.scrollTop = element.scrollHeight;
+        });
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+    // Restore the saved position first, then decide whether the user was
+    // actually reading near the bottom. Landing mid-history must not turn on
+    // auto-follow for the next streaming delta.
+    setAutoFollow(false);
     const raf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const element = scrollRef.current;
-        if (element) element.scrollTop = element.scrollHeight;
+        if (!element) return;
+        const nearBottom =
+          element.scrollHeight - element.scrollTop - element.clientHeight < 90;
+        setAutoFollow(nearBottom);
+        setShowJump(!nearBottom);
       });
     });
     return () => cancelAnimationFrame(raf);
   }, [sessionKey, scrollRef, scrollStorageKey]);
+
+  const onUserExpand = useCallback(() => {
+    setAutoFollow(false);
+    setShowJump(true);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    const element = scrollRef.current;
+    if (element) {
+      const reduced = prefersReducedMotion();
+      element.scrollTo({
+        top: element.scrollHeight,
+        behavior: reduced ? 'auto' : 'smooth',
+      });
+    }
+    setAutoFollow(true);
+    setShowJump(false);
+  }, [scrollRef]);
 
   useEffect(() => {
     if (!state.activeSessionId || state.screen !== 'session') return;
@@ -652,6 +709,18 @@ export function SessionScreen({ state }: { state: AppState }) {
       setShowJump(true);
     }
   }, [messageCount, state.live.assistants, state.live.tools, state.live.reasoning, state.pending?.state, autoFollow, scrollRef]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const onResize = () => {
+      if (!autoFollow) return;
+      const element = scrollRef.current;
+      if (element) element.scrollTop = element.scrollHeight;
+    };
+    viewport.addEventListener('resize', onResize);
+    return () => viewport.removeEventListener('resize', onResize);
+  }, [autoFollow, scrollRef]);
 
   useEffect(() => {
     if (!renaming) return;
@@ -744,7 +813,11 @@ export function SessionScreen({ state }: { state: AppState }) {
                 </EmptyState>
               ) : null}
               {state.snapshot?.messages.length ? (
-                <HistoryTimeline key={sessionKey} messages={state.snapshot.messages} />
+                <HistoryTimeline
+                  key={sessionKey}
+                  messages={state.snapshot.messages}
+                  onUserExpand={onUserExpand}
+                />
               ) : null}
               <PendingCard state={state} />
               {liveActive ? (
@@ -752,11 +825,14 @@ export function SessionScreen({ state }: { state: AppState }) {
                   <div className="quiet-work live-status">
                     <div className="work-main static">
                       <div className="work-glyph is-live">
-                        <Torus size={24} animated={Boolean(state.live.turnId)} />
+                        <Torus
+                          size={24}
+                          animated={Boolean(state.live.turnId) && state.connection.status === 'connected'}
+                        />
                       </div>
                       <div className="work-lines">
                         <div className="work-state">
-                          {startedLabel(state.live)}
+                          <span role="status" aria-live="polite">{startedLabel(state.live)}</span>
                           {state.live.turnId ? (
                             <>
                               <span className="thinking-dots">…</span>{' '}
@@ -777,7 +853,12 @@ export function SessionScreen({ state }: { state: AppState }) {
                       </button>
                     </div>
                   </div>
-                  <LiveTimeline live={state.live} visibility={state.reasoningVisibility} connected={state.connection.status === 'connected'} />
+                  <LiveTimeline
+                    live={state.live}
+                    visibility={state.reasoningVisibility}
+                    connected={state.connection.status === 'connected'}
+                    onUserExpand={onUserExpand}
+                  />
                   {state.live.error ? (
                     <p className="inline-error" role="alert">
                       {state.live.error}
@@ -808,12 +889,7 @@ export function SessionScreen({ state }: { state: AppState }) {
           {showJump ? (
             <button
               className="jump-new"
-              onClick={() => {
-                const element = scrollRef.current;
-                if (element) element.scrollTop = element.scrollHeight;
-                setAutoFollow(true);
-                setShowJump(false);
-              }}
+              onClick={jumpToLatest}
             >
               ↓ Jump to latest
             </button>
