@@ -9,10 +9,16 @@
 import assert from 'node:assert/strict';
 import './check-tool-status.mjs';
 import {
+  analyzeToolOutput,
   classifyDiffLine,
+  diffStats,
   describeToolCall,
   groupHistory,
   looksLikeDiff,
+  partialJsonString,
+  pathParts,
+  redactSecrets,
+  stripAnsi,
   toolIntent,
 } from '../apps/stillness/src/lib/toolLabels.ts';
 import {
@@ -72,10 +78,164 @@ check('tool args produce an observed summary and keep the raw name', () => {
 
   const edit = describeToolCall('edit', JSON.stringify({ file_path: '/repo/a.ts' }));
   assert.equal(edit.label, 'Edit file');
-  assert.equal(edit.summary, '/repo/a.ts');
+  assert.equal(edit.summary, 'a.ts');
+  assert.equal(edit.basename, 'a.ts');
+  assert.equal(edit.path, '/repo/a.ts');
 
   const unavailable = describeToolCall('read', 'not json');
   assert.equal(unavailable.summary, '');
+  assert.equal(unavailable.parseState, 'invalid');
+});
+
+check('source intent is primary text and exact evidence stays intact', () => {
+  const input = JSON.stringify({
+    intent: 'Build the web bundle',
+    command: 'cd /repo && bun run build',
+    timeout: 120000,
+  });
+  const bash = describeToolCall('bash', input);
+  assert.equal(bash.label, 'Build the web bundle');
+  assert.equal(bash.familyLabel, 'Run command');
+  assert.equal(bash.intent, 'Build the web bundle');
+  assert.equal(bash.command, 'cd /repo && bun run build');
+  assert.equal(bash.summary, 'cd /repo && bun run build');
+
+  const noIntent = describeToolCall('bash', JSON.stringify({ command: 'cd /home/quant && df -h' }));
+  assert.equal(noIntent.label, 'Run command', 'missing intent must not be invented');
+  assert.equal(noIntent.intent, null);
+  assert.equal(noIntent.summary, 'cd /home/quant && df -h');
+});
+
+check('file cards are filename-first and keep the full source path', () => {
+  const edit = describeToolCall('edit', JSON.stringify({
+    intent: 'Fix the release check',
+    file_path: '/home/quant/src/jcode-mobile/apps/stillness/src/lib/toolLabels.ts',
+    old_string: 'old line\n',
+    new_string: 'new line\n',
+  }));
+  assert.equal(edit.basename, 'toolLabels.ts');
+  assert.equal(edit.directory, '/home/quant/src/jcode-mobile/apps/stillness/src/lib');
+  assert.equal(edit.directoryHint, '…/src/lib');
+  assert.equal(edit.edits.length, 1);
+  assert.equal(edit.oldText, 'old line\n');
+  assert.equal(edit.newText, 'new line\n');
+
+  const multi = describeToolCall('edit', JSON.stringify({
+    file_path: 'src/a.ts',
+    edits: [
+      { old_string: 'one', new_string: 'two' },
+      { old_string: 'three', new_string: 'four', replace_all: true },
+    ],
+  }));
+  assert.equal(multi.edits.length, 2);
+  assert.equal(multi.edits[1].replaceAll, true);
+
+  const write = describeToolCall('write', JSON.stringify({
+    file_path: '/tmp/empty.txt',
+    content: '',
+  }));
+  assert.equal(write.basename, 'empty.txt');
+  assert.equal(write.content, '', 'an empty file is valid observed content');
+
+  const windows = pathParts('C:\\Users\\dev\\src\\App.tsx');
+  assert.equal(windows.basename, 'App.tsx');
+  assert.equal(windows.directoryHint, '…/dev/src');
+  assert.equal(pathParts('/repo/ünïcode/文件.ts').basename, '文件.ts');
+  assert.equal(pathParts('/repo/').basename, 'repo');
+});
+
+check('patch paths and aliases resolve without rewriting the tool name', () => {
+  const patch = describeToolCall('apply_patch', JSON.stringify({
+    intent: 'Apply parser fix',
+    patch_text: '*** Begin Patch\n*** Update File: crates/parser/src/lib.rs\n@@ -1 +1 @@\n-a\n+b\n*** End Patch',
+  }));
+  assert.equal(patch.family, 'apply_patch');
+  assert.equal(patch.basename, 'lib.rs');
+  assert.equal(patch.path, 'crates/parser/src/lib.rs');
+  assert.match(patch.patch, /Begin Patch/);
+
+  assert.equal(describeToolCall('shell_exec', '{}').family, 'bash');
+  assert.equal(describeToolCall('functions.bash', '{}').family, 'bash');
+  assert.equal(describeToolCall('Bash', '{}').family, 'bash');
+  assert.equal(describeToolCall('file_edit', '{}').family, 'edit');
+  assert.equal(describeToolCall('functions.file_grep', '{}').family, 'search');
+  assert.equal(describeToolCall('task', '{}').family, 'subagent');
+  assert.equal(describeToolCall('todo_write', '{}').family, 'plan');
+  assert.equal(describeToolCall('mcp__github__create_issue', '{}').family, 'mcp');
+});
+
+check('streamed partial input exposes only complete source fields', () => {
+  const partial = '{"intent":"Inspect logs","command":"tail -n 50 /var/log/jcode.log"';
+  assert.equal(partialJsonString(partial, 'intent'), 'Inspect logs');
+  const tool = describeToolCall('bash', partial);
+  assert.equal(tool.parseState, 'partial');
+  assert.equal(tool.label, 'Inspect logs', 'intent may arrive before the JSON closes');
+  assert.equal(tool.command, 'tail -n 50 /var/log/jcode.log');
+
+  const unterminated = '{"intent":"Inspect logs","command":"tail -n';
+  assert.equal(partialJsonString(unterminated, 'command'), null);
+  assert.equal(partialJsonString(unterminated, 'intent'), 'Inspect logs');
+});
+
+check('compact previews redact credential shapes but expanded evidence does not', () => {
+  const command = 'curl -H "Authorization: Bearer sk-abcdefghijklmnop" https://api.test';
+  const tool = describeToolCall('bash', JSON.stringify({ command, token: 'super-secret-value' }));
+  assert.match(tool.summary, /Bearer \[redacted\]/);
+  assert.doesNotMatch(tool.summary, /sk-abcdefghijklmnop/);
+  assert.equal(tool.command, command, 'expanded evidence is preserved exactly');
+  assert.equal(redactSecrets('API_KEY=abc123'), 'API_KEY=[redacted]');
+  assert.equal(redactSecrets('--password hunter2'), '--password [redacted]');
+  assert.equal(redactSecrets('plain text stays'), 'plain text stays');
+});
+
+check('output facts come from source text and never invent an exit code', () => {
+  const failed = analyzeToolOutput('boom\n\nExit code: 2');
+  assert.equal(failed.exitCode, 2);
+  assert.match(failed.summary, /boom/);
+  assert.doesNotMatch(failed.summary, /Exit code/, 'the footer is shown once as metadata');
+  assert.match(failed.display, /Exit code: 2/, 'copy keeps the exact source text');
+
+  const unknown = analyzeToolOutput('some output');
+  assert.equal(unknown.exitCode, null, 'missing exit code is not zero');
+  const empty = analyzeToolOutput('Command completed successfully (no output)');
+  assert.equal(empty.exitCode, null);
+
+  const background = analyzeToolOutput('--- Command finished with exit code: 7 ---');
+  assert.equal(background.exitCode, 7);
+
+  const withDiff = analyzeToolOutput([
+    'Updated file.ts (2 lines):',
+    '1- old',
+    '1+ new',
+    '',
+    'File diff:',
+    '```diff',
+    '--- a/file.ts',
+    '+++ b/file.ts',
+    '@@ -1 +1 @@',
+    '-old',
+    '+new',
+    '```',
+  ].join('\n'));
+  assert.match(withDiff.summary, /Updated file\.ts/);
+  assert.equal(withDiff.diff.includes('@@ -1 +1 @@'), true);
+  assert.deepEqual(diffStats(withDiff.diff), { added: 1, removed: 1 });
+
+  const ansi = analyzeToolOutput('\u001b[31mred\u001b[0m and \u001b[1mbold\u001b[0m');
+  assert.equal(ansi.display, 'red and bold');
+  assert.equal(ansi.hasAnsi, true);
+  assert.equal(stripAnsi('plain'), 'plain');
+  assert.equal(analyzeToolOutput('line\n... (output truncated)').truncated, true);
+  assert.equal(analyzeToolOutput('<script>alert(1)</script>').display, '<script>alert(1)</script>');
+});
+
+check('100 KB+ tool payload stays complete for copy and paged rendering', () => {
+  const chunk = 'x'.repeat(1024);
+  const output = Array.from({ length: 140 }, (_, index) => `${index}-${chunk}`).join('\n');
+  const facts = analyzeToolOutput(output);
+  assert.equal(facts.display.length > 100 * 1024, true);
+  assert.equal(facts.display, output, 'display keeps the full source for copy');
+  assert.equal(facts.exitCode, null);
 });
 
 check('diff classification is exact', () => {

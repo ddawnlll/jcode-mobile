@@ -15,16 +15,16 @@ export function toolPresentation(tool: JournalTool, turnActive: boolean, connect
   const taskId = !tool.error && (tool.status === 'done' || tool.status === 'result')
     ? reportedBackgroundTask(tool.name, tool.output)
     : null;
-  if (taskId) return { label: 'Moved to background', kind: 'background', taskId };
-  if (tool.status === 'failed' || tool.error) return { label: 'Failed', kind: 'failed', taskId: null };
-  if (tool.status === 'done') return { label: 'Completed', kind: 'done', taskId: null };
+  if (taskId) return { label: 'Moved to background', short: 'Background', kind: 'background', taskId };
+  if (tool.status === 'failed' || tool.error) return { label: 'Failed', short: 'Failed', kind: 'failed', taskId: null };
+  if (tool.status === 'done') return { label: 'Completed', short: 'Completed', kind: 'done', taskId: null };
   // Historical records lack the native error bit, so a result alone is not
   // evidence that the call succeeded.
-  if (tool.status === 'result') return { label: 'Result received', kind: 'done', taskId: null };
-  if (!connected || !turnActive) return { label: 'Unknown / reconciling', kind: 'unknown', taskId: null };
+  if (tool.status === 'result') return { label: 'Result received', short: 'Result', kind: 'done', taskId: null };
+  if (!connected || !turnActive) return { label: 'Unknown / reconciling', short: 'Reconciling', kind: 'unknown', taskId: null };
   // The controller also marks streamed input as running before tool_exec, so
   // this status does not prove that execution has begun.
-  if (tool.status === 'running') return { label: 'In progress', kind: 'running', taskId: null };
-  if (tool.status === 'started') return { label: 'Started', kind: 'started', taskId: null };
-  return { label: 'Unknown / reconciling', kind: 'unknown', taskId: null };
+  if (tool.status === 'running') return { label: 'In progress', short: 'Running', kind: 'running', taskId: null };
+  if (tool.status === 'started') return { label: 'Started', short: 'Started', kind: 'started', taskId: null };
+  return { label: 'Unknown / reconciling', short: 'Reconciling', kind: 'unknown', taskId: null };
 }

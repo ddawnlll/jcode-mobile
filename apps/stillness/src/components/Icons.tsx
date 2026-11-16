@@ -33,6 +33,69 @@ export function IconMenu(props: IconProps) {
   );
 }
 
+/** Lucide `panel-left`: a sidebar affordance, distinct from a More menu. */
+export function IconPanelLeft(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M9 4.5v15" />
+    </svg>
+  );
+}
+
+export function IconTerminal(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M7.5 9l3 3-3 3M13 15h4" />
+    </svg>
+  );
+}
+
+export function IconFilePlus(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 3.5h8l4 4v13H6z" />
+      <path d="M14 3.5v4h4M12 12v5M9.5 14.5h5" />
+    </svg>
+  );
+}
+
+export function IconGlobe(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M4 12h16M12 4c2.2 2.2 3.2 5 3.2 8s-1 5.8-3.2 8c-2.2-2.2-3.2-5-3.2-8s1-5.8 3.2-8z" />
+    </svg>
+  );
+}
+
+export function IconSparkles(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 4l1.4 4.1L17.5 9.5l-4.1 1.4L12 15l-1.4-4.1L6.5 9.5l4.1-1.4z" />
+      <path d="M18 15l.7 2.1 2.1.7-2.1.7L18 21l-.7-2.5-2.1-.7 2.1-.7z" />
+    </svg>
+  );
+}
+
+export function IconLayers(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3.5l8 4.5-8 4.5-8-4.5z" />
+      <path d="M4 12.5l8 4.5 8-4.5M4 16.5l8 4.5 8-4.5" />
+    </svg>
+  );
+}
+
+export function IconWrench(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M14.5 6.5a4 4 0 0 0-5.2 5.2L4 17l3 3 5.3-5.3a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.5-.6-.6-2.5z" />
+    </svg>
+  );
+}
+
 export function IconPlus(props: IconProps) {
   return (
     <svg {...base(props)}>
