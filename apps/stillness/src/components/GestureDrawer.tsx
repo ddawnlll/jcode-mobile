@@ -8,7 +8,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { controller, type AppState, type Screen } from '../lib/controller';
 import { relativeTime, sessionTitle } from '../lib/format';
-import { IconClose, IconList, IconMenu, IconMore } from './Icons';
+import {
+  IconActivity,
+  IconClose,
+  IconEdit,
+  IconFolder,
+  IconList,
+  IconSettings,
+} from './Icons';
 import { Torus } from './Torus';
 import { useAxisDrag, useBackGuard } from './gestures';
 import { clamp, resistance, spring, SPRING } from './motion';
@@ -182,11 +189,11 @@ export function Drawer({ state }: { state: AppState }) {
   const nav: Array<{ screen: Screen; label: string; icon: React.ReactNode }> = [
     { screen: 'home', label: 'Home', icon: <Torus size={20} animated={false} /> },
     { screen: 'sessions', label: 'Sessions', icon: <IconList /> },
-    { screen: 'projects', label: 'Projects', icon: <IconMenu /> },
-    { screen: 'plan', label: 'Plan', icon: <IconMore /> },
-    { screen: 'activity', label: 'Activity', icon: <IconMore /> },
-    { screen: 'changes', label: 'Changes', icon: <IconMore /> },
-    { screen: 'settings', label: 'Settings', icon: <IconMore /> },
+    { screen: 'projects', label: 'Projects', icon: <IconFolder /> },
+    { screen: 'plan', label: 'Plan', icon: <IconList /> },
+    { screen: 'activity', label: 'Activity', icon: <IconActivity /> },
+    { screen: 'changes', label: 'Changes', icon: <IconEdit /> },
+    { screen: 'settings', label: 'Settings', icon: <IconSettings /> },
   ];
 
   return (
