@@ -140,7 +140,17 @@ test('send reports acceptance honestly and stop is the only cancellation', async
   // The staging daemon's provider route varies by environment. Assert the
   // normalized Command Code identity, not one model id from a past run.
   await expect(page.getByTestId('command-code-section')).toContainText(/commandcode|command code/i);
-  await page.getByTestId('model-sheet').getByRole('button', { name: 'Close' }).click();
+  const requestedModel = process.env.STILLNESS_E2E_MODEL;
+  if (requestedModel) {
+    // Local hosts can name a route that their account actually serves. CI and
+    // the default run keep the session's own route.
+    await page
+      .locator(`[data-testid="model-sheet"] button[aria-label^="Set model ${requestedModel} "]`)
+      .first()
+      .click();
+  } else {
+    await page.getByTestId('model-sheet').getByRole('button', { name: 'Close' }).click();
+  }
   await expect(page.getByTestId('model-sheet')).toBeHidden();
 
   const composer = page.getByTestId('composer-input');
@@ -156,8 +166,9 @@ test('send reports acceptance honestly and stop is the only cancellation', async
     timeout: 20_000,
   });
 
-  // The isolated daemon has a real Command Code key. A generated answer is
-  // required evidence; a failure is reported as a failure, never as content.
+  // The isolated daemon must serve a real provider route. A generated answer
+  // is required evidence; a failure is reported as a failure, never as
+  // content.
   const assistant = page.locator('[data-testid="assistant-message"], [data-testid="live-assistant-message"]').last();
   await expect(assistant).toContainText(token, { timeout: 120_000 });
   await expect(failure).toBeHidden();

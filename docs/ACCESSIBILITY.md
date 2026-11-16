@@ -77,10 +77,16 @@ transitions become immediate.
 | Settings applies immediately, OS reduce changes System, explicit Full overrides | PASS (Playwright, isolated adapter) |
 | Off clamps to 0.001 ms and disables the Torus | PASS (Chromium fixture) |
 | Drawer focus enters Close and returns to Open sidebar | PASS (Chromium fixture) |
+| Android drawer tap, system back and focus restore | PASS (API 36 emulator, 360 dp) |
 | 360 dp collapsed/expanded command and edit cards | PASS (Chromium fixture, screenshots under `.staging/`) |
 | TalkBack announcement/focus matrix | NOT_RUN until Android device QA (#92) |
 | 200% Android font scale and high contrast | NOT_RUN until Android device QA (#92) |
 | Physical device gestures, predictive back and keyboard | NOT_RUN until #92 |
+
+Android emulator evidence: the PanelLeft tap opens the drawer and moves focus
+to Close; system back closes the drawer without exiting the app and focus
+returns to Open sidebar. A swipe beginning at the extreme left edge is consumed
+by Android system back, which is the intended ownership rule.
 
 Chromium results are web-target evidence only. They are not native Android or
 TalkBack claims.

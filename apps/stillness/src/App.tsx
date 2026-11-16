@@ -129,7 +129,7 @@ function Rail({ state }: { state: AppState }) {
         <IconServer size={16} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <strong>{state.server?.name ?? 'JCode server'}</strong>
-          <div>{state.connection.status} · v{state.server?.adapter_version ?? '0.5.0'}</div>
+          <div>{state.connection.status} · v{state.server?.adapter_version ?? '0.6.0'}</div>
         </div>
         <span className={`status-mark ${state.jcodeConnected ? '' : 'is-active'}`} />
       </div>

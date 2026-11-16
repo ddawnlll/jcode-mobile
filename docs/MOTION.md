@@ -106,6 +106,7 @@ performance claims.
 | 0.6.0 tool presentation (PR #94) | 128.07 kB | 12.51 kB | Source intent, structured cards |
 | 0.6.0 motion layer | 128.62 kB | 12.87 kB | +0.55 kB JS (Torus visibility), +0.36 kB CSS |
 | 0.6.0 motion + preferences | 128.89 kB | 13.08 kB | +0.82 kB JS / +0.57 kB CSS over PR #94 |
+| 0.6.0 final | 129.12 kB | 13.09 kB | Filename-first and neutral restored-result polish |
 
 No new dependency. The JS delta is the offscreen Torus observer and the
 reasoning/expand wiring, not an animation runtime.

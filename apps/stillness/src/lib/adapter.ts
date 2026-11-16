@@ -176,7 +176,7 @@ export class AdapterClient {
   async connect(): Promise<ServerHelloPayload> {
     const hello = {
       client_name: 'stillness-tauri',
-      client_version: '0.5.0',
+      client_version: '0.6.0',
       min_version: MIN_PROTOCOL_VERSION,
       max_version: PROTOCOL_VERSION,
       supports: [WS_SUBPROTOCOL, JOURNAL_WS_SUBPROTOCOL, LEGACY_WS_SUBPROTOCOL],
