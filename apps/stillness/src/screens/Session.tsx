@@ -8,7 +8,7 @@ import {
   IconCommand,
   IconEdit,
   IconImage,
-  IconMore,
+  IconPanelLeft,
   IconRefresh,
   IconShield,
   IconStop,
@@ -707,7 +707,7 @@ export function SessionScreen({ state }: { state: AppState }) {
             <IconEdit />
           </button>
           <button className="icon-btn" aria-label="Open sidebar" onClick={() => controller.openDrawer(true)}>
-            <IconMore />
+            <IconPanelLeft />
           </button>
         </div>
       </header>

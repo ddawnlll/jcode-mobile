@@ -10,7 +10,7 @@ assert.equal(toolPresentation(tool, true, false).label, 'Unknown / reconciling')
 assert.equal(toolPresentation({ ...tool, status: 'done' }, false, false).label, 'Completed');
 assert.equal(toolPresentation({ ...tool, status: 'failed', error: 'failed' }, false, false).label, 'Failed');
 assert.equal(toolPresentation({ ...tool, status: 'result' }, false, false).label, 'Result received');
-assert.deepEqual(toolPresentation({ ...tool, status: 'done', output: handoff }, false, false), { label: 'Moved to background', kind: 'background', taskId: '123456abcd' });
+assert.deepEqual(toolPresentation({ ...tool, status: 'done', output: handoff }, false, false), { label: 'Moved to background', short: 'Background', kind: 'background', taskId: '123456abcd' });
 assert.equal(reportedBackgroundTask('bash', handoff.replace('automatically after 3 seconds', 'by the user')), '123456abcd');
 assert.equal(reportedBackgroundTask('bash', handoff.replace('after 3 seconds', 'after 0.125 seconds')), '123456abcd');
 assert.equal(reportedBackgroundTask('read', handoff), null);
