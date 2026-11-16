@@ -282,4 +282,38 @@ describe('issue 80 authoritative reconciliation', () => {
     expect(h.state.live.daemonRunning).toBe(false);
     expect(h.state.live.tools[0].status).toBe('unknown');
   });
+
+  test('authoritative history removes represented live blocks but keeps unmatched work', () => {
+    const { h } = setup(async () => snapshot());
+    h.state.live = {
+      ...h.state.live,
+      assistants: [{ seq: 7, id: 'assistant', text: 'Command output: android-e2e', done: true }],
+      reasoning: [{ seq: 1, id: 'r', text: 'thinking', done: true }],
+      tools: [
+        { seq: 2, callId: 't1', name: 'bash', input: '', output: 'android-e2e', error: null, status: 'done' },
+        { seq: 3, callId: 't2', name: 'write', input: '', output: '', error: null, status: 'running' },
+      ],
+    };
+    const first = snapshot(false, 'idle');
+    first.messages = [
+      { index: 0, role: 'user', content: 'do work', tool_call_id: null, tool_name: null, tool_input: null, response_stats: null },
+      { index: 1, role: 'assistant', content: 'Command output: android-e2e', tool_call_id: null, tool_name: null, tool_input: null, response_stats: null },
+      { index: 2, role: 'tool', content: 'android-e2e', tool_call_id: 't1', tool_name: 'bash', tool_input: null, response_stats: null },
+    ] as typeof first.messages;
+    h.applySnapshot(first);
+    expect(h.state.live.assistants).toHaveLength(0);
+    expect(h.state.live.tools.map((tool) => tool.callId)).toEqual(['t2']);
+    expect(h.state.live.tools[0].status).toBe('unknown');
+    expect(h.state.live.reasoning).toHaveLength(1);
+
+    const second = snapshot(false, 'idle');
+    second.messages = [
+      ...first.messages,
+      { index: 3, role: 'tool', content: 'written', tool_call_id: 't2', tool_name: 'write', tool_input: null, response_stats: null },
+    ] as typeof first.messages;
+    h.applySnapshot(second);
+    expect(h.state.live.assistants).toHaveLength(0);
+    expect(h.state.live.tools).toHaveLength(0);
+    expect(h.state.live.reasoning).toHaveLength(0);
+  });
 });

@@ -42,6 +42,7 @@ import type {
   EventsAckPayload,
   EventsSubscribePayload,
   FilePreview,
+  HistoryMessageView,
   ModelsListPayload,
   OperationStatePayload,
   OperationView,
@@ -227,6 +228,68 @@ function emptyLive(): LiveState {
     recovery: null,
     error: null,
     needsReconcile: false,
+  };
+}
+
+export interface ReconciledLiveBlocks {
+  assistants: LiveState['assistants'];
+  reasoning: LiveState['reasoning'];
+  tools: LiveState['tools'];
+}
+
+function normalizeMessageText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Remove live blocks that the authoritative history already contains. This
+ * prevents the same completed turn from rendering once in the live timeline
+ * and again in restored history after a snapshot or reconnect.
+ *
+ * Only a settled assistant block can be matched by text; unfinished work and
+ * tool calls missing from history remain visible (as unknown) so nothing is
+ * silently lost. With no history at all, all live work is kept: that is the
+ * #80 stale-turn case where the snapshot is the only evidence of idle.
+ */
+export function reconcileLiveBlocks(
+  messages: HistoryMessageView[],
+  live: Pick<LiveState, 'assistants' | 'reasoning' | 'tools'>,
+): ReconciledLiveBlocks {
+  if (!messages.length) {
+    return { assistants: live.assistants, reasoning: live.reasoning, tools: live.tools };
+  }
+  const historyToolIds = new Set(
+    messages
+      .filter((message) => message.role === 'tool' && message.tool_call_id)
+      .map((message) => message.tool_call_id as string),
+  );
+  const historyText = normalizeMessageText(
+    messages
+      .filter((message) => message.role === 'assistant')
+      .map((message) => message.content ?? '')
+      .join('\n'),
+  );
+  const tools = live.tools
+    .filter((tool) => !historyToolIds.has(tool.callId))
+    .map((tool) =>
+      tool.status === 'started' || tool.status === 'running'
+        ? { ...tool, status: 'unknown' as const }
+        : tool,
+    );
+  const assistants = live.assistants.filter((block) => {
+    if (!block.done) return true;
+    const text = normalizeMessageText(block.text);
+    if (!text) return false;
+    return !historyText.includes(text.slice(0, 240));
+  });
+  // Reasoning is never persisted in history. Drop it only once the rest of
+  // the turn is fully represented; otherwise it may be the only evidence of
+  // work that has not reached storage yet.
+  const represented = tools.length === 0 && assistants.length === 0;
+  return {
+    assistants,
+    reasoning: represented ? [] : live.reasoning,
+    tools,
   };
 }
 
@@ -962,12 +1025,9 @@ export class Controller {
     // a stale local turn blocking the composer forever.
     const legacyIdle = !snapshot.stale && daemonStatus === null && !restoredTurn;
     const idle = confirmedIdle || legacyIdle;
-    const unresolvedTools = (status: 'unknown'): LiveTool[] =>
-      this.state.live.tools.map((tool) =>
-        tool.status === 'started' || tool.status === 'running'
-          ? { ...tool, status }
-          : tool,
-      );
+    const reconciled = idle
+      ? reconcileLiveBlocks(snapshot.messages, this.state.live)
+      : null;
     const nextLive = restoredTurn
       ? {
           ...(this.state.live.turnId === restoredTurn.turn_id ? this.state.live : emptyLive()),
@@ -995,7 +1055,13 @@ export class Controller {
             needsReconcile: false,
             daemonRunning: false,
             daemonStatus: confirmedIdle ? 'idle' as const : this.state.live.daemonStatus,
-            tools: unresolvedTools('unknown'),
+            assistants: reconciled?.assistants ?? this.state.live.assistants,
+            reasoning: reconciled?.reasoning ?? this.state.live.reasoning,
+            tools: (reconciled?.tools ?? this.state.live.tools).map((tool) =>
+              tool.status === 'started' || tool.status === 'running'
+                ? { ...tool, status: 'unknown' as const }
+                : tool,
+            ),
           }
         : confirmedRunning
         ? {

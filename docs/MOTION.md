@@ -93,6 +93,10 @@ performance claims.
 - Reconnect/snapshot replacement does not remount the whole transcript: the
   session key stays stable, cards keep their ids and settled items stay
   settled.
+- An authoritative idle snapshot removes live assistant/tool blocks already
+  present in history (matched by text and `call_id`). Unmatched tools remain
+  visible as `unknown`; with no history, all live work is kept. This prevents
+  the same completed turn from rendering twice after completion or reconnect.
 
 ## Measured impact
 
