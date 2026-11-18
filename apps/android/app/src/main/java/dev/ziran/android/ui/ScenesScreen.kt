@@ -51,7 +51,6 @@ fun ScenesScreen(
     palette: Palette,
     selectedScene: String = "peaks",
     themeMode: String = "system",
-    sceneKey: String = "peaks",
     onBack: () -> Unit = {},
     onSelectScene: (String) -> Unit = {},
     onSelectTheme: (String) -> Unit = {},

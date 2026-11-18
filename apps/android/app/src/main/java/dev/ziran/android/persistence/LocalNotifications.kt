@@ -18,9 +18,9 @@ import androidx.core.content.ContextCompat
  * docs/ANDROID_NATIVE.md: turn complete, turn failures, approval needed.
  */
 object LocalNotifications {
-    private const val CHANNEL_TURNS = "turns_complete"
-    private const val CHANNEL_FAILURES = "turn_failures"
-    private const val CHANNEL_APPROVAL = "approval_needed"
+    const val CHANNEL_TURNS = "turns_complete"
+    const val CHANNEL_FAILURES = "turn_failures"
+    const val CHANNEL_APPROVAL = "approval_needed"
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

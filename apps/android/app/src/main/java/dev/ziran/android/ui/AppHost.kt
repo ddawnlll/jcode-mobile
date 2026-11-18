@@ -1,118 +1,176 @@
 package dev.ziran.android.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import dev.ziran.android.data.AppController
-import dev.ziran.android.data.AppState
+import dev.ziran.android.design.InkRippleHost
 import dev.ziran.android.design.Palette
-import dev.ziran.android.design.WuFonts
-import dev.ziran.android.persistence.AppStore
+import dev.ziran.android.design.rememberAnimatorScale
 import kotlinx.coroutines.launch
 
+/** Hand-rolled back stack. State lives in the controller, not the screens. */
+sealed interface Screen {
+    object Start : Screen
+    object Threads : Screen
+    data class Thread(val sessionId: String) : Screen
+    object Model : Screen
+    object Scenes : Screen
+}
+
 /**
- * Live application host. One controller survives screen unmounts. Navigation
- * is a hand-rolled back stack; transitions arrive with the motion step.
- * Day and night resolve from the saved theme mode and system darkness.
+ * Application host. Day and night resolve from the saved theme mode and system
+ * darkness. Every touch gets an ink ripple. Navigation never cancels a turn:
+ * leaving a thread only changes which screen is painted.
  */
 @Composable
 fun ZiranApp(controller: AppController, deepLink: String? = null) {
     val state by controller.state.collectAsState()
-    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val dark = isSystemInDarkTheme()
     val palette = when (state.themeMode) {
         "day" -> Palette.Day
         "night" -> Palette.Night
-        else -> if (systemDark) Palette.Night else Palette.Day
+        else -> if (dark) Palette.Night else Palette.Day
     }
+    val durationScale = rememberAnimatorScale()
+    val reduced = durationScale <= 0.01f
     val scope = rememberCoroutineScope()
-    var stack by remember { mutableStateOf(listOf<Screen>(Screen.Start)) }
-    val current = stack.last()
-    val go = { next: Screen -> stack = stack + next }
-    val back = { if (stack.size > 1) stack = stack.dropLast(1) }
-
-    when (val screen = current) {
-        Screen.Start -> StartScreen(
-            palette = palette,
-            sceneKey = state.scene,
-            serverValue = "https://studio-vps:7646",
-            codeValue = "",
-            error = state.pairingError,
-            onPair = { scope.launch { controller.pair("https://studio-vps:7646", "", "ziran-android") } },
-            reducedMotion = isReducedMotion(),
-        )
-        Screen.Threads -> ThreadsScreen(
-            palette = palette,
-            sessions = state.sessions,
-            serverName = state.serverName ?: "studio-vps",
-            sceneKey = state.scene,
-            onOpen = {
-                scope.launch { controller.openSession(it) }
-                go(Screen.Thread(it))
-            },
-            reducedMotion = isReducedMotion(),
-        )
-        is Screen.Thread -> ThreadScreen(
-            palette = palette,
-            state = state,
-            sceneKey = state.scene,
-            onBack = back,
-            onModel = { go(Screen.Model) },
-            onScenes = { go(Screen.Scenes) },
-            onTextChange = controller::setComposerText,
-            onSend = { scope.launch { controller.send() } },
-            onStop = { scope.launch { controller.stop() } },
-            onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
-            reducedMotion = isReducedMotion(),
-        )
-        Screen.Model -> ModelScreen(
-            palette = palette,
-            state = state,
-            sceneKey = state.scene,
-            onBack = back,
-            onSelectModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
-            onSetEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
-            reducedMotion = isReducedMotion(),
-        )
-        Screen.Scenes -> ScenesScreen(
-            palette = palette,
-            selectedScene = state.scene,
-            themeMode = state.themeMode,
-            sceneKey = state.scene,
-            onBack = back,
-            onSelectScene = { key -> scope.launch { AppStoreHolder.store.setScene(key) } },
-            onSelectTheme = { mode -> scope.launch { AppStoreHolder.store.setThemeMode(mode) } },
-            reducedMotion = isReducedMotion(),
-        )
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val paste: () -> Unit = {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        val text = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+        if (text != null) controller.applyPairingLink(text)
     }
-    // Auto-navigate to threads once pairing completes.
-    if (state.phase == "ready" && current == Screen.Start) stack = listOf(Screen.Threads)
-}
+    var stack by remember { mutableStateOf(listOf<Screen>(Screen.Start)) }
+    val go: (Screen) -> Unit = { next -> stack = stack + next }
+    val back: () -> Unit = { if (stack.size > 1) stack = stack.dropLast(1) }
+    var handledDeepLink by remember { mutableStateOf<String?>(null) }
 
-@Composable
-private fun isReducedMotion(): Boolean {
-    val scale = dev.ziran.android.design.rememberAnimatorScale()
-    return scale <= 0.01f
-}
+    // Deep link: pair prefills and starts pairing; session opens the thread.
+    LaunchedEffect(deepLink) {
+        if (deepLink != null && deepLink != handledDeepLink) {
+            handledDeepLink = deepLink
+            when (val route = DeepLinks.parse(deepLink)) {
+                is DeepLinks.Route.Pair -> {
+                    stack = listOf(Screen.Start)
+                    controller.pair(route.server, route.code, "ziran-android")
+                }
+                is DeepLinks.Route.Session -> {
+                    stack = listOf(Screen.Threads, Screen.Thread(route.sessionId))
+                    controller.openSession(route.sessionId)
+                }
+                DeepLinks.Route.Unknown -> Unit
+            }
+        }
+    }
 
-object AppStoreHolder {
-    lateinit var store: AppStore
+    // First load and successful pairing land on Threads.
+    LaunchedEffect(state.phase) {
+        if (state.phase == "ready" && stack.lastOrNull() == Screen.Start) {
+            stack = listOf(Screen.Threads)
+        }
+    }
+
+    // The controller restores the last session after the list loads. Follow it
+    // once, into the exact thread. Going back to the list stays on the list.
+    var autoOpened by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(state.activeSessionId) {
+        val id = state.activeSessionId
+        if (state.phase == "ready" && id != null && autoOpened != id &&
+            stack == listOf(Screen.Threads)
+        ) {
+            autoOpened = id
+            stack = listOf(Screen.Threads, Screen.Thread(id))
+        }
+    }
+
+    val screen = stack.last()
+    // A screen change drops focus and the IME: no field should keep a caret
+    // across navigation, and the keyboard must not linger on a read-only view.
+    LaunchedEffect(screen) {
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
+    Box(Modifier.fillMaxSize().background(palette.paper)) {
+        InkRippleHost(ink = palette.ink, durationScale = durationScale, reducedMotion = reduced) {
+            when (screen) {
+                Screen.Start -> StartScreen(
+                    palette = palette,
+                    sceneKey = state.scene,
+                    serverValue = state.pairServer,
+                    codeValue = state.pairCode,
+                    error = state.pairingError,
+                    onServerChange = controller::setPairServer,
+                    onCodeChange = controller::setPairCode,
+                    onPair = { scope.launch { controller.pairFromFields() } },
+                    onPaste = paste,
+                    reducedMotion = reduced,
+                )
+                Screen.Threads -> ThreadsScreen(
+                    palette = palette,
+                    sessions = state.sessions,
+                    serverName = state.serverName ?: "studio-vps",
+                    sceneKey = state.scene,
+                    onOpen = { id ->
+                        go(Screen.Thread(id))
+                        scope.launch { controller.openSession(id) }
+                    },
+                    onScenes = { go(Screen.Scenes) },
+                    onArchive = { id -> scope.launch { controller.archiveSession(id) } },
+                    onRestore = { id -> scope.launch { controller.restoreSession(id) } },
+                    onRename = { id, title -> scope.launch { controller.renameSession(id, title) } },
+                    onRefresh = { scope.launch { controller.refreshSessions() } },
+                    reducedMotion = reduced,
+                )
+                is Screen.Thread -> ThreadScreen(
+                    palette = palette,
+                    state = state,
+                    sceneKey = state.scene,
+                    onBack = back,
+                    onModel = { go(Screen.Model) },
+                    onScenes = { go(Screen.Scenes) },
+                    onTextChange = controller::setComposerText,
+                    onSend = { text -> scope.launch { controller.sendText(text) } },
+                    onStop = { scope.launch { controller.stop() } },
+                    onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
+                    imePadding = Modifier.imePadding(),
+                    reducedMotion = reduced,
+                )
+                Screen.Model -> ModelScreen(
+                    palette = palette,
+                    state = state,
+                    sceneKey = state.scene,
+                    onBack = back,
+                    onSelectModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
+                    onSetEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
+                    reducedMotion = reduced,
+                )
+                Screen.Scenes -> ScenesScreen(
+                    palette = palette,
+                    selectedScene = state.scene,
+                    themeMode = state.themeMode,
+                    onBack = back,
+                    onSelectScene = { key -> scope.launch { controller.setScene(key) } },
+                    onSelectTheme = { mode -> scope.launch { controller.setThemeMode(mode) } },
+                    reducedMotion = reduced,
+                )
+            }
+        }
+    }
 }

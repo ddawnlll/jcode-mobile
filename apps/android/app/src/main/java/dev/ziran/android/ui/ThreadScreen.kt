@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +68,7 @@ fun ThreadScreen(
     onModel: () -> Unit = {},
     onScenes: () -> Unit = {},
     onTextChange: (String) -> Unit = {},
-    onSend: () -> Unit = {},
+    onSend: (String) -> Unit = {},
     onStop: () -> Unit = {},
     onPermission: (String) -> Unit = {},
     onQueue: (String) -> Unit = {},
@@ -152,10 +153,11 @@ fun ThreadScreen(
                 palette = palette,
                 value = state.composerText,
                 placeholder = "write to $agent…",
-                isWorking = state.live.turnId != null || state.live.daemonRunning,
+                isWorking = state.live.turnId != null || state.live.status in setOf("dispatching", "thinking", "working", "writing") || state.live.permission != null,
                 onValueChange = onTextChange,
                 onSend = onSend,
                 onStop = onStop,
+                sessionKey = state.activeSessionId ?: "thread",
             )
             Row(Modifier.padding(top = 2.dp)) {
                 Text(state.serverName ?: "studio-vps", style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3), modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp))
@@ -282,16 +284,24 @@ private fun ComposerWithStop(
     palette: Palette,
     value: String,
     placeholder: String,
+    sessionKey: String,
     isWorking: Boolean,
     onValueChange: (String) -> Unit,
-    onSend: () -> Unit,
+    onSend: (String) -> Unit,
     onStop: () -> Unit,
 ) {
+    // The field owns its text while the user types: driving it from a StateFlow
+    // drops fast IME characters. The controller still receives each change for
+    // the per-session draft, and send carries the exact visible text.
+    var local by remember(sessionKey) { mutableStateOf(value) }
+    // Follow external changes (restored draft, rejected text) without fighting
+    // fast IME input: value tracks local once the controller catches up.
+    LaunchedEffect(value) { if (value != local) local = value }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             androidx.compose.foundation.text.BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+                value = local,
+                onValueChange = { next -> local = next; onValueChange(next) },
                 textStyle = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 17.sp, color = palette.ink),
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 singleLine = true,
@@ -308,8 +318,11 @@ private fun ComposerWithStop(
             Text("stop", style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.5.sp, color = palette.ink3, textDecoration = TextDecoration.Underline), modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp).semantics { role = Role.Button; contentDescription = "Stop" }.clickable { onStop() })
         }
         Spacer(Modifier.width(10.dp))
-        Box(Modifier.size(48.dp).clickable { onSend() }.semantics { role = Role.Button; contentDescription = "Send" }) {
-            dev.ziran.android.design.SendSeal(sizeDp = 48, backgroundColor = palette.seal, strokeColor = palette.onSeal)
-        }
+        dev.ziran.android.design.SealButton(
+            sizeDp = 48,
+            backgroundColor = palette.seal,
+            strokeColor = palette.onSeal,
+            onClick = { onSend(local) },
+        )
     }
 }

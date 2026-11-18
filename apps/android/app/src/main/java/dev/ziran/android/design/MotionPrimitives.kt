@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
@@ -97,10 +96,18 @@ fun InkRippleHost(
     val ripples = remember { mutableStateListOf<Ripple>() }
     var nextId = remember { longArrayOf(0) }
     Box(
+        // Observe in the Initial pass without consuming, so children still get
+        // their taps: a ripple must never steal a button press.
         Modifier.pointerInput(Unit) {
-            detectTapGestures { offset ->
-                nextId[0] += 1
-                ripples.add(Ripple(nextId[0], offset.x, offset.y))
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                    val down = event.changes.firstOrNull { it.pressed && !it.previousPressed }
+                    if (down != null) {
+                        nextId[0] += 1
+                        ripples.add(Ripple(nextId[0], down.position.x, down.position.y))
+                    }
+                }
             }
         },
     ) {

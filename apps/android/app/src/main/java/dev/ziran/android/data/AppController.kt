@@ -1,7 +1,9 @@
 package dev.ziran.android.data
 
+import android.content.Context
 import dev.ziran.android.connection.AdapterClient
 import dev.ziran.android.persistence.AppStore
+import dev.ziran.android.persistence.LocalNotifications
 import dev.ziran.android.protocol.AdapterRequestError
 import dev.ziran.android.protocol.CancelTurnResponse
 import dev.ziran.android.protocol.OperationView
@@ -21,8 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -44,6 +44,7 @@ import java.util.concurrent.TimeUnit
  */
 class AppController(
     private val store: AppStore,
+    private val context: Context? = null,
     private val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
@@ -51,7 +52,6 @@ class AppController(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val reducer = LiveReducer()
-    private val mutex = Mutex()
     private var sessionGeneration = 0
     private var snapshotTimer: Job? = null
 
@@ -60,14 +60,6 @@ class AppController(
 
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
-
-    init {
-        scope.launch {
-            client?.events?.collect { envelope ->
-                // events are collected in observeEvents; this placeholder keeps the client hot.
-            }
-        }
-    }
 
     private fun setState(update: (AppState) -> AppState) {
         _state.update(update)
@@ -79,6 +71,11 @@ class AppController(
 
     fun start() {
         scope.launch {
+            // Saved scene and theme resolve before the first paint settles.
+            val scene = store.getScene()
+            val theme = store.getThemeMode()
+            setState { it.copy(scene = scene, themeMode = theme) }
+            context?.let { LocalNotifications.ensureChannels(it) }
             val serverIds = store.listServerIds()
             val first = serverIds.firstOrNull()
             if (first == null) {
@@ -113,6 +110,7 @@ class AppController(
                 savedAt = System.currentTimeMillis(),
             )
             store.saveCredential(credential)
+            this.credential = credential
             setState { it.copy(pairingStage = "connecting", pairingMessage = "Negotiating the authenticated mobile channel.") }
             startClient(credential, fresh = true)
             setState { it.copy(phase = "ready", pairingStage = "verified", pairingError = null) }
@@ -121,7 +119,7 @@ class AppController(
                 it.copy(
                     phase = "unpaired",
                     pairingStage = "error",
-                    pairingError = error.message ?: "Pairing failed.",
+                    pairingError = error.message ?: (error.javaClass.simpleName + " during pairing."),
                     pairingMessage = error.message ?: "Pairing failed.",
                 )
             }
@@ -129,6 +127,7 @@ class AppController(
     }
 
     suspend fun startClient(credential: PairedCredential, fresh: Boolean = false) {
+        this.credential = credential
         val previous = client
         previous?.close()
         val adapter = AdapterClient(credential.baseUrl, credential.token, scope)
@@ -147,6 +146,7 @@ class AppController(
                         serverName = adapter.server.value?.name ?: it.serverName,
                     )
                 }
+                if (status == dev.ziran.android.connection.ConnectionStatus.Connected) maybeDrainQueue()
             }
         }
         scope.launch {
@@ -182,6 +182,46 @@ class AppController(
     private suspend fun awaitReady() {
         awaitConnected()
         refreshSessions()
+    }
+
+    fun setPairServer(value: String) {
+        setState { it.copy(pairServer = value, pairingError = null) }
+    }
+
+    fun setPairCode(value: String) {
+        setState { it.copy(pairCode = value, pairingError = null) }
+    }
+
+    /** Parse a pasted pairing link exactly as pairingPayload.ts; fill the fields. */
+    fun applyPairingLink(raw: String): Boolean {
+        return try {
+            val payload = dev.ziran.android.protocol.PairingPayload.parse(raw)
+            setState { it.copy(pairServer = payload.server, pairCode = payload.code, pairingError = null) }
+            true
+        } catch (error: Exception) {
+            setState { it.copy(pairingError = error.message ?: "This is not a supported pairing link.") }
+            false
+        }
+    }
+
+    suspend fun pairFromFields() {
+        val server = _state.value.pairServer
+        val code = _state.value.pairCode
+        if (code.isBlank()) {
+            setState { it.copy(pairingError = "Enter the one-time code from the adapter.") }
+            return
+        }
+        pair(server, code, "ziran-android")
+    }
+
+    suspend fun setScene(key: String) {
+        store.setScene(key)
+        setState { it.copy(scene = key) }
+    }
+
+    suspend fun setThemeMode(mode: String) {
+        store.setThemeMode(mode)
+        setState { it.copy(themeMode = mode) }
     }
 
     // -- envelope routing -----------------------------------------------------
@@ -237,22 +277,45 @@ class AppController(
         }
         try {
             val payload = try {
-                adapter.request("sessions.delta", JsonObject(mapOf("since_revision" to JsonPrimitive(_state.value.sessions.size), "include_projects" to JsonPrimitive(true))))
+                adapter.request(
+                    "sessions.delta",
+                    JsonObject(
+                        mapOf(
+                            "since_revision" to JsonPrimitive(_state.value.sessionRevision),
+                            "include_projects" to JsonPrimitive(true),
+                        ),
+                    ),
+                )
             } catch (_: Exception) {
                 adapter.request("sessions.list", JsonObject(emptyMap()))
             }
-            val sessions = payload["sessions"]?.let {
+            val incoming = payload["sessions"]?.let {
                 (it as? kotlinx.serialization.json.JsonArray)?.mapNotNull { item -> (item as? JsonObject)?.let { dev.ziran.android.protocol.parseSessionSummary(it) } }
             } ?: emptyList()
-            // Persist raw for cache; decode is best-effort.
+            val removed = payload["removed"]?.let {
+                (it as? kotlinx.serialization.json.JsonArray)?.mapNotNull { v -> v.toString().trim('"') }
+            } ?: emptyList()
+            val full = payload["full"]?.toString()?.trim('"') != "false"
+            val revision = payload["revision"]?.toString()?.trim('"')?.toLongOrNull() ?: _state.value.sessionRevision
+            // A delta merges into the list; only a full listing replaces it.
+            val current = _state.value.sessions
+            val merged = if (full) {
+                incoming
+            } else {
+                val base = current.associateBy { it.sessionId }.toMutableMap()
+                for (session in incoming) base[session.sessionId] = session
+                for (id in removed) base.remove(id)
+                base.values.sortedByDescending { it.updatedAtMs ?: 0L }
+            }
             store.saveSessionListCache(credential.serverId, payload.toString())
             val active = _state.value.activeSessionId
             setState {
                 it.copy(
-                    sessions = sessions,
+                    sessions = merged,
+                    sessionRevision = revision,
                     savedOnPhone = false,
                     sessionsError = null,
-                    activeMissing = active != null && sessions.none { s -> s.sessionId == active } && it.snapshot?.session?.sessionId != active,
+                    activeMissing = active != null && merged.none { s -> s.sessionId == active } && it.snapshot?.session?.sessionId != active,
                 )
             }
         } catch (error: Exception) {
@@ -424,6 +487,7 @@ class AppController(
             }
             s
         }
+        maybeDrainQueue()
     }
 
     private suspend fun loadCachedSnapshot(serverId: String, sessionId: String): SessionSnapshot? {
@@ -471,6 +535,14 @@ class AppController(
         val reduction = reducer.reduceEvent(_state.value, sessionId, epoch, seq, payload)
         setState { reduction.state }
         if (reduction.effect is LiveReducer.Effect.NeedSnapshot) scheduleSnapshot(150)
+        when (val event = payload.event) {
+            is dev.ziran.android.protocol.SessionEvent.PermissionRequest ->
+                notify(LocalNotifications.CHANNEL_APPROVAL, "Approval needed", "${event.toolName}: ${event.description}".take(160))
+            is dev.ziran.android.protocol.SessionEvent.TurnDone ->
+                notify(LocalNotifications.CHANNEL_TURNS, "Turn complete", "The agent finished in this thread.")
+            else -> Unit
+        }
+        maybeDrainQueue()
     }
 
     // -- send / stop / permission ---------------------------------------------
@@ -482,8 +554,11 @@ class AppController(
         scope.launch { store.saveDraft(credential.serverId, sessionId, text) }
     }
 
-    suspend fun send() {
-        val text = _state.value.composerText.trim()
+    suspend fun send() = sendText(_state.value.composerText)
+
+    /** Send exactly the text the field currently shows. */
+    suspend fun sendText(rawText: String) {
+        val text = rawText.trim()
         val sessionId = _state.value.activeSessionId ?: return
         val adapter = client ?: run { setState { it.copy(sessionsError = "The adapter is offline. The draft is saved on this phone.") }; return }
         if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) {
@@ -496,8 +571,11 @@ class AppController(
             setState { it.copy(sessionsError = "This message is still being resolved. Do not resend it.") }
             return
         }
+        // A message written while the turn runs is a soft interrupt: it waits
+        // in the queue and is sent once the turn settles. Nothing is cancelled.
         if (_state.value.live.turnId != null || _state.value.live.daemonRunning) {
-            setState { it.copy(sessionsError = "A turn is already running in this session.") }
+            setState { it.copy(queuedMessages = it.queuedMessages + text, composerText = "") }
+            store.saveDraft(currentCredential()!!.serverId, sessionId, "")
             return
         }
         val credential = currentCredential() ?: return
@@ -545,6 +623,33 @@ class AppController(
                 setState { it.copy(sessionsError = "Delivery unconfirmed: ${error.message}") }
             }
         }
+    }
+
+    private var draining = false
+
+    /** Send the first queued message once no turn is running. */
+    private fun maybeDrainQueue() {
+        if (draining) return
+        val current = _state.value
+        // Never spend a queued message while offline: it would be lost without
+        // an operation to look up later.
+        if (current.connection != "connected") return
+        val running = current.live.turnId != null || current.live.daemonRunning
+        if (running || current.queuedMessages.isEmpty()) return
+        val next = current.queuedMessages.first()
+        draining = true
+        scope.launch {
+            setState { it.copy(queuedMessages = it.queuedMessages.drop(1), composerText = next) }
+            send()
+            draining = false
+            maybeDrainQueue()
+        }
+    }
+
+    private fun notify(kind: String, title: String, body: String) {
+        val ctx = context ?: return
+        val sessionId = _state.value.activeSessionId ?: return
+        LocalNotifications.postIfBackgrounded(ctx, kind, sessionId, title, body)
     }
 
     private fun applyOperation(operation: OperationView) {
@@ -779,11 +884,7 @@ class AppController(
         client?.close()
     }
 
-    private fun currentCredential(): PairedCredential? {
-        // Credentials are loaded by the UI layer before start; this accessor is
-        // replaced by the injected credential flow in AppFactory.
-        return credentialOverride
-    }
+    private fun currentCredential(): PairedCredential? = credential
 
-    var credentialOverride: PairedCredential? = null
+    private var credential: PairedCredential? = null
 }

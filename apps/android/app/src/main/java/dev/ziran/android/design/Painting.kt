@@ -9,9 +9,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.DefaultShadowColor
 import androidx.compose.ui.graphics.TransformOrigin
@@ -109,15 +112,17 @@ fun Painting(
                     }
                     .alpha(if (isNight) 0.58f else 1f),
             )
-            // Mist band: a blurred paper strip. Compose has no blur on Box without
-            // RenderEffect, so use a semi-transparent paper band.
+            // Mist band: a 46 dp paper strip at 52 percent, blurred 16 dp and
+            // overhanging 40 dp each side, as in the board.
             Box(
                 Modifier
                     .offset(y = (heightDp * 0.52).roundToInt().dp)
-                    .graphicsLayer { scaleX = 1.15f }
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .graphicsLayer { scaleX = 1.12f }
+                    .blur(16.dp, edgeTreatment = androidx.compose.ui.draw.BlurredEdgeTreatment.Unbounded)
                     .alpha(0.32f)
-                    .fillMaxSize()
-                    .background(dev.ziran.android.design.Tokens.DayPaper),
+                    .background(if (isNight) Tokens.NightPaper else Tokens.DayPaper),
             )
         }
     }

@@ -65,6 +65,7 @@ data class AppState(
     val savedOnPhone: Boolean = false,
     val sessions: List<SessionSummary> = emptyList(),
     val sessionsError: String? = null,
+    val sessionRevision: Long = 0,
     val activeSessionId: String? = null,
     val activeMissing: Boolean = false,
     val snapshot: SessionSnapshot? = null,
@@ -82,6 +83,8 @@ data class AppState(
     val composerText: String = "",
     val themeMode: String = "system", // day | night | system
     val scene: String = "peaks",
+    val pairServer: String = "http://10.0.2.2:7644",
+    val pairCode: String = "",
     val queuedMessages: List<String> = emptyList(),
     val queuedNotice: String? = null,
     val serverName: String? = null,

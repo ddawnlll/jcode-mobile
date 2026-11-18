@@ -56,7 +56,7 @@ object PairingPayload {
         val serverRaw = params["url"]?.firstOrNull() ?: ""
         val server = normalizeServerUrl(serverRaw) // throws on invalid
         val host = server.host?.lowercase() ?: throw IllegalArgumentException("This pairing link has an invalid server address.")
-        val loopback = host == "localhost" || host == "127.0.0.1" || host == "::1" || host.endsWith(".localhost")
+        val loopback = isLoopbackHost(host)
         if (server.scheme == "http" && !loopback) {
             throw IllegalArgumentException("Remote pairing requires a trusted HTTPS address.")
         }
@@ -89,7 +89,9 @@ object PairingPayload {
 fun isLoopbackHost(host: String?): Boolean {
     if (host.isNullOrEmpty()) return false
     val h = host.lowercase().trim('[', ']')
-    return h == "localhost" || h == "127.0.0.1" || h == "::1" || h == "::1" || h.endsWith(".localhost")
+    // 10.0.2.2 is the Android emulator's alias for the host loopback interface.
+    return h == "localhost" || h == "127.0.0.1" || h == "::1" ||
+        h == "10.0.2.2" || h.endsWith(".localhost")
 }
 
 /**
@@ -113,6 +115,9 @@ fun normalizeServerUrl(input: String): URI {
     }
     if (!url.userInfo.isNullOrEmpty()) {
         throw IllegalArgumentException("This pairing link has an invalid server address.")
+    }
+    if (url.scheme == "http" && !isLoopbackHost(url.host)) {
+        throw IllegalArgumentException("Remote pairing requires a trusted HTTPS address.")
     }
     if ((url.path != null && url.path != "" && url.path != "/") || !url.query.isNullOrEmpty() || url.fragment != null) {
         throw IllegalArgumentException("This pairing link has an invalid server address.")

@@ -8,7 +8,7 @@ import kotlinx.serialization.json.JsonObject
 object ServerUrls {
     fun isLoopbackHost(value: String): Boolean {
         val host = value.replaceFirst(Regex("^https?://"), "").split('/')[0].split(':')[0].trim('[', ']')
-        return host == "localhost" || host == "127.0.0.1" || host == "::1" || host.endsWith(".localhost")
+        return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "10.0.2.2" || host.endsWith(".localhost")
     }
 
     fun normalize(input: String): String {
@@ -20,6 +20,9 @@ object ServerUrls {
         }
         val url = java.net.URI(value)
         if (url.scheme != "http" && url.scheme != "https") throw IllegalArgumentException("Invalid server address.")
+        if (url.scheme == "http" && !isLoopbackHost(url.host ?: "")) {
+            throw IllegalArgumentException("Remote pairing requires a trusted HTTPS address.")
+        }
         val authority = buildString {
             append(url.host ?: throw IllegalArgumentException("Invalid server address."))
             if (url.port != -1) append(":" + url.port)

@@ -17,7 +17,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 object PairingHttp {
     private val json = EnvelopeWriter.json
 
-    suspend fun pair(baseUrl: String, code: String, deviceName: String, http: OkHttpClient): PairPayload {
+    suspend fun pair(baseUrl: String, code: String, deviceName: String, http: OkHttpClient): PairPayload =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val normalized = normalizeServerUrl(baseUrl).toString().trimEnd('/')
         val body = JsonObject(
             mapOf(
@@ -43,7 +44,7 @@ object PairingHttp {
         if (token.isNullOrEmpty() || device == null || server == null) {
             throw IllegalStateException("The adapter returned an incomplete pairing response.")
         }
-        return PairPayload(token, parseDeviceInfo(device), parseServerInfo(server))
+        PairPayload(token, parseDeviceInfo(device), parseServerInfo(server))
     }
 }
 

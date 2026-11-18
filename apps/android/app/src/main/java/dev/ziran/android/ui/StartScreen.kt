@@ -1,12 +1,16 @@
 package dev.ziran.android.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -56,7 +60,10 @@ fun StartScreen(
 ) {
     Box(Modifier.fillMaxSize().background(palette.paper)) {
         ScreenChrome(sceneKey, palette, headerHeightDp = 340, reducedMotion = reducedMotion)
-        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp).imePadding()) {
+            // The fields sit in a scroll region so the IME lifts the footer
+            // without moving what the finger is aiming at.
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Spacer(Modifier.height(290.dp))
             Text("jcode", style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 12.sp, color = palette.ink3), modifier = Modifier.offset(y = 0.dp))
             Text(
@@ -93,17 +100,24 @@ fun StartScreen(
             if (error != null) {
                 Text(error, style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 15.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = palette.seal), modifier = Modifier.padding(top = 10.dp))
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(24.dp))
+            }
             Row(Modifier.fillMaxWidth().padding(bottom = 30.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "paste a pairing link",
                     style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 12.sp, color = palette.ink2, textDecoration = TextDecoration.Underline),
-                    modifier = Modifier.semantics { role = Role.Button; contentDescription = "paste a pairing link" },
+                    modifier = Modifier
+                        .semantics { role = Role.Button; contentDescription = "paste a pairing link" }
+                        .clickable { onPaste() },
                 )
                 Spacer(Modifier.weight(1f))
-                Box(Modifier.semantics { role = Role.Button; contentDescription = "Pair" }) {
-                    SendSeal(sizeDp = 64, backgroundColor = palette.seal, strokeColor = palette.onSeal)
-                }
+                dev.ziran.android.design.SealButton(
+                    sizeDp = 64,
+                    backgroundColor = palette.seal,
+                    strokeColor = palette.onSeal,
+                    label = "Pair",
+                    onClick = onPair,
+                )
             }
         }
     }

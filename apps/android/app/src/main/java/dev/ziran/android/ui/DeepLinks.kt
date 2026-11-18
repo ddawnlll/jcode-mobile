@@ -18,7 +18,9 @@ object DeepLinks {
         val uri = try { java.net.URI(raw) } catch (_: Exception) { return Route.Unknown }
         if (uri.host == "pair" && (uri.scheme == "ziran" || uri.scheme == "jcode")) {
             return try {
-                val payload = PairingPayload.parse(raw)
+                // Both schemes are accepted; the payload validator speaks jcode://.
+                val canonical = if (uri.scheme == "ziran") "jcode:" + raw.substringAfter(":") else raw
+                val payload = PairingPayload.parse(canonical)
                 Route.Pair(payload.server, payload.code)
             } catch (_: Exception) {
                 Route.Unknown

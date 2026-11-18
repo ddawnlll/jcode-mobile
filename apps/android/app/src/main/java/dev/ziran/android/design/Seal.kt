@@ -2,6 +2,7 @@ package dev.ziran.android.design
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -84,6 +85,54 @@ fun Seal(
                     drawLine(color, Offset(xm2, y), Offset(xe, y), strokeW, androidx.compose.ui.graphics.StrokeCap.Round)
                 }
             }
+        }
+    }
+}
+
+/**
+ * Send seal as a button: one node owns size, background, the brush stroke and
+ * the click, so nothing sits between the finger and the handler.
+ */
+@Composable
+fun SealButton(
+    modifier: Modifier = Modifier,
+    sizeDp: Int = 48,
+    backgroundColor: Color,
+    strokeColor: Color,
+    label: String = "Send",
+    onClick: () -> Unit,
+) {
+    val size = sizeDp.dp
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+            .background(backgroundColor)
+            .clickable(onClick = onClick)
+            .semantics { role = Role.Button; contentDescription = label },
+    ) {
+        Canvas(Modifier.size(size)) {
+            val strokeW = size.toPx() * (2.6f / 24f)
+            val path = Path().apply {
+                moveTo(size.toPx() * (12f / 24f), size.toPx() * (19.5f / 24f))
+                cubicTo(
+                    size.toPx() * (11.6f / 24f), size.toPx() * (15f / 24f),
+                    size.toPx() * (12.2f / 24f), size.toPx() * (10f / 24f),
+                    size.toPx() * (12f / 24f), size.toPx() * (5.2f / 24f),
+                )
+                moveTo(size.toPx() * (6.6f / 24f), size.toPx() * (10.4f / 24f))
+                cubicTo(
+                    size.toPx() * (8.6f / 24f), size.toPx() * (8.6f / 24f),
+                    size.toPx() * (10.4f / 24f), size.toPx() * (6.8f / 24f),
+                    size.toPx() * (12f / 24f), size.toPx() * (5f / 24f),
+                )
+                cubicTo(
+                    size.toPx() * (13.6f / 24f), size.toPx() * (6.8f / 24f),
+                    size.toPx() * (15.4f / 24f), size.toPx() * (8.6f / 24f),
+                    size.toPx() * (17.4f / 24f), size.toPx() * (10.4f / 24f),
+                )
+            }
+            drawPath(path, strokeColor, style = Stroke(strokeW, cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
     }
 }
