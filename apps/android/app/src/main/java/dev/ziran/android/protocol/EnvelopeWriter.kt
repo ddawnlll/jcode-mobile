@@ -2,6 +2,7 @@ package dev.ziran.android.protocol
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -23,8 +24,10 @@ object EnvelopeWriter {
                 "id" to JsonPrimitive(id),
                 "type" to JsonPrimitive(type),
                 "payload" to payload,
-                "session_id" to (sessionId?.let(::JsonPrimitive) ?: JsonPrimitive(null.toString())),
-                "operation_id" to (operationId?.let(::JsonPrimitive) ?: JsonPrimitive(null.toString())),
+                // JsonNull, never the string "null": the adapter treats a
+                // string as a real session id.
+                "session_id" to (sessionId?.let(::JsonPrimitive) ?: JsonNull),
+                "operation_id" to (operationId?.let(::JsonPrimitive) ?: JsonNull),
             )
         )
         return json.encodeToString(JsonObject.serializer(), o)

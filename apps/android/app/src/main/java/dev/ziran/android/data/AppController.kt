@@ -591,14 +591,11 @@ class AppController(
         try {
             val reserved = adapter.request(
                 "operations.reserve",
-                JsonObject(
-                    mapOf(
-                        "operation_id" to JsonPrimitive(operationId),
-                        "session_id" to JsonPrimitive(sessionId),
-                        "kind" to JsonPrimitive("send"),
-                        "body" to JsonPrimitive(text),
-                        "expected_turn_id" to JsonPrimitive(null.toString()),
-                    ),
+                dev.ziran.android.protocol.RequestPayloads.reserve(
+                    operationId = operationId,
+                    sessionId = sessionId,
+                    body = text,
+                    expectedTurnId = null,
                 ),
                 sessionId = sessionId,
                 operationId = operationId,
@@ -607,7 +604,7 @@ class AppController(
             applyOperation(dev.ziran.android.protocol.parseOperation((reserved["operation"] as? JsonObject) ?: JsonObject(emptyMap())))
             val dispatched = adapter.request(
                 "operations.dispatch",
-                JsonObject(mapOf("operation_id" to JsonPrimitive(operationId))),
+                dev.ziran.android.protocol.RequestPayloads.dispatch(operationId),
                 sessionId = sessionId,
                 operationId = operationId,
                 timeoutMs = 40000,
@@ -669,7 +666,10 @@ class AppController(
         val adapter = client ?: return
         if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
         try {
-            val payload = adapter.request("operations.lookup", JsonObject(mapOf("operation_id" to JsonPrimitive(operationId))))
+            val payload = adapter.request(
+                "operations.lookup",
+                dev.ziran.android.protocol.RequestPayloads.lookupOperation(operationId),
+            )
             val operation = (payload["operation"] as? JsonObject)?.let { dev.ziran.android.protocol.parseOperation(it) }
             if (operation != null) applyOperation(operation)
         } catch (_: Exception) { }
@@ -685,13 +685,10 @@ class AppController(
         try {
             val response = adapter.request(
                 "operations.cancel",
-                JsonObject(
-                    mapOf(
-                        "session_id" to JsonPrimitive(sessionId),
-                        "operation_id" to JsonPrimitive(_state.value.live.operationId ?: null.toString()),
-                        "expected_turn_id" to JsonPrimitive(turnId ?: null.toString()),
-                        "allow_running_unknown" to JsonPrimitive((turnId == null).toString()),
-                    ),
+                dev.ziran.android.protocol.RequestPayloads.cancel(
+                    sessionId = sessionId,
+                    operationId = _state.value.live.operationId,
+                    expectedTurnId = turnId,
                 ),
                 sessionId = sessionId,
                 operationId = _state.value.live.operationId,
@@ -825,7 +822,7 @@ class AppController(
         return try {
             val payload = adapter.request(
                 "sessions.favorite",
-                JsonObject(mapOf("session_id" to JsonPrimitive(sessionId), "favorite" to JsonPrimitive(favorite.toString()))),
+                dev.ziran.android.protocol.RequestPayloads.favorite(sessionId, favorite),
                 sessionId = sessionId,
                 timeoutMs = 20000,
             )
@@ -859,20 +856,18 @@ class AppController(
         } catch (_: Exception) { }
     }
 
-    suspend fun createSession(projectId: String?, title: String) {
+    suspend fun createSession(projectId: String?, title: String, workingDir: String? = null) {
         val adapter = client ?: return
         if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
         val clientRequestId = UUID.randomUUID().toString()
         try {
             val payload = adapter.request(
                 "sessions.create",
-                JsonObject(
-                    mapOf(
-                        "client_request_id" to JsonPrimitive(clientRequestId),
-                        "project_id" to JsonPrimitive(projectId ?: null.toString()),
-                        "working_dir" to JsonPrimitive(null.toString()),
-                        "title" to JsonPrimitive(title.trim().ifEmpty { null.toString() }),
-                    ),
+                dev.ziran.android.protocol.RequestPayloads.create(
+                    clientRequestId = clientRequestId,
+                    projectId = projectId,
+                    title = title,
+                    workingDir = workingDir,
                 ),
                 timeoutMs = 40000,
             )
