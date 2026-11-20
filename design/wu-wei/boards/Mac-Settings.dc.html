@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jcode for Mac · settings · day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+
+@keyframes l-word{from{opacity:0;transform:translate3d(0,3px,0)}to{opacity:1;transform:none}}
+@keyframes l-in{from{opacity:0;transform:translate3d(-6px,0,0)}to{opacity:1;transform:none}}
+@keyframes l-drop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes l-flow{from{transform:translate3d(-60%,0,0)}to{transform:translate3d(160%,0,0)}}
+@keyframes l-grind{to{transform:rotate(360deg)}}
+@keyframes l-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.s .w{display:inline-block;white-space:pre;animation:l-word .5s var(--ease) both}
+.s .slidein{animation:l-in .6s var(--ease) both}
+.s .inkdot{width:8px;height:8px;border-radius:50%;background:var(--ink);animation:l-drop .55s var(--ease) both}
+.s .flow{position:relative;height:1.5px;margin:0 0 2px 26px;overflow:hidden}
+.s .flow::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .grind{animation:l-grind 2.4s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .stack{display:grid}.s .stack>*{grid-area:1/1}
+.s .trow .done-only,.s .think .done-only{opacity:0;transition:opacity .5s var(--ease)}
+.s .trow .run-only,.s .think .run-only{opacity:1;transition:opacity .4s var(--ease)}
+.s .trow.done .done-only,.s .think.done .done-only{opacity:1}
+.s .trow.done .run-only,.s .think.done .run-only{opacity:0}
+.s .ring2 circle{stroke-dasharray:37;stroke-dashoffset:37;transition:stroke-dashoffset .9s var(--ease) .1s}
+.s .trow.done .ring2 circle{stroke-dashoffset:0}
+.s .fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .75s var(--ease),opacity .5s var(--ease)}
+.s .open>.fold,.s .open .fold{grid-template-rows:1fr;opacity:1}
+.s .fold>div{overflow:hidden;min-height:0}
+.s .think .bar{position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--ink3);opacity:.5;transform-origin:top;animation:l-grow 3.4s var(--ease) both}
+.s .live-main{transition:opacity .8s var(--ease)}
+.s .live-main.fadeall{opacity:0}
+
+.s kbd{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;line-height:15px;color:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:0 5px;background:transparent}
+.s .tl{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2)}
+.s .tl:active{transform:none;opacity:.7}
+.s .tb{height:32px;min-width:32px;padding:0 8px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:7px;color:var(--ink2);transition:background .18s var(--ease),transform .18s var(--ease)}
+.s .tb:hover{background:var(--hov)}
+.s .tb.on{background:var(--sel)}
+.s .srow{width:100%;display:flex;align-items:center;gap:10px;min-height:48px;padding:5px 10px;box-sizing:border-box;border-radius:8px;text-align:left;transition:background .25s var(--ease)}
+.s .srow:hover{background:var(--hov)}
+.s .srow.on{background:var(--sel)}
+.s .grp{font-size:13px;font-style:italic;color:var(--ink3);padding:14px 10px 3px}
+.s .drow{display:grid;grid-template-columns:18px 52px minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:31px;font-size:16px;color:var(--ink2)}
+.s .drow .tool{font-size:11.5px;color:var(--ink)}
+.s .drow .meta{font-size:11px;color:var(--ink3)}
+.s .diff{margin:4px 0 8px 28px;border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:11.5px;line-height:20px;background:var(--paper2)}
+.s .diff .dh{display:flex;justify-content:space-between;padding:5px 12px;color:var(--ink3);border-bottom:1px solid var(--line)}
+.s .diff .dl{display:grid;grid-template-columns:34px 1fr;white-space:pre;color:var(--ink2);padding-right:12px}
+.s .diff .ln{color:var(--ink3);text-align:right;padding-right:12px;opacity:.8}
+.s .diff .del{color:var(--seal);text-decoration:line-through;text-decoration-thickness:1px}
+.s .diff .add{color:var(--green)}
+.s .side-col,.s .insp-col{overflow:hidden;min-width:0}
+.s .scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;overscroll-behavior:contain}
+@keyframes m-pop{from{opacity:0;transform:translate3d(0,-6px,0) scale(.98)}to{opacity:1;transform:none}}
+@keyframes m-fade{from{opacity:0}to{opacity:1}}
+@keyframes m-in{from{opacity:0;transform:translate3d(0,4px,0)}to{opacity:1;transform:none}}
+.s .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;box-shadow:0 18px 48px var(--shadow),0 2px 6px var(--shadow)}
+.s .pop{animation:m-pop .2s var(--ease) both;transform-origin:top right}
+.s .pal{animation:m-pop .22s var(--ease) both;transform-origin:top center}
+.s .scrim{animation:m-fade .22s var(--ease) both}
+.s .min{animation:m-in .45s var(--ease) both}
+.s .pitem{width:100%;display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;box-sizing:border-box;border-radius:7px;text-align:left;transition:background .12s}
+.s .pitem.act{background:var(--sel)}
+.s .ist{display:grid;grid-template-columns:14px 44px 1fr;align-items:center;column-gap:8px;font-size:14.5px;line-height:26px;color:var(--ink2);position:relative}
+.s .ist .dot{width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:1.4px solid var(--ink3);justify-self:center;background:var(--side);position:relative;z-index:1}
+.s .ist.done .dot{background:var(--seal);border-color:var(--seal)}
+.s .ist.now .dot{border-color:var(--blue);animation:s-wet 2.2s ease-in-out infinite}
+.s .ist.ask .dot{background:var(--seal);border-color:var(--seal);animation:s-wet 1.6s ease-in-out infinite}
+.s .ist.todo{color:var(--ink3)}
+.s .ilist{position:relative;list-style:none;margin:0;padding:0}
+.s .ilist::before{content:'';position:absolute;left:6.5px;top:13px;bottom:13px;width:1px;background:var(--ink3);opacity:.35}
+.s .lbl{font-size:13px;font-style:italic;color:var(--ink3);margin:0 0 6px}
+.s .seg{display:flex;padding:2px;border-radius:8px;background:var(--paper2);gap:2px}
+.s .seg button{height:28px;padding:0 14px;border-radius:6px;font-size:13.5px;color:var(--ink2);transition:background .2s var(--ease),color .2s var(--ease)}
+.s .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px var(--shadow)}
+.s .tab{width:76px;height:52px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13px;color:var(--ink2);transition:background .2s var(--ease),color .2s var(--ease)}
+.s .tab.on{background:var(--sel);color:var(--ink)}
+.s .press:active{transform:scale(.9) rotate(-3deg)}
+@keyframes m-stampin{0%{transform:scale(1.5) rotate(-12deg);opacity:0}60%{transform:scale(.95) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+.s .stampin{animation:m-stampin .6s cubic-bezier(.2,.8,.2,1) both}
+.s .hl{position:absolute;inset:0;pointer-events:none}
+@media (max-width:1040px){.s.mac-main{grid-template-columns:260px minmax(0,1fr) 0px!important}}
+@media (max-width:720px){.s.mac-main,.s.mac-live{grid-template-columns:0px minmax(0,1fr) 0px!important}}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div class="s mac mac-settings" style="width:100%;height:600px;position:relative;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#E5EBE0;--paper2:#D6E0D3;--ink:#16231D;--ink2:#2D3C34;--ink3:#56685D;--line:#BCCBBE;--seal:#A8322B;--onseal:#F1F4EC;--blue:#34677A;--green:#2F6B4E;--mist:#E5EBE0;--imgf:saturate(1);--side:#E0E7DC;--panel:#EEF2EA;--sel:rgba(22,35,29,.075);--hov:rgba(22,35,29,.045);--shadow:rgba(22,35,29,.16);--scrim:rgba(229,235,224,.55);">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<div style="position:relative;height:118px;border-bottom:1px solid var(--line);background:var(--side)"><div style="position:absolute;left:0;right:0;top:12px;text-align:center;font-size:15px;color:var(--ink2)">{{tabTitle}}</div><div role="tablist" aria-label="Settings" style="position:absolute;left:0;right:0;top:44px;display:flex;justify-content:center;gap:6px"><button type="button" role="tab" aria-selected="{{tabOn.scene}}" class="tab {{tabCls.scene}}" onClick="{{tabPick.scene}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 18 L9.5 9 L12.5 13 L14.8 10.5 L20.5 18 Z"></path></svg><span>Scene</span></button><button type="button" role="tab" aria-selected="{{tabOn.model}}" class="tab {{tabCls.model}}" onClick="{{tabPick.model}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18.5 C 8.5 16, 11.5 11.5, 18 5.5 M6 18.5 C 5.6 16.8, 6.4 15.6, 8 15.4"></path></svg><span>Brush</span></button><button type="button" role="tab" aria-selected="{{tabOn.servers}}" class="tab {{tabCls.servers}}" onClick="{{tabPick.servers}}"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5 H19 V11 H5 Z M5 13 H19 V17.5 H5 Z"></path></svg><span>Servers</span></button></div></div><div style="padding:24px 34px"><sc-if value="{{tabIs.scene}}" hint-placeholder-val="{{true}}"><div class="min" style="display:flex;flex-direction:column;gap:18px"><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:16px">Appearance</span><div class="seg" role="radiogroup" aria-label="Appearance"><button type="button" class="{{lookCls.day}}" onClick="{{lookPick.day}}">Day</button><button type="button" class="{{lookCls.night}}" onClick="{{lookPick.night}}">Night</button><button type="button" class="{{lookCls.mac}}" onClick="{{lookPick.mac}}">Follow the Mac</button></div></div><div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px"><span style="font-size:16px">Scene for new threads</span><span style="font-size:13.5px;font-style:italic;color:var(--ink3)">a thread keeps the scene it began with</span></div><div role="radiogroup" aria-label="Scene" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px 12px"><button type="button" role="radio" aria-checked="{{sel.peaks}}" onClick="{{pick.peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.peaks}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">peaks</span></button><button type="button" role="radio" aria-checked="{{sel.jade_peaks}}" onClick="{{pick.jade_peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.jade_peaks}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-jade-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">jade peaks</span></button><button type="button" role="radio" aria-checked="{{sel.pavilion}}" onClick="{{pick.pavilion}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.pavilion}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-pavilion.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">pavilion</span></button><button type="button" role="radio" aria-checked="{{sel.river_valley}}" onClick="{{pick.river_valley}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.river_valley}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-river-valley.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">river valley</span></button><button type="button" role="radio" aria-checked="{{sel.blue_hills}}" onClick="{{pick.blue_hills}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.blue_hills}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-blue-hills.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">blue hills</span></button><button type="button" role="radio" aria-checked="{{sel.riders}}" onClick="{{pick.riders}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.riders}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-riders.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">riders</span></button><button type="button" role="radio" aria-checked="{{sel.misty_peaks}}" onClick="{{pick.misty_peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.misty_peaks}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-misty-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">misty peaks</span></button><button type="button" role="radio" aria-checked="{{sel.lone_boat}}" onClick="{{pick.lone_boat}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.lone_boat}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-lone-boat.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">lone boat</span></button><button type="button" role="radio" aria-checked="{{sel.sage_under_pine}}" onClick="{{pick.sage_under_pine}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.sage_under_pine}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-sage-under-pine.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">sage under pine</span></button><button type="button" role="radio" aria-checked="{{sel.green_woods}}" onClick="{{pick.green_woods}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.green_woods}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-green-woods.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">green woods</span></button><button type="button" role="radio" aria-checked="{{sel.quiet_river}}" onClick="{{pick.quiet_river}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.quiet_river}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-quiet-river.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">quiet river</span></button><button type="button" role="radio" aria-checked="{{sel.butterfly}}" onClick="{{pick.butterfly}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0"><span style="position:relative;display:block;height:74px;border-radius:6px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.butterfly}};outline-offset:3px;transition:outline-color .3s"><img src="../assets/painting-butterfly.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></span><span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink2)">butterfly dream</span></button></div></div></div></sc-if><sc-if value="{{tabIs.model}}" hint-placeholder-val="{{false}}"><div class="min" style="display:flex;flex-direction:column;gap:6px;max-width:460px;margin:0 auto;width:100%"><span style="font-size:16px">Default model</span><div role="radiogroup" aria-label="Model" style="display:flex;flex-direction:column"><sc-for list="{{models}}" as="m" hint-placeholder-count="4"><button type="button" role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" disabled="{{m.off}}" style="display:flex;align-items:center;gap:12px;height:48px;border-bottom:1px solid var(--line);text-align:left;opacity:{{m.op}}"><span style="flex:1;display:flex;flex-direction:column"><span class="mono" style="font-size:12.5px;color:var(--ink)">{{m.name}}</span><span style="font-size:13.5px;font-style:italic;color:var(--ink3)">{{m.note}}</span></span><sc-if value="{{m.on}}" hint-placeholder-val="{{false}}"><svg class="ringdraw" aria-hidden="true" width="16" height="16" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></sc-if></button></sc-for></div><div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:18px"><span style="font-size:16px">Effort</span><span class="mono" style="font-size:11px;color:var(--ink3)">{{effort}}</span></div><div role="radiogroup" aria-label="Reasoning effort" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr))"><sc-for list="{{inks}}" as="k" hint-placeholder-count="6"><button type="button" role="radio" aria-checked="{{k.on}}" aria-label="{{k.en}}" onClick="{{k.pick}}" style="height:64px;display:flex;flex-direction:column;align-items:center;gap:5px"><span style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.6px solid {{k.ring}};box-sizing:border-box;transition:border-color .3s"><span style="width:22px;height:22px;border-radius:50%;background:var(--ink);opacity:{{k.ink}};filter:url(#bleed)"></span></span><span class="mono" style="font-size:10px;color:var(--ink3)">{{k.en}}</span></button></sc-for></div></div></sc-if><sc-if value="{{tabIs.servers}}" hint-placeholder-val="{{false}}"><div class="min" style="max-width:520px;margin:0 auto;width:100%;display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:12px;height:56px;border-bottom:1px solid var(--line)"><span aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:var(--green)"></span><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:16px">studio-vps</span><span class="mono" style="font-size:11px;color:var(--ink3)">https://studio-vps:7646</span></span><span style="font-size:13.5px;font-style:italic;color:var(--ink3)">paired · 5 threads</span></div><div style="display:flex;align-items:center;gap:12px;height:56px;border-bottom:1px solid var(--line)"><span aria-hidden="true" style="width:7px;height:7px;border-radius:50%;background:var(--green)"></span><span style="flex:1;display:flex;flex-direction:column"><span style="font-size:16px">this Mac</span><span class="mono" style="font-size:11px;color:var(--ink3)">localhost:7646</span></span><span style="font-size:13.5px;font-style:italic;color:var(--ink3)">found on this Mac</span></div><a href="Mac-Start.dc.html" class="mono" style="margin-top:16px;align-self:flex-start;font-size:12px;color:var(--ink2);text-decoration:underline;text-underline-offset:4px;text-decoration-color:var(--line)">pair another server…</a></div></sc-if></div><div style="position:absolute;left:20px;top:19px;display:flex;gap:8px;z-index:6"><button type="button" class="tl" aria-label="Close window" style="background:#FF5F57"></button><button type="button" class="tl" aria-label="Minimise window" style="background:#FEBC2E"></button><button type="button" class="tl" aria-label="Zoom window" style="background:var(--line)"></button></div>
+<div aria-hidden="true" class="grain grain-day"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":780,"height":600}}'>
+
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: 'scene', scene: 'peaks', look: 'day', model: 'gpt-5.6-luna', ink: 3 }; }
+  renderVals() {
+    const S = this.state;
+
+    const keys = ['peaks','jade_peaks','pavilion','river_valley','blue_hills','riders','misty_peaks','lone_boat','sage_under_pine','green_woods','quiet_river','butterfly'];
+    const sel = {}, ring = {}, pick = {}, show = {};
+    keys.forEach(k => { const on = this.state.scene === k; sel[k] = on; show[k] = on; ring[k] = on ? 'var(--seal)' : 'transparent'; pick[k] = () => this.setState({ scene: k }); });
+
+    const list = [['gpt-5.6-luna','openai · responses'],['claude-opus-5-5','anthropic · your subscription'],['deepseek-v4-flash','command-code · quick and light'],['gpt-5.2','openai · not in your plan',true]];
+    const models = list.map(([name, note, off]) => ({ name, note, off: !!off, on: name === S.model, op: off ? 0.45 : 1, pick: () => { if (!off) this.setState({ model: name }); } }));
+    const en = ['minimal','low','medium','high','xhigh','max'];
+    const inks = en.map((e, i) => ({ en: e, ink: (0.12 + i * 0.17).toFixed(2), on: i === S.ink, ring: i === S.ink ? 'var(--seal)' : 'transparent', pick: () => this.setState({ ink: i }) }));
+
+    const T = [['scene', 'Scene'], ['model', 'Brush'], ['servers', 'Servers']];
+    const tabIs = {}, tabCls = {}, tabPick = {}, tabOn = {};
+    T.forEach(([k]) => { tabIs[k] = S.tab === k; tabOn[k] = S.tab === k ? 'true' : 'false'; tabCls[k] = S.tab === k ? 'on' : ''; tabPick[k] = () => this.setState({ tab: k }); });
+    const lookCls = {}, lookPick = {};
+    ['day', 'night', 'mac'].forEach(k => { lookCls[k] = S.look === k ? 'on' : ''; lookPick[k] = () => this.setState({ look: k }); });
+    return { sel, ring, pick, show, models, inks, tabIs, tabCls, tabPick, tabOn, lookCls, lookPick, tabTitle: T.find(x => x[0] === S.tab)[1], effort: ['minimal','low','medium','high','xhigh','max'][S.ink] };
+  }
+}
+
+</script>
+</body>
+</html>
