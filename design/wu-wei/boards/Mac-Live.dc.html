@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jcode for Mac · live work · day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+
+@keyframes l-word{from{opacity:0;transform:translate3d(0,3px,0)}to{opacity:1;transform:none}}
+@keyframes l-in{from{opacity:0;transform:translate3d(-6px,0,0)}to{opacity:1;transform:none}}
+@keyframes l-drop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes l-flow{from{transform:translate3d(-60%,0,0)}to{transform:translate3d(160%,0,0)}}
+@keyframes l-grind{to{transform:rotate(360deg)}}
+@keyframes l-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.s .w{display:inline-block;white-space:pre;animation:l-word .5s var(--ease) both}
+.s .slidein{animation:l-in .6s var(--ease) both}
+.s .inkdot{width:8px;height:8px;border-radius:50%;background:var(--ink);animation:l-drop .55s var(--ease) both}
+.s .flow{position:relative;height:1.5px;margin:0 0 2px 26px;overflow:hidden}
+.s .flow::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .grind{animation:l-grind 2.4s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .stack{display:grid}.s .stack>*{grid-area:1/1}
+.s .trow .done-only,.s .think .done-only{opacity:0;transition:opacity .5s var(--ease)}
+.s .trow .run-only,.s .think .run-only{opacity:1;transition:opacity .4s var(--ease)}
+.s .trow.done .done-only,.s .think.done .done-only{opacity:1}
+.s .trow.done .run-only,.s .think.done .run-only{opacity:0}
+.s .ring2 circle{stroke-dasharray:37;stroke-dashoffset:37;transition:stroke-dashoffset .9s var(--ease) .1s}
+.s .trow.done .ring2 circle{stroke-dashoffset:0}
+.s .fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .75s var(--ease),opacity .5s var(--ease)}
+.s .open>.fold,.s .open .fold{grid-template-rows:1fr;opacity:1}
+.s .fold>div{overflow:hidden;min-height:0}
+.s .think .bar{position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--ink3);opacity:.5;transform-origin:top;animation:l-grow 3.4s var(--ease) both}
+.s .live-main{transition:opacity .8s var(--ease)}
+.s .live-main.fadeall{opacity:0}
+
+.s kbd{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;line-height:15px;color:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:0 5px;background:transparent}
+.s .tl{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2)}
+.s .tl:active{transform:none;opacity:.7}
+.s .tb{height:32px;min-width:32px;padding:0 8px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:7px;color:var(--ink2);transition:background .18s var(--ease),transform .18s var(--ease)}
+.s .tb:hover{background:var(--hov)}
+.s .tb.on{background:var(--sel)}
+.s .srow{width:100%;display:flex;align-items:center;gap:10px;min-height:48px;padding:5px 10px;box-sizing:border-box;border-radius:8px;text-align:left;transition:background .25s var(--ease)}
+.s .srow:hover{background:var(--hov)}
+.s .srow.on{background:var(--sel)}
+.s .grp{font-size:13px;font-style:italic;color:var(--ink3);padding:14px 10px 3px}
+.s .drow{display:grid;grid-template-columns:18px 52px minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:31px;font-size:16px;color:var(--ink2)}
+.s .drow .tool{font-size:11.5px;color:var(--ink)}
+.s .drow .meta{font-size:11px;color:var(--ink3)}
+.s .diff{margin:4px 0 8px 28px;border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:11.5px;line-height:20px;background:var(--paper2)}
+.s .diff .dh{display:flex;justify-content:space-between;padding:5px 12px;color:var(--ink3);border-bottom:1px solid var(--line)}
+.s .diff .dl{display:grid;grid-template-columns:34px 1fr;white-space:pre;color:var(--ink2);padding-right:12px}
+.s .diff .ln{color:var(--ink3);text-align:right;padding-right:12px;opacity:.8}
+.s .diff .del{color:var(--seal);text-decoration:line-through;text-decoration-thickness:1px}
+.s .diff .add{color:var(--green)}
+.s .side-col,.s .insp-col{overflow:hidden;min-width:0}
+.s .scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;overscroll-behavior:contain}
+@keyframes m-pop{from{opacity:0;transform:translate3d(0,-6px,0) scale(.98)}to{opacity:1;transform:none}}
+@keyframes m-fade{from{opacity:0}to{opacity:1}}
+@keyframes m-in{from{opacity:0;transform:translate3d(0,4px,0)}to{opacity:1;transform:none}}
+.s .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;box-shadow:0 18px 48px var(--shadow),0 2px 6px var(--shadow)}
+.s .pop{animation:m-pop .2s var(--ease) both;transform-origin:top right}
+.s .pal{animation:m-pop .22s var(--ease) both;transform-origin:top center}
+.s .scrim{animation:m-fade .22s var(--ease) both}
+.s .min{animation:m-in .45s var(--ease) both}
+.s .pitem{width:100%;display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;box-sizing:border-box;border-radius:7px;text-align:left;transition:background .12s}
+.s .pitem.act{background:var(--sel)}
+.s .ist{display:grid;grid-template-columns:14px 44px 1fr;align-items:center;column-gap:8px;font-size:14.5px;line-height:26px;color:var(--ink2);position:relative}
+.s .ist .dot{width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:1.4px solid var(--ink3);justify-self:center;background:var(--side);position:relative;z-index:1}
+.s .ist.done .dot{background:var(--seal);border-color:var(--seal)}
+.s .ist.now .dot{border-color:var(--blue);animation:s-wet 2.2s ease-in-out infinite}
+.s .ist.ask .dot{background:var(--seal);border-color:var(--seal);animation:s-wet 1.6s ease-in-out infinite}
+.s .ist.todo{color:var(--ink3)}
+.s .ilist{position:relative;list-style:none;margin:0;padding:0}
+.s .ilist::before{content:'';position:absolute;left:6.5px;top:13px;bottom:13px;width:1px;background:var(--ink3);opacity:.35}
+.s .lbl{font-size:13px;font-style:italic;color:var(--ink3);margin:0 0 6px}
+.s .seg{display:flex;padding:2px;border-radius:8px;background:var(--paper2);gap:2px}
+.s .seg button{height:28px;padding:0 14px;border-radius:6px;font-size:13.5px;color:var(--ink2);transition:background .2s var(--ease),color .2s var(--ease)}
+.s .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px var(--shadow)}
+.s .tab{width:76px;height:52px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13px;color:var(--ink2);transition:background .2s var(--ease),color .2s var(--ease)}
+.s .tab.on{background:var(--sel);color:var(--ink)}
+.s .press:active{transform:scale(.9) rotate(-3deg)}
+@keyframes m-stampin{0%{transform:scale(1.5) rotate(-12deg);opacity:0}60%{transform:scale(.95) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+.s .stampin{animation:m-stampin .6s cubic-bezier(.2,.8,.2,1) both}
+.s .hl{position:absolute;inset:0;pointer-events:none}
+@media (max-width:1040px){.s.mac-main{grid-template-columns:260px minmax(0,1fr) 0px!important}}
+@media (max-width:720px){.s.mac-main,.s.mac-live{grid-template-columns:0px minmax(0,1fr) 0px!important}}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div class="s mac mac-live" style="width:100%;height:800px;position:relative;overflow:hidden;display:grid;grid-template-columns:260px minmax(0,1fr);transition:grid-template-columns .45s var(--ease);background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#E5EBE0;--paper2:#D6E0D3;--ink:#16231D;--ink2:#2D3C34;--ink3:#56685D;--line:#BCCBBE;--seal:#A8322B;--onseal:#F1F4EC;--blue:#34677A;--green:#2F6B4E;--mist:#E5EBE0;--imgf:saturate(1);--side:#E0E7DC;--panel:#EEF2EA;--sel:rgba(22,35,29,.075);--hov:rgba(22,35,29,.045);--shadow:rgba(22,35,29,.16);--scrim:rgba(229,235,224,.55);">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<aside class="side-col" aria-label="Threads" style="position:relative;background:var(--side);border-right:1px solid var(--line)"><div style="width:260px;height:800px;display:flex;flex-direction:column"><div style="position:relative;height:178px;overflow:hidden;flex:none"><div class="kb" style="position:absolute;inset:0"><img src="../assets/painting-peaks.jpg" alt="Detail of an old blue-and-green landscape painting: mountain peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></div><div aria-hidden="true" class="drift" style="position:absolute;left:-40px;right:-40px;top:50%;height:40px;background:var(--side);opacity:.3;filter:blur(14px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 45%,var(--side) 97%)"></div></div><div class="mono" style="display:flex;align-items:center;gap:8px;padding:0 20px;margin-top:-14px;position:relative;font-size:11.5px;color:var(--ink2)"><span aria-hidden="true" style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>studio-vps<span style="margin-left:auto;color:var(--ink3)">~/src</span></div><nav class="scroll" aria-label="Threads" style="flex:1;min-height:0;padding:2px 10px 10px;display:flex;flex-direction:column;gap:1px"><div class="grp">waiting for you</div><button type="button" class="srow " aria-pressed="false" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Clean the build cache</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">asks to run <span class="mono" style="font-style:normal;font-size:10.5px">rm -rf target/…</span></span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span role="img" aria-label="Waiting for you" style="width:9px;height:9px;border-radius:50%;background:var(--seal)"></span></span></button><div class="grp">working</div><button type="button" class="srow on" aria-pressed="true" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Adapter v4 timeline</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">running the tests</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></span></button><button type="button" class="srow " aria-pressed="false" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Pinned todo card</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">with owl, wren and lynx · 3 of 7</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></span></button><div class="grp">finished</div><button type="button" class="srow " aria-pressed="false" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Socket timeout</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">fourteen minutes ago</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></span></button><div class="grp">resting</div><button type="button" class="srow " aria-pressed="false" style="opacity:.62;"><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Android back stack</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">resting since Saturday</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></span></button></nav><div style="display:flex;gap:4px;padding:8px 10px 12px;border-top:1px solid var(--line)"><button type="button" class="tb" title="New thread ⌘N" style="justify-content:flex-start;padding:0 10px;flex:1;font-size:15px;color:var(--ink2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5.5 H6 V18 H18.5 V10.5 M10.5 13.5 L19 5"></path></svg><span style="flex:1;text-align:left">new thread</span><kbd>⌘N</kbd></button><a href="Mac-Settings.dc.html" class="tb" aria-label="Settings" title="Settings ⌘," style="width:32px"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 18 L9.5 9 L12.5 13 L14.8 10.5 L20.5 18 Z"></path></svg></a></div></div></aside><section aria-label="Thread" style="position:relative;min-width:0;height:800px;overflow:hidden"><div aria-hidden="true" style="position:absolute;left:0;right:0;top:0;height:240px;overflow:hidden;pointer-events:none"><img src="../assets/wash-peaks.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.6"><div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 20%,var(--paper) 96%)"></div></div><div style="position:absolute;left:0;right:0;top:0;height:52px;display:flex;align-items:center;gap:4px;padding:0 12px 0 14px;z-index:4;transition:padding .45s var(--ease)"><button type="button" class="tb on" aria-label="Show or hide the sidebar"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 H20 V17.5 H4 Z M9.5 6.5 V17.5"></path></svg></button><button type="button" class="tb" aria-label="New thread"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5.5 H6 V18 H18.5 V10.5 M10.5 13.5 L19 5"></path></svg></button><span style="flex:1"></span><button type="button" class="tb mono" style="font-size:11.5px;padding:0 10px"><span aria-hidden="true" style="width:9px;height:9px;border-radius:50%;background:var(--ink);opacity:.63"></span>gpt-5.6-luna · high</button><button type="button" class="tb" aria-label="Go to a thread or command"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 16 A5.5 5.5 0 1 1 10.5 5 A5.5 5.5 0 1 1 10.5 16 M14.6 14.6 L19 19"></path></svg></button><button type="button" class="tb" aria-label="Show or hide the inspector"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 H20 V17.5 H4 Z M14.5 6.5 V17.5"></path></svg></button></div><header style="position:absolute;left:0;right:0;top:72px;z-index:2"><div style="max-width:760px;margin:0 auto;padding:0 48px;box-sizing:border-box"><div style="display:flex;align-items:flex-end;gap:14px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Adapter v4 timeline</h1><div class="mono clip rise" style="font-size:11.5px;color:var(--ink3);margin-top:3px">fox · {{sub}}</div></div><span aria-hidden="true" class="seal stampin" style="width:26px;height:26px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span></div></div></header><div class="scroll" style="position:absolute;left:0;right:0;top:150px;bottom:96px;z-index:2"><div style="max-width:760px;margin:0 auto;padding:0 48px;box-sizing:border-box;padding-top:10px"><main class="live-main {{mainCls}}" style="position:relative;display:flex;flex-direction:column;gap:10px">
+    <p style="margin:0;display:flex;gap:8px;font-size:17px;line-height:26px;color:var(--ink)">
+      <span class="mono" style="font-size:12px;color:var(--seal);flex:none;padding-top:2px">1›</span>
+      <span>Why does the socket drop when my phone sleeps? Fix it, keep the protocol.</span>
+    </p>
+    <sc-if value="{{sT}}" hint-placeholder-val="{{true}}"><div class="think rise {{cT}}" style="position:relative;padding-left:14px"><span class="bar run-only" aria-hidden="true"></span><div class="stack" style="font-size:14px;color:var(--ink3);font-style:italic"><span class="run-only" style="display:flex;align-items:center;gap:8px;height:28px"><svg class="grind" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" style="stroke:var(--ink3)" stroke-width="2.6" stroke-dasharray="34 20" stroke-linecap="round"></circle></svg>thinking</span><button type="button" class="done-only" aria-expanded="false" style="display:flex;align-items:center;gap:8px;height:28px;font-style:italic;color:var(--ink3)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" style="stroke:var(--ink3)" stroke-width="2.4" stroke-dasharray="46 8" transform="rotate(-70 12 12)"></circle></svg>thought for 4s <span style="font-style:normal">›</span></button></div><div class="fold"><div><p style="margin:2px 0 4px;font-size:15.5px;line-height:23px;color:var(--ink3);font-style:italic"><span class="w" style="animation-delay:0.35s">Doze </span><span class="w" style="animation-delay:0.41s">defers </span><span class="w" style="animation-delay:0.48s">network </span><span class="w" style="animation-delay:0.54s">wakeups, </span><span class="w" style="animation-delay:0.61s">so </span><span class="w" style="animation-delay:0.68s">pongs </span><span class="w" style="animation-delay:0.74s">arrive </span><span class="w" style="animation-delay:0.80s">late. </span><span class="w" style="animation-delay:0.87s">If </span><span class="w" style="animation-delay:0.93s">the </span><span class="w" style="animation-delay:1.00s">adapter </span><span class="w" style="animation-delay:1.06s">waits </span><span class="w" style="animation-delay:1.13s">only </span><span class="w" style="animation-delay:1.19s">five </span><span class="w" style="animation-delay:1.26s">seconds </span><span class="w" style="animation-delay:1.33s">it </span><span class="w" style="animation-delay:1.39s">calls </span><span class="w" style="animation-delay:1.46s">a </span><span class="w" style="animation-delay:1.52s">healthy </span><span class="w" style="animation-delay:1.58s">socket </span><span class="w" style="animation-delay:1.65s">dead. </span><span class="w" style="animation-delay:1.71s">Find </span><span class="w" style="animation-delay:1.78s">the </span><span class="w" style="animation-delay:1.85s">timeout, </span><span class="w" style="animation-delay:1.91s">then </span><span class="w" style="animation-delay:1.98s">check </span><span class="w" style="animation-delay:2.04s">what </span><span class="w" style="animation-delay:2.10s">happens </span><span class="w" style="animation-delay:2.17s">to </span><span class="w" style="animation-delay:2.23s">frames </span><span class="w" style="animation-delay:2.30s">sent </span><span class="w" style="animation-delay:2.37s">while </span><span class="w" style="animation-delay:2.43s">it </span><span class="w" style="animation-delay:2.50s">was </span><span class="w" style="animation-delay:2.56s">gone. </span></p></div></div></div></sc-if>
+    <ol aria-label="Tool calls" aria-live="polite" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column"><sc-if value="{{s1}}" hint-placeholder-val="{{false}}"><li class="trow {{c1}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">grep</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">find where the socket dies</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e1}}</span><span class="done-only" style="color:var(--ink3)">4 hits</span></span></div><div class="flow run-only" aria-hidden="true"></div></li></sc-if><sc-if value="{{s2}}" hint-placeholder-val="{{false}}"><li class="trow {{c2}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">read</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">adapter.ts</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e2}}</span><span class="done-only" style="color:var(--ink3)">212 lines</span></span></div><div class="flow run-only" aria-hidden="true"></div></li></sc-if><sc-if value="{{s3}}" hint-placeholder-val="{{false}}"><li class="trow {{c3}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">edit</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">lengthen the pong wait</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e3}}</span><span class="done-only" style="color:var(--ink3)"><span style="color:var(--green)">+12</span> <span style="color:var(--seal)">−3</span></span></span></div><div class="flow run-only" aria-hidden="true"></div><div class="fold"><div><div class="mono" style="margin:4px 0 6px 26px;padding:8px 10px;background:var(--paper2);border-radius:4px;font-size:11.5px;line-height:20px"><div style="color:var(--ink3)">src/lib/adapter.ts</div><div style="color:var(--ink3)">  const beat = setInterval(ping, 10_000);</div><div style="color:var(--seal);opacity:.8;text-decoration:line-through;text-decoration-thickness:1.5px">- const timeout = 5_000;</div><div class="rise" style="color:var(--green);animation-delay:.7s">+ const timeout = 15_000;</div><div class="rise" style="color:var(--green);animation-delay:1s">+ const retries = 3;</div></div></div></div></li></sc-if><sc-if value="{{s4}}" hint-placeholder-val="{{false}}"><li class="trow {{c4}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">bash</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">run reconnect tests</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e4}}</span><span class="done-only" style="color:var(--ink3)">6 passed</span></span></div><div class="flow run-only" aria-hidden="true"></div><div class="fold"><div><div class="mono" style="margin:2px 0 6px 26px;font-size:11.5px;line-height:19px;color:var(--ink3)"><div class="rise" style="animation-delay:.3s"><span style="color:var(--green)">✓</span> backs off 1s, 2s, 4s</div><div class="rise" style="animation-delay:1s"><span style="color:var(--green)">✓</span> keeps the journal cursor</div><div class="rise" style="animation-delay:1.7s"><span style="color:var(--green)">✓</span> resumes after 30s doze</div></div></div></div></li></sc-if></ol>
+    <sc-if value="{{sA}}" hint-placeholder-val="{{false}}"><p style="margin:6px 0 0;font-size:16.5px;line-height:24px;color:var(--ink2);font-style:italic"><span class="w" style="animation-delay:0.00s">Doze </span><span class="w" style="animation-delay:0.06s">held </span><span class="w" style="animation-delay:0.11s">the </span><span class="w" style="animation-delay:0.17s">pongs </span><span class="w" style="animation-delay:0.22s">past </span><span class="w" style="animation-delay:0.28s">five </span><span class="w" style="animation-delay:0.33s">seconds, </span><span class="w" style="animation-delay:0.39s">so </span><span class="w" style="animation-delay:0.44s">the </span><span class="w" style="animation-delay:0.49s">socket </span><span class="w" style="animation-delay:0.55s">was </span><span class="w" style="animation-delay:0.60s">judged </span><span class="w" style="animation-delay:0.66s">dead. </span><span class="w" style="animation-delay:0.71s">Now </span><span class="w" style="animation-delay:0.77s">it </span><span class="w" style="animation-delay:0.82s">waits </span><span class="w" style="animation-delay:0.88s">fifteen, </span><span class="w" style="animation-delay:0.94s">and </span><span class="w" style="animation-delay:0.99s">tries </span><span class="w" style="animation-delay:1.04s">thrice </span><span class="w" style="animation-delay:1.10s">before </span><span class="w" style="animation-delay:1.16s">letting </span><span class="w" style="animation-delay:1.21s">go. </span></p></sc-if>
+    
+  </main></div></div><div style="position:absolute;left:0;right:0;bottom:16px;z-index:3"><div style="max-width:760px;margin:0 auto;padding:0 48px;box-sizing:border-box"><div style="display:flex;align-items:center;gap:12px"><label style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:48px"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Message</span><input placeholder="write to fox…" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17.5px;color:var(--ink);padding:0"><svg aria-hidden="true" viewBox="0 0 200 8" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:6px;width:100%;height:6px"><path class="inkdraw" d="M2 5 C 40 2, 90 6, 140 3 S 190 4, 198 3" style="stroke:var(--ink)" stroke-width="2.2" fill="none" stroke-linecap="round" opacity=".5" filter="url(#bleed)"></path></svg></label><button type="button" class="tb mono" title="Stop ⌘." style="font-size:11.5px;color:var(--ink3)">stop <kbd>⌘.</kbd></button><button type="button" aria-label="Send" class="seal press" style="width:42px;height:42px"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button></div><div class="mono" style="display:flex;gap:14px;font-size:11px;color:var(--ink3);margin-top:2px"><span>studio-vps · ~/src</span><span style="margin-left:auto">↩ send · messages wait their turn while it works</span></div></div></div></section><div style="position:absolute;left:20px;top:19px;display:flex;gap:8px;z-index:6"><button type="button" class="tl" aria-label="Close window" style="background:#FF5F57"></button><button type="button" class="tl" aria-label="Minimise window" style="background:#FEBC2E"></button><button type="button" class="tl" aria-label="Zoom window" style="background:#28C840"></button></div>
+<div aria-hidden="true" class="grain grain-day"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { t: 0, now: 0 }; this.timers = []; }
+  componentDidMount() { this.loop(); this.iv = setInterval(() => this.setState({ now: Date.now() - this.t0 }), 1000); }
+  componentWillUnmount() { this.timers.forEach(clearTimeout); clearInterval(this.iv); }
+  loop() {
+    this.t0 = Date.now();
+    this.setState({ t: 0, now: 0 });
+    const marks = [500, 600, 4300, 4600, 4700, 5900, 6000, 7000, 7100, 9600, 9700, 12300, 12600, 18000];
+    marks.forEach(m => this.timers.push(setTimeout(() => this.setState({ t: m }), m)));
+    this.timers.push(setTimeout(() => { this.timers = []; this.loop(); }, 19000));
+  }
+  renderVals() {
+    const t = this.state.t, now = this.state.now;
+    const row = (a, b) => t < a ? '' : (t < a + 100 ? 'run' : (t < b ? 'run open' : 'done'));
+    const el = (a) => '0:0' + Math.min(9, Math.max(0, Math.floor((now - a) / 1000)));
+    return {
+      sT: t >= 500, cT: t < 600 ? '' : (t < 4300 ? 'open' : 'done'),
+      s1: t >= 4600, c1: row(4600, 5900), e1: el(4600),
+      s2: t >= 5900, c2: row(5900, 7000), e2: el(5900),
+      s3: t >= 7000, c3: row(7000, 9600), e3: el(7000),
+      s4: t >= 9600, c4: row(9600, 12300), e4: el(9600),
+      sA: t >= 12600, mainCls: t >= 18000 ? 'fadeall' : '',
+      sub: t >= 12300 ? 'finished · 12s' : (t >= 4300 ? 'working' : 'thinking'),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

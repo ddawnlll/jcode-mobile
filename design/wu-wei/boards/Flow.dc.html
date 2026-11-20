@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jcode · flow prototype</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+
+@keyframes l-word{from{opacity:0;transform:translate3d(0,3px,0)}to{opacity:1;transform:none}}
+@keyframes l-in{from{opacity:0;transform:translate3d(-6px,0,0)}to{opacity:1;transform:none}}
+@keyframes l-drop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes l-flow{from{transform:translate3d(-60%,0,0)}to{transform:translate3d(160%,0,0)}}
+@keyframes l-grind{to{transform:rotate(360deg)}}
+@keyframes l-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.s .w{display:inline-block;white-space:pre;animation:l-word .5s var(--ease) both}
+.s .slidein{animation:l-in .6s var(--ease) both}
+.s .inkdot{width:8px;height:8px;border-radius:50%;background:var(--ink);animation:l-drop .55s var(--ease) both}
+.s .flow{position:relative;height:1.5px;margin:0 0 2px 26px;overflow:hidden}
+.s .flow::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .grind{animation:l-grind 2.4s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .stack{display:grid}.s .stack>*{grid-area:1/1}
+.s .trow .done-only,.s .think .done-only{opacity:0;transition:opacity .5s var(--ease)}
+.s .trow .run-only,.s .think .run-only{opacity:1;transition:opacity .4s var(--ease)}
+.s .trow.done .done-only,.s .think.done .done-only{opacity:1}
+.s .trow.done .run-only,.s .think.done .run-only{opacity:0}
+.s .ring2 circle{stroke-dasharray:37;stroke-dashoffset:37;transition:stroke-dashoffset .9s var(--ease) .1s}
+.s .trow.done .ring2 circle{stroke-dashoffset:0}
+.s .fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .75s var(--ease),opacity .5s var(--ease)}
+.s .open>.fold,.s .open .fold{grid-template-rows:1fr;opacity:1}
+.s .fold>div{overflow:hidden;min-height:0}
+.s .think .bar{position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--ink3);opacity:.5;transform-origin:top;animation:l-grow 3.4s var(--ease) both}
+.s .live-main{transition:opacity .8s var(--ease)}
+.s .live-main.fadeall{opacity:0}
+
+@keyframes t-slide-out{from{transform:none}to{transform:translate3d(100%,0,0)}}
+@keyframes t-slide-in{from{transform:translate3d(-22%,0,0);opacity:.55}to{transform:none;opacity:1}}
+@keyframes g-ripple{from{transform:scale(.08);opacity:.22}to{transform:scale(1);opacity:0}}
+@keyframes g-spin{to{transform:rotate(360deg)}}
+.s .enter-slide{z-index:1;animation:t-slide-in .42s var(--ease) both}
+.s .leave-slide{z-index:2;animation:t-slide-out .42s cubic-bezier(.4,0,.2,1) both;box-shadow:-12px 0 30px rgba(0,0,0,.12)}
+.s .ripple{position:absolute;width:180px;height:180px;margin:-90px 0 0 -90px;border-radius:50%;pointer-events:none;z-index:20;
+  background:radial-gradient(circle,var(--ink) 0,var(--ink) 18%,transparent 70%);animation:g-ripple .65s var(--ease) both}
+.s .edge{position:absolute;left:0;top:96px;bottom:0;width:22px;z-index:9;touch-action:none}
+.s .backchip{position:absolute;left:-8px;width:40px;height:40px;border-radius:50%;background:var(--paper2);display:flex;align-items:center;justify-content:center;z-index:30;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.15)}
+.s .scrim{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .38s var(--ease);z-index:24;border:0;padding:0}
+.s .scrim.on{opacity:.32;pointer-events:auto}
+.s .sheet{position:absolute;left:0;right:0;bottom:0;z-index:25;background:var(--paper);border-radius:20px 20px 0 0;padding:10px 20px 30px;transform:translate3d(0,105%,0);transition:transform .42s var(--ease);box-shadow:0 -8px 30px rgba(0,0,0,.12)}
+.s .sheet.on{transform:none}
+.s .snack{position:absolute;left:14px;right:14px;bottom:100px;z-index:22;background:var(--ink);color:var(--paper);border-radius:12px;height:52px;display:flex;align-items:center;padding:0 6px 0 16px;gap:10px;transform:translate3d(0,24px,0);opacity:0;pointer-events:none;transition:transform .45s var(--ease),opacity .3s var(--ease)}
+.s .snack.on{transform:none;opacity:1;pointer-events:auto}
+.s .pull{position:absolute;left:50%;top:-6px;width:28px;height:28px;margin-left:-14px;pointer-events:none}
+.s .pull.spin svg{animation:g-spin .8s linear infinite}
+.s .action{display:flex;align-items:center;gap:14px;height:52px;width:100%;font-size:18px;color:var(--ink);text-align:left}
+</style>
+</helmet>
+<div class="s" onPointerDown="{{ripple}}" style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;transition:background .6s;{{vars}}">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<sc-if value="{{vis.start}}" hint-placeholder-val="{{true}}"><div class="screen {{cls.start}}" style="--ox:{{ox}};--oy:{{oy}};transform:{{tf.start}};border-radius:{{rad.start}};transition:{{trn.start}};box-shadow:{{sh.start}};opacity:{{op.start}};z-index:{{zi.start}}"><div style="position:absolute;left:0;top:0;width:390px;height:340px;overflow:hidden"><img class="kb" src="../assets/painting-butterfly.jpg" alt="Detail of Zhuang Zhou Dreaming of a Butterfly, attributed to Lu Zhi, Ming dynasty" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div>
+  <div style="position:absolute;left:24px;right:24px;top:290px;display:flex;flex-direction:column">
+    <span class="mono rise" style="font-size:12px;color:var(--ink3);letter-spacing:.08em">jcode</span>
+    <h1 class="rise" style="margin:6px 0 0;font-size:32px;line-height:38px;font-weight:500;color:var(--ink);animation-delay:.1s">Pair with your server</h1>
+    <p class="rise" style="margin:8px 0 0;font-size:17.5px;line-height:25px;color:var(--ink3);animation-delay:.2s">Start the adapter where jcode runs. It prints a code that works once, for ten minutes.</p>
+    <label class="rise" style="margin-top:22px;display:flex;flex-direction:column;gap:2px;animation-delay:.3s">
+      <span class="mono" style="font-size:11px;color:var(--ink3)">server</span>
+      <input value="https://studio-vps:7646" style="height:42px;background:none;border:0;border-bottom:1.5px solid var(--line);outline:none;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:14px;color:var(--ink);padding:0">
+    </label>
+    <label class="rise" style="margin-top:14px;display:flex;flex-direction:column;gap:6px;animation-delay:.4s">
+      <span class="mono" style="font-size:11px;color:var(--ink3)">code</span>
+      <input value="K7QM-P2XA-" autocomplete="one-time-code" style="height:48px;background:var(--paper2);border:0;border-radius:4px;outline:none;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:20px;letter-spacing:.16em;color:var(--ink);padding:0 14px">
+    </label>
+  </div>
+  <div style="position:absolute;left:24px;right:24px;bottom:30px;display:flex;align-items:center;justify-content:space-between">
+    <button class="mono" style="height:44px;font-size:12px;color:var(--ink2);text-decoration:underline;text-underline-offset:4px;text-decoration-color:var(--line)">paste a pairing link</button>
+    <button type="button" class="seal stamp" aria-label="Pair" onClick="{{go.sessions}}" style="width:64px;height:64px"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+  </div></div></sc-if>
+<sc-if value="{{vis.sessions}}" hint-placeholder-val="{{false}}"><div class="screen {{cls.sessions}}" style="--ox:{{ox}};--oy:{{oy}};transform:{{tf.sessions}};border-radius:{{rad.sessions}};transition:{{trn.sessions}};box-shadow:{{sh.sessions}};opacity:{{op.sessions}};z-index:{{zi.sessions}}"><div style="position:absolute;left:0;top:0;width:390px;height:280px;overflow:hidden"><img class="kb" src="../assets/painting-pavilion.jpg" alt="Detail of an old blue-and-green landscape painting: a pavilion under pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div><button type="button" class="" aria-label="Server studio-vps · scenes and theme" onClick="{{go.scenes}}" style="position:absolute;right:16px;top:54px;height:40px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink2);font-family:'JetBrains Mono',monospace;z-index:2"><span aria-hidden="true" style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>studio-vps</button><div style="position:absolute;left:22px;right:22px;top:226px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Threads</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">~/src · {{threadCount}} sessions</div></div></div><nav aria-label="Threads" style="position:absolute;left:22px;right:22px;top:282px;display:flex;flex-direction:column"><div class="pull {{pullCls}}" aria-hidden="true" style="transform:translate3d(0,{{pullY}}px,0) scale({{pullS}});opacity:{{pullO}};transition:{{pullTr}}"><svg width="28" height="28" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" style="stroke:var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="{{pullDash}} 60" transform="rotate(-90 12 12)"></circle></svg></div><div style="display:flex;flex-direction:column;transform:translate3d(0,{{listY}}px,0);transition:{{pullTr}}" onPointerDown="{{listDown}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"><div class="rw" style="display:grid;grid-template-rows:{{rows.r1.gr}};transition:grid-template-rows .45s var(--ease),opacity .3s;opacity:{{rows.r1.o}}"><div style="min-height:0;position:relative;overflow:hidden"><div aria-hidden="true" style="position:absolute;inset:1px 0;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:14px;background:var(--paper2);opacity:{{rows.r1.uo}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3H4zM6 10v8h12v-8M10 14h4"></path></svg><span class="mono" style="font-size:11px;color:var(--ink2)">archive</span></div><div style="position:relative;background:var(--paper);touch-action:pan-y;transform:translate3d({{rows.r1.dx}}px,0,0) scale({{rows.r1.sc}});box-shadow:{{rows.r1.sh}};transition:{{rows.r1.tr}};border-radius:{{rows.r1.rad}}" onPointerDown="{{rows.r1.down}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"><button type="button" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.1s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Clean the build cache</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">crane asks to run <span class="mono" style="font-style:normal;font-size:11px">rm -rf target/…</span></span></span><span style="width:24px;display:flex;justify-content:center"><span role="img" aria-label="Waiting for you" style="width:10px;height:10px;border-radius:50%;background:var(--seal)"></span></span></button></div></div></div><div class="rw" style="display:grid;grid-template-rows:{{rows.r2.gr}};transition:grid-template-rows .45s var(--ease),opacity .3s;opacity:{{rows.r2.o}}"><div style="min-height:0;position:relative;overflow:hidden"><div aria-hidden="true" style="position:absolute;inset:1px 0;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:14px;background:var(--paper2);opacity:{{rows.r2.uo}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3H4zM6 10v8h12v-8M10 14h4"></path></svg><span class="mono" style="font-size:11px;color:var(--ink2)">archive</span></div><div style="position:relative;background:var(--paper);touch-action:pan-y;transform:translate3d({{rows.r2.dx}}px,0,0) scale({{rows.r2.sc}});box-shadow:{{rows.r2.sh}};transition:{{rows.r2.tr}};border-radius:{{rows.r2.rad}}" onPointerDown="{{rows.r2.down}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"><button type="button" class="rise" onClick="{{go.main_r2}}" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.2s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Adapter v4 timeline</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">fox · running the tests</span></span><span style="width:24px;display:flex;justify-content:center"><span class="mono spin" role="img" aria-label="Working" style="font-size:15px;color:var(--blue)"></span></span></button></div></div></div><div class="rw" style="display:grid;grid-template-rows:{{rows.r3.gr}};transition:grid-template-rows .45s var(--ease),opacity .3s;opacity:{{rows.r3.o}}"><div style="min-height:0;position:relative;overflow:hidden"><div aria-hidden="true" style="position:absolute;inset:1px 0;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:14px;background:var(--paper2);opacity:{{rows.r3.uo}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3H4zM6 10v8h12v-8M10 14h4"></path></svg><span class="mono" style="font-size:11px;color:var(--ink2)">archive</span></div><div style="position:relative;background:var(--paper);touch-action:pan-y;transform:translate3d({{rows.r3.dx}}px,0,0) scale({{rows.r3.sc}});box-shadow:{{rows.r3.sh}};transition:{{rows.r3.tr}};border-radius:{{rows.r3.rad}}" onPointerDown="{{rows.r3.down}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"><button type="button" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.3s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Pinned todo card</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">heron, with owl, wren and lynx · 3 of 7</span></span><span style="width:24px;display:flex;justify-content:center"><span class="mono spin" role="img" aria-label="Working" style="font-size:15px;color:var(--blue)"></span></span></button></div></div></div><div class="rw" style="display:grid;grid-template-rows:{{rows.r4.gr}};transition:grid-template-rows .45s var(--ease),opacity .3s;opacity:{{rows.r4.o}}"><div style="min-height:0;position:relative;overflow:hidden"><div aria-hidden="true" style="position:absolute;inset:1px 0;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:14px;background:var(--paper2);opacity:{{rows.r4.uo}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3H4zM6 10v8h12v-8M10 14h4"></path></svg><span class="mono" style="font-size:11px;color:var(--ink2)">archive</span></div><div style="position:relative;background:var(--paper);touch-action:pan-y;transform:translate3d({{rows.r4.dx}}px,0,0) scale({{rows.r4.sc}});box-shadow:{{rows.r4.sh}};transition:{{rows.r4.tr}};border-radius:{{rows.r4.rad}}" onPointerDown="{{rows.r4.down}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"><button type="button" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.4s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Socket timeout</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">owl · done, fourteen minutes ago</span></span><span style="width:24px;display:flex;justify-content:center"><span class="ring" role="img" aria-label="Finished" style="width:15px;height:15px"></span></span></button></div></div></div><div class="rw" style="display:grid;grid-template-rows:{{rows.r5.gr}};transition:grid-template-rows .45s var(--ease),opacity .3s;opacity:{{rows.r5.o}}"><div style="min-height:0;position:relative;overflow:hidden"><div aria-hidden="true" style="position:absolute;inset:1px 0;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-right:14px;background:var(--paper2);opacity:{{rows.r5.uo}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3H4zM6 10v8h12v-8M10 14h4"></path></svg><span class="mono" style="font-size:11px;color:var(--ink2)">archive</span></div><div style="position:relative;background:var(--paper);touch-action:pan-y;transform:translate3d({{rows.r5.dx}}px,0,0) scale({{rows.r5.sc}});box-shadow:{{rows.r5.sh}};transition:{{rows.r5.tr}};border-radius:{{rows.r5.rad}}" onPointerDown="{{rows.r5.down}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"><button type="button" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.5s;opacity:.6;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Android back stack</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">moth · resting since Saturday</span></span><span style="width:24px;display:flex;justify-content:center"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></span></button></div></div></div></div></nav>
+  <div style="position:absolute;left:20px;right:16px;bottom:22px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:50px">
+        <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Message</span>
+        <input placeholder="begin a new thread…" value="{{draft}}" onChange="{{onDraft}}" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17px;color:var(--ink);padding:0">
+        <svg aria-hidden="true" viewBox="0 0 200 8" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:7px;width:100%;height:6px"><path class="inkdraw" d="M2 5 C 40 2, 90 6, 140 3 S 190 4, 198 3" style="stroke:var(--ink)" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".55" filter="url(#bleed)"></path></svg>
+      </label>
+      
+      <button type="button" aria-label="Send" onClick="{{send}}" class="seal {{stampCls}}" style="width:48px;height:48px"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+    
+  </div></div></sc-if>
+<sc-if value="{{vis.main}}" hint-placeholder-val="{{false}}"><div class="screen {{cls.main}}" style="--ox:{{ox}};--oy:{{oy}};transform:{{tf.main}};border-radius:{{rad.main}};transition:{{trn.main}};box-shadow:{{sh.main}};opacity:{{op.main}};z-index:{{zi.main}}"><sc-if value="{{heroIs.peaks}}" hint-placeholder-val="{{true}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-peaks.jpg" alt="Detail of an old blue-and-green landscape painting: mountain peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.jade_peaks}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-jade-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: jade peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.pavilion}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-pavilion.jpg" alt="Detail of an old blue-and-green landscape painting: a pavilion under pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.river_valley}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-river-valley.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a river valley" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.blue_hills}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-blue-hills.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: blue hills" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.riders}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-riders.jpg" alt="Detail of an old blue-and-green landscape painting: two riders beneath the pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.misty_peaks}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-misty-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: peaks in mist" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.lone_boat}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-lone-boat.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a lone boat" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.sage_under_pine}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-sage-under-pine.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a sage resting under a pine" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.green_woods}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-green-woods.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: green woods" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.quiet_river}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-quiet-river.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a quiet river" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><sc-if value="{{heroIs.butterfly}}" hint-placeholder-val="{{false}}"><div style="position:absolute;left:0;top:0;width:390px;height:210px;overflow:hidden"><img class="kb" src="../assets/painting-butterfly.jpg" alt="Detail of Zhuang Zhou Dreaming of a Butterfly, attributed to Lu Zhi, Ming dynasty" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></sc-if><button type="button" class="" aria-label="Threads" onClick="{{go.sessions}}" style="position:absolute;left:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.7" stroke-linecap="round"><path d="M4 7.5h15M4 12h10M4 16.5h13"></path></svg></button><div style="position:absolute;left:22px;right:22px;top:170px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Adapter v4 timeline</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">fox · {{sub}}</div></div><span aria-hidden="true" class="seal stamp" style="width:28px;height:28px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span></div>
+  <main class="live-main {{mainCls}}" style="position:absolute;left:22px;right:22px;top:236px;display:flex;flex-direction:column;gap:10px">
+    <p style="margin:0;display:flex;gap:8px;font-size:16px;line-height:24px;color:var(--ink)">
+      <span class="mono" style="font-size:12px;color:var(--seal);flex:none;padding-top:1px">1›</span>
+      <span>Why does the socket drop when my phone sleeps? Fix it, keep the protocol.</span>
+    </p>
+    <sc-if value="{{sT}}" hint-placeholder-val="{{true}}"><div class="think rise {{cT}}" style="position:relative;padding-left:14px"><span class="bar run-only" aria-hidden="true"></span><div class="stack" style="font-size:14px;color:var(--ink3);font-style:italic"><span class="run-only" style="display:flex;align-items:center;gap:8px;height:28px"><svg class="grind" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" style="stroke:var(--ink3)" stroke-width="2.6" stroke-dasharray="34 20" stroke-linecap="round"></circle></svg>thinking</span><button type="button" class="done-only" aria-expanded="false" style="display:flex;align-items:center;gap:8px;height:28px;font-style:italic;color:var(--ink3)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" style="stroke:var(--ink3)" stroke-width="2.4" stroke-dasharray="46 8" transform="rotate(-70 12 12)"></circle></svg>thought for 4s <span style="font-style:normal">›</span></button></div><div class="fold"><div><p style="margin:2px 0 4px;font-size:15.5px;line-height:23px;color:var(--ink3);font-style:italic"><span class="w" style="animation-delay:0.35s">Doze </span><span class="w" style="animation-delay:0.41s">defers </span><span class="w" style="animation-delay:0.48s">network </span><span class="w" style="animation-delay:0.54s">wakeups, </span><span class="w" style="animation-delay:0.61s">so </span><span class="w" style="animation-delay:0.68s">pongs </span><span class="w" style="animation-delay:0.74s">arrive </span><span class="w" style="animation-delay:0.80s">late. </span><span class="w" style="animation-delay:0.87s">If </span><span class="w" style="animation-delay:0.93s">the </span><span class="w" style="animation-delay:1.00s">adapter </span><span class="w" style="animation-delay:1.06s">waits </span><span class="w" style="animation-delay:1.13s">only </span><span class="w" style="animation-delay:1.19s">five </span><span class="w" style="animation-delay:1.26s">seconds </span><span class="w" style="animation-delay:1.33s">it </span><span class="w" style="animation-delay:1.39s">calls </span><span class="w" style="animation-delay:1.46s">a </span><span class="w" style="animation-delay:1.52s">healthy </span><span class="w" style="animation-delay:1.58s">socket </span><span class="w" style="animation-delay:1.65s">dead. </span><span class="w" style="animation-delay:1.71s">Find </span><span class="w" style="animation-delay:1.78s">the </span><span class="w" style="animation-delay:1.85s">timeout, </span><span class="w" style="animation-delay:1.91s">then </span><span class="w" style="animation-delay:1.98s">check </span><span class="w" style="animation-delay:2.04s">what </span><span class="w" style="animation-delay:2.10s">happens </span><span class="w" style="animation-delay:2.17s">to </span><span class="w" style="animation-delay:2.23s">frames </span><span class="w" style="animation-delay:2.30s">sent </span><span class="w" style="animation-delay:2.37s">while </span><span class="w" style="animation-delay:2.43s">it </span><span class="w" style="animation-delay:2.50s">was </span><span class="w" style="animation-delay:2.56s">gone. </span></p></div></div></div></sc-if>
+    <ol aria-label="Tool calls" aria-live="polite" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column"><sc-if value="{{s1}}" hint-placeholder-val="{{false}}"><li class="trow {{c1}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">grep</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">find where the socket dies</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e1}}</span><span class="done-only" style="color:var(--ink3)">4 hits</span></span></div><div class="flow run-only" aria-hidden="true"></div></li></sc-if><sc-if value="{{s2}}" hint-placeholder-val="{{false}}"><li class="trow {{c2}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">read</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">adapter.ts</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e2}}</span><span class="done-only" style="color:var(--ink3)">212 lines</span></span></div><div class="flow run-only" aria-hidden="true"></div></li></sc-if><sc-if value="{{s3}}" hint-placeholder-val="{{false}}"><li class="trow {{c3}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">edit</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">lengthen the pong wait</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e3}}</span><span class="done-only" style="color:var(--ink3)"><span style="color:var(--green)">+12</span> <span style="color:var(--seal)">−3</span></span></span></div><div class="flow run-only" aria-hidden="true"></div><div class="fold"><div><div class="mono" style="margin:4px 0 6px 26px;padding:8px 10px;background:var(--paper2);border-radius:4px;font-size:11.5px;line-height:20px"><div style="color:var(--ink3)">src/lib/adapter.ts</div><div style="color:var(--ink3)">  const beat = setInterval(ping, 10_000);</div><div style="color:var(--seal);opacity:.8;text-decoration:line-through;text-decoration-thickness:1.5px">- const timeout = 5_000;</div><div class="rise" style="color:var(--green);animation-delay:.7s">+ const timeout = 15_000;</div><div class="rise" style="color:var(--green);animation-delay:1s">+ const retries = 3;</div></div></div></div></li></sc-if><sc-if value="{{s4}}" hint-placeholder-val="{{false}}"><li class="trow {{c4}}" style="display:flex;flex-direction:column"><div style="display:flex;align-items:center;gap:10px;min-height:30px"><span class="stack" style="width:16px;height:16px;place-items:center;flex:none"><span class="run-only" style="display:flex"><span class="inkdot"></span></span><svg class="done-only ring2" role="img" aria-label="done" width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></span><span class="mono slidein" style="font-size:11.5px;color:var(--ink);flex:none;animation-delay:.05s">bash</span><span class="clip slidein" style="flex:1;min-width:0;font-size:16px;color:var(--ink2);animation-delay:.12s">run reconnect tests</span><span class="stack mono" style="font-size:11px;flex:none;justify-items:end"><span class="run-only" style="color:var(--blue)"><span class="spin" aria-hidden="true"></span> {{e4}}</span><span class="done-only" style="color:var(--ink3)">6 passed</span></span></div><div class="flow run-only" aria-hidden="true"></div><div class="fold"><div><div class="mono" style="margin:2px 0 6px 26px;font-size:11.5px;line-height:19px;color:var(--ink3)"><div class="rise" style="animation-delay:.3s"><span style="color:var(--green)">✓</span> backs off 1s, 2s, 4s</div><div class="rise" style="animation-delay:1s"><span style="color:var(--green)">✓</span> keeps the journal cursor</div><div class="rise" style="animation-delay:1.7s"><span style="color:var(--green)">✓</span> resumes after 30s doze</div></div></div></div></li></sc-if></ol>
+    <sc-if value="{{sA}}" hint-placeholder-val="{{false}}"><p style="margin:6px 0 0;font-size:16.5px;line-height:24px;color:var(--ink2);font-style:italic"><span class="w" style="animation-delay:0.00s">Doze </span><span class="w" style="animation-delay:0.06s">held </span><span class="w" style="animation-delay:0.11s">the </span><span class="w" style="animation-delay:0.17s">pongs </span><span class="w" style="animation-delay:0.22s">past </span><span class="w" style="animation-delay:0.28s">five </span><span class="w" style="animation-delay:0.33s">seconds, </span><span class="w" style="animation-delay:0.39s">so </span><span class="w" style="animation-delay:0.44s">the </span><span class="w" style="animation-delay:0.49s">socket </span><span class="w" style="animation-delay:0.55s">was </span><span class="w" style="animation-delay:0.60s">judged </span><span class="w" style="animation-delay:0.66s">dead. </span><span class="w" style="animation-delay:0.71s">Now </span><span class="w" style="animation-delay:0.77s">it </span><span class="w" style="animation-delay:0.82s">waits </span><span class="w" style="animation-delay:0.88s">fifteen, </span><span class="w" style="animation-delay:0.94s">and </span><span class="w" style="animation-delay:0.99s">tries </span><span class="w" style="animation-delay:1.04s">thrice </span><span class="w" style="animation-delay:1.10s">before </span><span class="w" style="animation-delay:1.16s">letting </span><span class="w" style="animation-delay:1.21s">go. </span></p></sc-if>
+    <sc-for list="{{sent}}" as="q" hint-placeholder-count="0"><p class="rise" style="margin:0;display:flex;gap:8px;font-size:16px;line-height:24px;color:var(--ink)"><span class="mono" style="font-size:12px;color:var(--seal);flex:none;padding-top:1px">{{q.n}}›</span><span style="flex:1">{{q.text}}</span><span class="mono" style="font-size:10.5px;color:var(--blue);flex:none;padding-top:3px">{{q.tag}}</span></p></sc-for>
+  </main>
+  <div style="position:absolute;left:20px;right:16px;bottom:22px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:50px">
+        <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Message</span>
+        <input placeholder="write to fox…" value="{{draft}}" onChange="{{onDraft}}" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17px;color:var(--ink);padding:0">
+        <svg aria-hidden="true" viewBox="0 0 200 8" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:7px;width:100%;height:6px"><path class="inkdraw" d="M2 5 C 40 2, 90 6, 140 3 S 190 4, 198 3" style="stroke:var(--ink)" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".55" filter="url(#bleed)"></path></svg>
+      </label>
+      <button type="button" class="mono" style="height:38px;padding:0 4px;font-size:11.5px;color:var(--ink3);text-decoration:underline;text-underline-offset:4px;text-decoration-color:var(--line);flex:none">stop</button>
+      <button type="button" aria-label="Send" onClick="{{send}}" class="seal {{stampCls}}" style="width:48px;height:48px"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+    <div class="mono" style="display:flex;gap:2px;font-size:11px;color:var(--ink3)"><button type="button" class="" onClick="{{go.scenes}}" style="padding:6px 4px;font-size:11px;color:var(--ink3)">studio-vps</button><span aria-hidden="true" style="padding:6px 0">·</span><button type="button" class="" onClick="{{go.model}}" style="padding:6px 4px;font-size:11px;color:var(--ink3);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line)">gpt-5.6-luna · high</button></div>
+  </div><div class="edge" aria-hidden="true" onPointerDown="{{edgeDown}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"></div></div></sc-if>
+<sc-if value="{{vis.model}}" hint-placeholder-val="{{false}}"><div class="screen {{cls.model}}" style="--ox:{{ox}};--oy:{{oy}};transform:{{tf.model}};border-radius:{{rad.model}};transition:{{trn.model}};box-shadow:{{sh.model}};opacity:{{op.model}};z-index:{{zi.model}}"><sc-if value="{{rodModel}}" hint-placeholder-val="{{false}}"><span class="rod" aria-hidden="true"></span></sc-if><div style="position:absolute;left:0;top:0;width:390px;height:250px;overflow:hidden"><img class="kb" src="../assets/painting-riders.jpg" alt="Detail of an old blue-and-green landscape painting: two riders beneath the pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div><button type="button" class="" aria-label="Back to the thread" onClick="{{go.main_back}}" style="position:absolute;left:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5c-3 2.5-5.5 4.6-7 7 1.5 2.4 4 4.5 7 7"></path></svg></button><div style="position:absolute;left:22px;right:22px;top:196px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Model</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">used from the next turn</div></div></div>
+  <div style="position:absolute;left:22px;right:22px;top:256px;display:flex;flex-direction:column">
+    <div role="radiogroup" aria-label="Model" style="display:flex;flex-direction:column">
+      <sc-for list="{{models}}" as="m" hint-placeholder-count="4">
+        <button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" disabled="{{m.off}}" style="display:flex;align-items:center;gap:12px;height:54px;border-bottom:1px solid var(--line);text-align:left;opacity:{{m.op}}">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span class="mono clip" style="font-size:13.5px;color:var(--ink)">{{m.name}}</span>
+            <span class="clip" style="font-size:14px;color:var(--ink3);font-style:italic">{{m.note}}</span>
+          </span>
+          <sc-if value="{{m.on}}" hint-placeholder-val="{{false}}"><svg class="ringdraw" aria-hidden="true" width="18" height="18" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.8" fill="none" style="stroke:var(--seal)" stroke-width="1.6" transform="rotate(-90 7 7)"></circle></svg></sc-if>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:22px">
+      <span style="font-size:19px;color:var(--ink)">Effort</span><span style="font-size:15px;color:var(--ink3);font-style:italic">how much ink</span>
+    </div>
+    <div role="radiogroup" aria-label="Reasoning effort" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin-top:8px">
+      <sc-for list="{{inks}}" as="k" hint-placeholder-count="6">
+        <button role="radio" aria-checked="{{k.on}}" aria-label="{{k.en}}" onClick="{{k.pick}}" style="height:70px;display:flex;flex-direction:column;align-items:center;gap:6px">
+          <span style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1.6px solid {{k.ring}};transition:border-color .3s">
+            <span style="width:26px;height:26px;border-radius:50%;background:var(--ink);opacity:{{k.ink}};filter:url(#bleed)"></span>
+          </span>
+          <span class="mono" style="font-size:10px;color:var(--ink3)">{{k.en}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+  <div style="position:absolute;right:22px;bottom:30px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:15px;color:var(--ink3);font-style:italic">use this brush</span>
+    <button type="button" class="seal" aria-label="Use this model" onClick="{{go.main_back}}" style="width:52px;height:52px;transform:rotate(-3deg)"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+  </div><div class="edge" aria-hidden="true" onPointerDown="{{edgeDown}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"></div></div></sc-if>
+<sc-if value="{{vis.scenes}}" hint-placeholder-val="{{false}}"><div class="screen {{cls.scenes}}" style="--ox:{{ox}};--oy:{{oy}};transform:{{tf.scenes}};border-radius:{{rad.scenes}};transition:{{trn.scenes}};box-shadow:{{sh.scenes}};opacity:{{op.scenes}};z-index:{{zi.scenes}}"><sc-if value="{{rodScenes}}" hint-placeholder-val="{{false}}"><span class="rod" aria-hidden="true"></span></sc-if><sc-if value="{{show.peaks}}" hint-placeholder-val="{{true}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-peaks.jpg" alt="Detail of an old blue-and-green landscape painting: mountain peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.jade_peaks}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-jade-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: jade peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.pavilion}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-pavilion.jpg" alt="Detail of an old blue-and-green landscape painting: a pavilion under pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.river_valley}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-river-valley.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a river valley" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.blue_hills}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-blue-hills.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: blue hills" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.riders}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-riders.jpg" alt="Detail of an old blue-and-green landscape painting: two riders beneath the pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.misty_peaks}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-misty-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: peaks in mist" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.lone_boat}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-lone-boat.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a lone boat" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.sage_under_pine}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-sage-under-pine.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a sage resting under a pine" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.green_woods}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-green-woods.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: green woods" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.quiet_river}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-quiet-river.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a quiet river" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.butterfly}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-butterfly.jpg" alt="Detail of Zhuang Zhou Dreaming of a Butterfly, attributed to Lu Zhi, Ming dynasty" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><button type="button" class="" aria-label="Back to threads" onClick="{{go.sessions_back}}" style="position:absolute;left:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5c-3 2.5-5.5 4.6-7 7 1.5 2.4 4 4.5 7 7"></path></svg></button><div style="position:absolute;left:22px;right:22px;top:180px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Scene</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">behind every thread</div></div></div>
+  <div style="position:absolute;left:22px;right:22px;top:232px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:17px;color:var(--ink)">Ink</span>
+      <div role="group" aria-label="Theme" style="display:flex;gap:4px;padding:3px;border-radius:22px;border:1px solid var(--line)"><button type="button" aria-label="Day" onClick="{{setDay}}" class="mono" style="height:34px;padding:0 14px;border-radius:18px;font-size:12px;{{dayStyle}}">day</button><button type="button" aria-label="Night" onClick="{{setNight}}" class="mono" style="height:34px;padding:0 14px;border-radius:18px;font-size:12px;{{nightStyle}}">night</button></div>
+    </div>
+    <div role="radiogroup" aria-label="Scene" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 12px">
+      <button role="radio" aria-checked="{{sel.peaks}}" onClick="{{pick.peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.peaks}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">peaks</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.jade_peaks}}" onClick="{{pick.jade_peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.jade_peaks}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-jade-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">jade peaks</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.pavilion}}" onClick="{{pick.pavilion}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.pavilion}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-pavilion.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">pavilion</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.river_valley}}" onClick="{{pick.river_valley}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.river_valley}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-river-valley.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">river valley</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.blue_hills}}" onClick="{{pick.blue_hills}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.blue_hills}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-blue-hills.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">blue hills</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.riders}}" onClick="{{pick.riders}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.riders}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-riders.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">riders</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.misty_peaks}}" onClick="{{pick.misty_peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.misty_peaks}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-misty-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">misty peaks</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.lone_boat}}" onClick="{{pick.lone_boat}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.lone_boat}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-lone-boat.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">lone boat</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.sage_under_pine}}" onClick="{{pick.sage_under_pine}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.sage_under_pine}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-sage-under-pine.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">sage under pine</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.green_woods}}" onClick="{{pick.green_woods}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.green_woods}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-green-woods.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">green woods</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.quiet_river}}" onClick="{{pick.quiet_river}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.quiet_river}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-quiet-river.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">quiet river</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.butterfly}}" onClick="{{pick.butterfly}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.butterfly}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-butterfly.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">butterfly dream</span>
+      </button>
+    </div>
+    <p style="margin:0;font-size:15px;line-height:21px;color:var(--ink3);font-style:italic">Details from old paintings. Left alone, the scene changes with the hour.</p>
+  </div><div class="edge" aria-hidden="true" onPointerDown="{{edgeDown}}" onPointerMove="{{pmove}}" onPointerUp="{{pup}}" onPointerCancel="{{pup}}"></div></div></sc-if>
+
+<sc-if value="{{backing}}" hint-placeholder-val="{{false}}"><div class="backchip" aria-hidden="true" style="top:{{backY}}px;transform:translate3d({{chipX}}px,0,0);opacity:{{chipO}}">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:{{chipArrow}}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5c-3 2.5-5.5 4.6-7 7 1.5 2.4 4 4.5 7 7"></path></svg></div></sc-if>
+<sc-for list="{{ripples}}" as="r" hint-placeholder-count="0"><span class="ripple" aria-hidden="true" style="left:{{r.x}}px;top:{{r.y}}px"></span></sc-for>
+<div class="snack {{snackCls}}" role="status"><span class="clip" style="flex:1;font-size:16px">Archived “{{snackName}}”</span><button type="button" onClick="{{undo}}" class="mono" style="height:44px;padding:0 12px;font-size:12px;color:var(--paper);text-decoration:underline;text-underline-offset:4px">undo</button></div>
+<button type="button" aria-label="Close actions" class="scrim {{sheetCls}}" onClick="{{closeSheet}}"></button>
+<div class="sheet {{sheetCls}}" role="dialog" aria-label="Thread actions">
+  <div aria-hidden="true" style="width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 14px"></div>
+  <div class="clip" style="font-size:21px;color:var(--ink);margin-bottom:6px">{{sheetName}}</div>
+  <button type="button" class="action" onClick="{{closeSheet}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round"><path d="M12 17v4M8 3h8l-1 6 3 4H6l3-4z"></path></svg>Pin to the top</button>
+  <button type="button" class="action" onClick="{{closeSheet}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"></path></svg>Rename</button>
+  <button type="button" class="action" onClick="{{closeSheet}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 9h16"></path></svg>Open in a new window</button>
+  <button type="button" class="action" onClick="{{archiveSheet}}"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3H4zM6 10v8h12v-8M10 14h4"></path></svg>Archive</button>
+</div>
+<div aria-hidden="true" class="grain {{grainCls}}"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = { screen: 'start', prev: null, kind: 'drop', ox: '50%', oy: '50%', theme: 'day', scene: 'peaks',
+      model: 'gpt-5.6-luna', ink: 3, lt: -1, lnow: 0, draft: '', sent: [], stamp: 0,
+      ripples: [], back: null, rows: {}, sheet: null, snack: null, pull: 0, pullPhase: 'idle' };
+    this.timers = []; this.g = null; this.rid = 0;
+  }
+  componentWillUnmount() { this.timers.forEach(clearTimeout); clearInterval(this.iv); }
+  later(fn, ms) { const id = setTimeout(fn, ms); this.timers.push(id); return id; }
+  scale(e) { const r = e.currentTarget.closest('.s').getBoundingClientRect(); return { k: 390 / r.width, r }; }
+  buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (x) {} }
+
+  go(screen, kind, ox, oy) {
+    if (this.noClick || screen === this.state.screen) return;
+    this.setState({ prev: this.state.screen, screen, kind, ox: ox || '50%', oy: oy || '50%', back: null });
+    this.later(() => this.setState({ prev: null }), 900);
+    if (screen === 'main' && !this.liveStarted) {
+      this.liveStarted = true;
+      const t0 = Date.now() + 500;
+      [500, 600, 4300, 4600, 4700, 5900, 6000, 7000, 7100, 9600, 9700, 12300, 12600].forEach(m => this.later(() => this.setState({ lt: m }), 500 + m));
+      this.iv = setInterval(() => { const n = Date.now() - t0; this.setState({ lnow: n }); if (n > 13000) clearInterval(this.iv); }, 1000);
+    }
+  }
+  backTarget() { return { main: 'sessions', model: 'main', scenes: 'sessions' }[this.state.screen]; }
+
+  // ink ripple from every touch point
+  ripple(e) {
+    const { k, r } = this.scale(e);
+    const x = (e.clientX - r.left) * k, y = (e.clientY - r.top) * k, id = ++this.rid;
+    this.setState({ ripples: this.state.ripples.concat([{ id, x: x.toFixed(0), y: y.toFixed(0) }]) });
+    this.later(() => this.setState({ ripples: this.state.ripples.filter(q => q.id !== id) }), 700);
+  }
+
+  // predictive back: drag from the left edge
+  edgeDown(e) {
+    const target = this.backTarget(); if (!target || this.state.prev) return;
+    e.stopPropagation();
+    if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+    const { k, r } = this.scale(e);
+    this.g = { type: 'back', x0: e.clientX, k, top: r.top };
+    this.setState({ back: { p: 0, y: (e.clientY - r.top) * k, drag: true, target } });
+  }
+
+  // rows: swipe left to archive, long-press for actions
+  rowDown(id, e) {
+    const { k } = this.scale(e);
+    this.g = { type: 'row?', id, x0: e.clientX, y0: e.clientY, k };
+    if (e.currentTarget.setPointerCapture) e.currentTarget.setPointerCapture(e.pointerId);
+    clearTimeout(this.lp);
+    this.lp = this.later(() => {
+      if (!this.g || this.g.type !== 'row?') return;
+      this.g = null; this.noClick = true; this.buzz(12);
+      this.setRow(id, { lift: true });
+      this.later(() => this.setState({ sheet: id }), 140);
+      this.later(() => { this.noClick = false; }, 600);
+    }, 450);
+  }
+  listDown(e) { if (!this.g) { const { k } = this.scale(e); this.g = { type: 'pull?', y0: e.clientY, x0: e.clientX, k }; } }
+
+  pmove(e) {
+    const g = this.g; if (!g) return;
+    if (g.type === 'back') {
+      const p = Math.max(0, Math.min(1, (e.clientX - g.x0) * g.k / 300));
+      this.setState({ back: Object.assign({}, this.state.back, { p, y: (e.clientY - g.top) * g.k }) });
+      return;
+    }
+    const dx = (e.clientX - g.x0) * g.k, dy = (e.clientY - g.y0) * g.k;
+    if (g.type === 'row?' || g.type === 'pull?') {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      clearTimeout(this.lp);
+      if (g.type === 'row?' && Math.abs(dx) > Math.abs(dy) && dx < 0) g.type = 'swipe';
+      else if (dy > 0 && Math.abs(dy) > Math.abs(dx)) g.type = 'pull';
+      else { this.g = null; return; }
+      this.noClick = true;
+    }
+    if (g.type === 'swipe') this.setRow(g.id, { dx: Math.min(0, dx), drag: true });
+    if (g.type === 'pull') this.setState({ pull: Math.max(0, dy), pullPhase: 'drag' });
+  }
+
+  pup() {
+    const g = this.g; this.g = null; clearTimeout(this.lp);
+    this.later(() => { this.noClick = false; }, 60);
+    if (!g) return;
+    if (g.type === 'back') {
+      const b = this.state.back;
+      if (b.p > 0.32) {
+        this.buzz(8);
+        this.setState({ back: Object.assign({}, b, { drag: false, commit: true }) });
+        this.later(() => this.setState({ screen: b.target, prev: null, back: null }), 300);
+      } else {
+        this.setState({ back: Object.assign({}, b, { p: 0, drag: false }) });
+        this.later(() => this.setState({ back: null }), 320);
+      }
+    }
+    if (g.type === 'swipe') {
+      const dx = (this.state.rows[g.id] || {}).dx || 0;
+      if (dx < -110) {
+        this.buzz(8);
+        this.setRow(g.id, { dx: -420, drag: false });
+        this.later(() => this.setRow(g.id, { gone: true }), 260);
+        this.later(() => this.setState({ snack: g.id }), 300);
+        clearTimeout(this.snackT); this.snackT = this.later(() => this.setState({ snack: null }), 4600);
+      } else this.setRow(g.id, { dx: 0, drag: false });
+    }
+    if (g.type === 'pull') {
+      if (this.state.pull > 70) {
+        this.buzz(6);
+        this.setState({ pull: 56, pullPhase: 'refresh' });
+        this.later(() => this.setState({ pull: 0, pullPhase: 'settle' }), 1300);
+      } else this.setState({ pull: 0, pullPhase: 'settle' });
+    }
+  }
+
+  setRow(id, patch) {
+    const rows = Object.assign({}, this.state.rows);
+    rows[id] = Object.assign({}, rows[id] || {}, patch);
+    this.setState({ rows });
+  }
+  closeSheet(action) {
+    const id = this.state.sheet; if (!id) return;
+    this.setState({ sheet: null }); this.setRow(id, { lift: false });
+    if (action === 'archive') {
+      this.later(() => this.setRow(id, { dx: -420 }), 250);
+      this.later(() => this.setRow(id, { gone: true }), 520);
+      this.later(() => this.setState({ snack: id }), 560);
+      clearTimeout(this.snackT); this.snackT = this.later(() => this.setState({ snack: null }), 4800);
+    }
+  }
+  undo() { const id = this.state.snack; if (!id) return; this.setState({ snack: null }); this.setRow(id, { gone: false, dx: 0 }); }
+
+  renderVals() {
+    const S = this.state;
+    const day = { paper:'#E5EBE0', paper2:'#D6E0D3', ink:'#16231D', ink2:'#2D3C34', ink3:'#56685D', line:'#BCCBBE', seal:'#A8322B', onseal:'#F1F4EC', blue:'#3F7484', green:'#3B7A5C', mist:'#E5EBE0', imgf:'saturate(1)' };
+    const night = { paper:'#0E1613', paper2:'#17221D', ink:'#DCE8DE', ink2:'#BCCFC1', ink3:'#86998C', line:'#24342C', seal:'#C5483C', onseal:'#10140F', blue:'#7FAFBD', green:'#6FA88A', mist:'#0E1613', imgf:'brightness(.58) saturate(.85)' };
+    const pal = S.theme === 'day' ? day : night;
+    const vars = Object.keys(pal).map(k => '--' + k + ':' + pal[k]).join(';');
+
+    const screens = ['start', 'sessions', 'main', 'model', 'scenes'];
+    const vis = {}, cls = {}, tf = {}, rad = {}, trn = {}, sh = {}, op = {}, zi = {};
+    const b = S.back;
+    const ease = 'transform .32s cubic-bezier(.22,1,.36,1), border-radius .32s, opacity .32s';
+    screens.forEach(k => {
+      vis[k] = k === S.screen || k === S.prev || !!(b && k === b.target);
+      cls[k] = S.prev == null ? '' : (k === S.screen ? 'enter-' + S.kind : (k === S.prev ? 'leave-' + S.kind : ''));
+      tf[k] = 'none'; rad[k] = '0px'; trn[k] = 'none'; sh[k] = 'none'; op[k] = '1'; zi[k] = '';
+      if (b) {
+        if (k === S.screen) {
+          const p = b.commit ? 1 : b.p;
+          tf[k] = 'translate3d(' + (b.commit ? 420 : b.p * 46).toFixed(1) + 'px,0,0) scale(' + (1 - 0.1 * p).toFixed(3) + ')';
+          rad[k] = (p * 30).toFixed(1) + 'px'; trn[k] = b.drag ? 'none' : ease; sh[k] = '0 14px 40px rgba(0,0,0,.22)'; zi[k] = '3';
+        } else if (k === b.target) {
+          const p = b.commit ? 1 : b.p;
+          tf[k] = 'translate3d(' + (-40 * (1 - p)).toFixed(1) + 'px,0,0)'; op[k] = (0.55 + 0.45 * p).toFixed(2); trn[k] = b.drag ? 'none' : ease; zi[k] = '1';
+        }
+      }
+    });
+
+    const go = {
+      sessions: () => this.go('sessions', S.screen === 'start' ? 'drop' : 'slide', '86%', '90%'),
+      sessions_back: () => this.go('sessions', 'slide'),
+      main_r2: () => this.go('main', 'drop', '30%', '402px'),
+      main_back: () => this.go('main', 'slide'),
+      model: () => this.go('model', 'unroll'),
+      scenes: () => this.go('scenes', 'unroll'),
+    };
+
+    const rows = {}; let count = 0;
+    ['r1', 'r2', 'r3', 'r4', 'r5'].forEach(id => {
+      const r = S.rows[id] || {}; if (!r.gone) count++;
+      rows[id] = {
+        dx: (r.dx || 0).toFixed(1), sc: r.lift ? '1.025' : '1', rad: r.lift ? '10px' : '0px',
+        sh: r.lift ? '0 10px 26px rgba(0,0,0,.18)' : 'none',
+        tr: r.drag ? 'none' : 'transform .38s cubic-bezier(.22,1,.36,1), box-shadow .3s, border-radius .3s',
+        uo: Math.min(1, Math.abs(r.dx || 0) / 90).toFixed(2), gr: r.gone ? '0fr' : '1fr', o: r.gone ? '0' : '1',
+        down: (e) => this.rowDown(id, e),
+      };
+    });
+    const names = { r1: 'Clean the build cache', r2: 'Adapter v4 timeline', r3: 'Pinned todo card', r4: 'Socket timeout', r5: 'Android back stack' };
+    const pullP = Math.min(1, S.pull / 70);
+
+    const lt = S.lt, lnow = S.lnow, fin = lt >= 12300;
+    const row = (a, c) => lt < a ? '' : (lt < a + 100 ? 'run' : (lt < c ? 'run open' : 'done'));
+    const el = (a) => '0:0' + Math.min(9, Math.max(0, Math.floor((lnow - a) / 1000)));
+
+    const keys = ['peaks','jade_peaks','pavilion','river_valley','blue_hills','riders','misty_peaks','lone_boat','sage_under_pine','green_woods','quiet_river','butterfly'];
+    const sel = {}, ring = {}, pick = {}, show = {}, heroIs = {};
+    keys.forEach(k => { const on = S.scene === k; sel[k] = on; show[k] = on; heroIs[k] = on; ring[k] = on ? 'var(--seal)' : 'transparent'; pick[k] = () => this.setState({ scene: k }); });
+    const list = [['gpt-5.6-luna','openai · responses'],['claude-opus-5-5','anthropic · your subscription'],['deepseek-v4-flash','command-code · quick and light'],['gpt-5.2','openai · not in your plan',true]];
+    const models = list.map(([name, note, off]) => ({ name, note, off: !!off, on: name === S.model, op: off ? 0.45 : 1, pick: () => { if (!off) this.setState({ model: name }); } }));
+    const en = ['minimal','low','medium','high','xhigh','max'];
+    const inks = en.map((e, i) => ({ en: e, ink: (0.12 + i * 0.17).toFixed(2), on: i === S.ink, ring: i === S.ink ? 'var(--seal)' : 'transparent', pick: () => this.setState({ ink: i }) }));
+    const on = 'background:var(--ink);color:var(--paper)', off = 'color:var(--ink2)';
+
+    return {
+      vars, vis, cls, tf, rad, trn, sh, op, zi, go, rows, models, inks, sel, ring, pick, show, heroIs,
+      rodModel: cls.model === 'enter-unroll', rodScenes: cls.scenes === 'enter-unroll',
+      ox: S.ox, oy: S.oy, grainCls: S.theme === 'day' ? 'grain-day' : 'grain-night',
+      ripple: (e) => this.ripple(e), ripples: S.ripples,
+      edgeDown: (e) => this.edgeDown(e), pmove: (e) => this.pmove(e), pup: (e) => this.pup(e), listDown: (e) => this.listDown(e),
+      backing: !!(b && !b.commit), backY: b ? (b.y - 20).toFixed(0) : '0', chipX: b ? (b.p * 44).toFixed(1) : '0',
+      chipO: b ? Math.min(1, b.p * 4).toFixed(2) : '0', chipArrow: b && b.p > 0.32 ? 'var(--seal)' : 'var(--ink2)',
+      sheetCls: S.sheet ? 'on' : '', sheetName: S.sheet ? names[S.sheet] : '',
+      closeSheet: () => this.closeSheet(), archiveSheet: () => this.closeSheet('archive'),
+      snackCls: S.snack ? 'on' : '', snackName: S.snack ? names[S.snack] : '', undo: () => this.undo(), threadCount: String(count),
+      listY: (S.pullPhase === 'drag' ? S.pull * 0.45 : (S.pullPhase === 'refresh' ? 26 : 0)).toFixed(1),
+      pullY: (S.pullPhase === 'drag' ? Math.min(S.pull * 0.45, 40) : (S.pullPhase === 'refresh' ? 22 : 0)).toFixed(1),
+      pullS: (S.pullPhase === 'refresh' ? 1 : 0.4 + 0.6 * pullP).toFixed(2), pullO: (S.pullPhase === 'refresh' ? 1 : pullP).toFixed(2),
+      pullDash: (S.pullPhase === 'refresh' ? 36 : pullP * 50).toFixed(1), pullCls: S.pullPhase === 'refresh' ? 'spin' : '',
+      pullTr: S.pullPhase === 'drag' ? 'none' : 'transform .45s cubic-bezier(.22,1,.36,1), opacity .3s',
+      sT: lt >= 500, cT: lt < 600 ? '' : (lt < 4300 ? 'open' : 'done'),
+      s1: lt >= 4600, c1: row(4600, 5900), e1: el(4600), s2: lt >= 5900, c2: row(5900, 7000), e2: el(5900),
+      s3: lt >= 7000, c3: row(7000, 9600), e3: el(7000), s4: lt >= 9600, c4: row(9600, 12300), e4: el(9600),
+      sA: lt >= 12600, mainCls: '', sub: fin ? 'finished · 12s' : (lt >= 4300 ? 'working' : 'thinking'),
+      sent: S.sent.map((t, i) => ({ text: t, n: i + 2, tag: fin ? 'sent' : 'queued' })),
+      dayStyle: S.theme === 'day' ? on : off, nightStyle: S.theme === 'day' ? off : on,
+      setDay: () => this.setState({ theme: 'day' }), setNight: () => this.setState({ theme: 'night' }),
+      draft: S.draft, onDraft: (e) => this.setState({ draft: e.target.value }), stampCls: S.stamp % 2 ? 'stamp' : '',
+      send: () => { const text = (S.draft || '').trim() || 'Also log each backoff attempt, once.'; this.setState({ sent: S.sent.concat([text]), draft: '', stamp: S.stamp + 1 }); },
+    };
+  }
+}
+
+</script>
+</body>
+</html>
