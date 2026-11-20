@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -17,11 +18,20 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.ziran.android.design.Palette
 
-/** Hamburger back button at left:8 top:50 44x44 as in Main and Model. */
+/**
+ * Hamburger back button at left:8 top:50, 44x44 as in Main and Model.
+ *
+ * The offset is applied here, not by the caller: without it the button sits on
+ * top of the system status bar clock.
+ */
 @Composable
 fun BackChevron(palette: Palette, onBack: () -> Unit) {
     Box(
-        Modifier.size(44.dp).semantics { role = Role.Button; contentDescription = "Back" }.clickable { onBack() },
+        Modifier
+            .padding(start = 8.dp, top = 50.dp)
+            .size(44.dp)
+            .semantics { role = Role.Button; contentDescription = "Back" }
+            .clickable { onBack() },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(22.dp)) {

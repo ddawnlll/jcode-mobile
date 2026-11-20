@@ -214,6 +214,25 @@ class AppController(
         }
     }
 
+    /**
+     * Pair from a link. The fields are updated first so, if pairing fails, the
+     * screen shows the server that was actually tried instead of the default.
+     */
+    suspend fun pairFromLink(server: String, code: String) {
+        setState { it.copy(pairServer = server, pairCode = code, pairingError = null) }
+        pair(server, code, "ziran-android")
+    }
+
+    /** The link was not a usable pairing link; say so on the pair screen. */
+    fun reportPairingLinkError() {
+        setState {
+            it.copy(
+                phase = "unpaired",
+                pairingError = "This pairing link is not valid. Check the adapter's code and try again.",
+            )
+        }
+    }
+
     suspend fun pairFromFields() {
         val server = _state.value.pairServer
         val code = _state.value.pairCode

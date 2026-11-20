@@ -93,9 +93,15 @@ fun ZiranApp(
         val from = stack.last()
         stack = stack + next
         transition = NavTransition(kind, from, next, lastTap)
+        android.util.Log.i("ZiranNav", "go $from -> $next kind=$kind")
         scope.launch {
-            runNavTransition(navProgress, kind, durationScale, reduced)
-            if (navProgress.value >= 0.999f) transition = null
+            try {
+                runNavTransition(navProgress, kind, durationScale, reduced)
+                android.util.Log.i("ZiranNav", "progress=${navProgress.value}")
+                if (navProgress.value >= 0.999f) transition = null
+            } catch (t: Throwable) {
+                android.util.Log.e("ZiranNav", "transition failed", t)
+            }
         }
     }
 
@@ -120,22 +126,35 @@ fun ZiranApp(
         val to = stack.getOrNull(stack.size - 2) ?: return@PredictiveBackHandler
         transition = NavTransition(NavKind.Slide, from, to, predictive = true)
         gestureActive = true
-        var last = 0f
+        // -1 means the flow ended without a single progress reading, which is
+        // what a plain back press (key or toolbar) looks like: that commits.
+        var last = -1f
+        var cancelled = false
         try {
             progress.collect { event ->
                 last = event.progress
                 navProgress.snapTo(event.progress.coerceIn(0f, 1f))
             }
         } catch (_: CancellationException) {
-            // The user let go short of the threshold.
+            // The gesture was released short of the threshold.
+            cancelled = true
+        } finally {
+            gestureActive = false
         }
-        gestureActive = false
-        if (MotionMath.shouldCommitBack(last)) {
-            navProgress.animateTo(1f, tween(120, easing = WuEasing.Default))
-            stack = stack.dropLast(1)
-            transition = null
-        } else {
-            navProgress.animateTo(0f, tween(WuDurations.PredictiveSettle, easing = WuEasing.Default))
+        val commit = !cancelled && (last < 0f || MotionMath.shouldCommitBack(last))
+        try {
+            if (commit) {
+                navProgress.animateTo(1f, tween(120, easing = WuEasing.Default))
+                stack = stack.dropLast(1)
+            } else {
+                navProgress.animateTo(0f, tween(WuDurations.PredictiveSettle, easing = WuEasing.Default))
+            }
+        } catch (_: CancellationException) {
+            // The handler coroutine is being torn down; the sheet is still
+            // committed below so no half-painted transition can survive.
+        } finally {
+            // Always clear the transition: a stuck hand-off would paint two
+            // screens at once and swallow every touch behind them.
             transition = null
         }
     }
@@ -149,13 +168,14 @@ fun ZiranApp(
             when (val route = DeepLinks.parse(deepLink)) {
                 is DeepLinks.Route.Pair -> {
                     stack = listOf(Screen.Start)
-                    controller.pair(route.server, route.code, "ziran-android")
+                    controller.pairFromLink(route.server, route.code)
                 }
                 is DeepLinks.Route.Session -> {
                     stack = listOf(Screen.Threads, Screen.Thread(route.sessionId))
                     controller.openSession(route.sessionId)
                 }
-                DeepLinks.Route.Unknown -> Unit
+                // A link that cannot be used says so, instead of doing nothing.
+                DeepLinks.Route.Unknown -> controller.reportPairingLinkError()
             }
         }
     }
