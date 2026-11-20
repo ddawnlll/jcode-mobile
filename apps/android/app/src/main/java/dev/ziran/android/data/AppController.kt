@@ -52,6 +52,8 @@ class AppController(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val reducer = LiveReducer()
+    /** Soft-interrupt queue, scoped by serverId + sessionId. */
+    private val queues = MessageQueues()
     private var sessionGeneration = 0
     private var snapshotTimer: Job? = null
 
@@ -167,6 +169,7 @@ class AppController(
         // Wait for the socket, then load sessions and restore the session.
         awaitConnected()
         refreshSessions()
+        loadQueues(credential)
         val last = store.getLastSession(credential.serverId)
         val cachedList = loadCachedSessions(credential.serverId)
         val ids = _state.value.sessions.map { it.sessionId }
@@ -322,6 +325,9 @@ class AppController(
                     activeMissing = active != null && merged.none { s -> s.sessionId == active } && it.snapshot?.session?.sessionId != active,
                 )
             }
+            // A session that just went idle may hold queued text; drain it into
+            // its own thread, not the open one.
+            maybeDrainQueue()
         } catch (error: Exception) {
             setState { it.copy(sessionsError = "Sessions could not be refreshed: ${error.message}", savedOnPhone = true) }
         }
@@ -362,6 +368,7 @@ class AppController(
                 agents = cached?.agents,
                 context = cached?.context,
                 models = emptyList(),
+                queuedMessages = credential?.let { queues.list(it.serverId, sessionId) } ?: emptyList(),
             )
         }
         credential?.let { store.setLastSession(it.serverId, sessionId) }
@@ -479,19 +486,24 @@ class AppController(
     private fun applySnapshot(snapshot: SessionSnapshot) {
         val credential = currentCredential() ?: return
         scope.launch { store.saveSnapshotCache(credential.serverId, snapshot.session.sessionId, snapshot.toString()) }
-        val pendingInHistory = _state.value.pending?.let { pending ->
-            snapshot.messages.any { it.role == "user" && it.content == pending.text }
-        } == true
-        val next = applySnapshotToState(_state.value, snapshot)
-        setState {
-            var s = next
-            if (pendingInHistory) {
-                s = s.copy(pending = null, composerText = "")
-                scope.launch { store.clearPending(credential.serverId, snapshot.session.sessionId) }
-            }
-            s
-        }
+        setState { applySnapshotToState(it, snapshot) }
+        // Delivery is decided by operation state, never by matching text: an
+        // older message with the same words is not proof that this send landed.
+        reconcilePending()
         maybeDrainQueue()
+    }
+
+    /**
+     * Ask the adapter for the operation's own state. Pending stays unresolved
+     * (and never offers a resend) until the operation itself settles.
+     */
+    private fun reconcilePending() {
+        val pending = _state.value.pending ?: return
+        if (pending.state !in setOf("staged", "reserved", "dispatching", "unknown")) return
+        val now = System.currentTimeMillis()
+        if (now - lastPendingLookupAt < 2_000) return
+        lastPendingLookupAt = now
+        scope.launch { lookupOperation(pending.operationId) }
     }
 
     private suspend fun loadCachedSnapshot(serverId: String, sessionId: String): SessionSnapshot? {
@@ -560,34 +572,45 @@ class AppController(
 
     suspend fun send() = sendText(_state.value.composerText)
 
-    /** Send exactly the text the field currently shows. */
-    suspend fun sendText(rawText: String) {
+    /**
+     * Send exactly the given text.
+     *
+     * A queue drain passes the session it was queued in, so a message written
+     * in thread A still lands in A when thread B is on screen. It never touches
+     * the composer.
+     */
+    suspend fun sendText(rawText: String, targetSessionId: String? = null, fromQueue: Boolean = false) {
         val text = rawText.trim()
-        val sessionId = _state.value.activeSessionId ?: return
+        val sessionId = targetSessionId ?: _state.value.activeSessionId ?: return
+        val isActive = _state.value.activeSessionId == sessionId
         val adapter = client ?: run { setState { it.copy(sessionsError = "The adapter is offline. The draft is saved on this phone.") }; return }
         if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) {
             setState { it.copy(sessionsError = "The adapter is offline. The draft is saved on this phone.") }
             return
         }
         if (text.isEmpty()) return
-        val pending = _state.value.pending
+        val pending = if (isActive) _state.value.pending else null
         if (pending != null && pending.state in listOf("staged", "reserved", "dispatching", "accepted", "unknown")) {
             setState { it.copy(sessionsError = "This message is still being resolved. Do not resend it.") }
             return
         }
-        // A message written while the turn runs is a soft interrupt: it waits
-        // in the queue and is sent once the turn settles. Nothing is cancelled.
-        if (_state.value.live.turnId != null || _state.value.live.daemonRunning) {
-            setState { it.copy(queuedMessages = it.queuedMessages + text, composerText = "") }
-            store.saveDraft(currentCredential()!!.serverId, sessionId, "")
+        if (isActive && (_state.value.live.turnId != null || _state.value.live.daemonRunning)) {
+            // A message written while the turn runs is a soft interrupt: it
+            // waits in this session's queue and is sent once that turn
+            // settles. Nothing is cancelled.
+            enqueue(sessionId, text)
+            setState { it.copy(composerText = "") }
+            val serverId = currentCredential()?.serverId
+            if (serverId != null) store.saveDraft(serverId, sessionId, "")
             return
         }
         val credential = currentCredential() ?: return
         val operationId = UUID.randomUUID().toString()
         val next = PendingMessage(text, operationId, "staged", null, System.currentTimeMillis())
-        store.saveDraft(credential.serverId, sessionId, text)
+        // A queue drain must leave the user's draft exactly as it is.
+        if (!fromQueue) store.saveDraft(credential.serverId, sessionId, text)
         store.savePending(credential.serverId, sessionId, operationId, text, "staged", next.createdAt)
-        setState { it.copy(pending = next, composerText = "") }
+        setState { it.copy(pending = if (isActive) next else it.pending, composerText = if (isActive) "" else it.composerText) }
         try {
             val reserved = adapter.request(
                 "operations.reserve",
@@ -610,16 +633,34 @@ class AppController(
                 timeoutMs = 40000,
             )
             applyOperation(dev.ziran.android.protocol.parseOperation((dispatched["operation"] as? JsonObject) ?: JsonObject(emptyMap())))
-            store.saveDraft(credential.serverId, sessionId, "")
+            if (!fromQueue) store.saveDraft(credential.serverId, sessionId, "")
         } catch (error: Exception) {
-            val unknown = error !is AdapterRequestError
-            if (!unknown) {
-                setState { it.copy(pending = null, composerText = text) }
+            // Only an adapter `error` reply proves the attempt never entered the
+            // session. Anything else (socket close, timeout) is unknown: the
+            // bytes may have reached the agent, so no resend is offered.
+            val rejected = error is AdapterRequestError
+            if (rejected) {
+                setState {
+                    it.copy(
+                        pending = if (isActive) null else it.pending,
+                        composerText = if (isActive && !fromQueue) text else it.composerText,
+                    )
+                }
                 store.clearPending(credential.serverId, sessionId)
-                store.saveDraft(credential.serverId, sessionId, text)
-                setState { it.copy(sessionsError = "Message was not sent: ${error.message}") }
+                if (fromQueue) {
+                    // The queued text was never accepted: keep it queued rather
+                    // than silently dropping it into the draft field.
+                    val restored = queues.pushFront(credential.serverId, sessionId, text)
+                    store.saveQueue(credential.serverId, sessionId, restored)
+                    if (_state.value.activeSessionId == sessionId) setState { it.copy(queuedMessages = restored) }
+                    setState { it.copy(sessionsError = "Queued message was not sent: ${error.message}") }
+                } else {
+                    store.saveDraft(credential.serverId, sessionId, text)
+                    setState { it.copy(sessionsError = "Message was not sent: ${error.message}") }
+                }
             } else {
-                setState { it.copy(pending = next.copy(state = "unknown", error = error.message)) }
+                val unknown = next.copy(state = "unknown", error = error.message)
+                setState { it.copy(pending = if (isActive) unknown else it.pending) }
                 store.savePending(credential.serverId, sessionId, operationId, text, "unknown", next.createdAt)
                 setState { it.copy(sessionsError = "Delivery unconfirmed: ${error.message}") }
             }
@@ -627,24 +668,67 @@ class AppController(
     }
 
     private var draining = false
+    private var lastPendingLookupAt = 0L
 
-    /** Send the first queued message once no turn is running. */
+    private suspend fun enqueue(sessionId: String, text: String) {
+        val serverId = currentCredential()?.serverId ?: return
+        val next = queues.enqueue(serverId, sessionId, text)
+        store.saveQueue(serverId, sessionId, next)
+        if (_state.value.activeSessionId == sessionId) setState { it.copy(queuedMessages = next) }
+    }
+
+    private suspend fun loadQueues(credential: PairedCredential) {
+        for (sessionId in store.queuedSessionIds(credential.serverId)) {
+            queues.load(credential.serverId, sessionId, store.loadQueue(credential.serverId, sessionId))
+        }
+        val active = _state.value.activeSessionId
+        if (active != null) setState { it.copy(queuedMessages = queues.list(credential.serverId, active)) }
+    }
+
+    /**
+     * Send the oldest queued message of whichever session has gone idle.
+     *
+     * Each take is scoped to that one session, and the text goes straight to
+     * sendText: the composer keeps whatever the user is typing now.
+     */
     private fun maybeDrainQueue() {
         if (draining) return
+        val credential = currentCredential() ?: return
         val current = _state.value
         // Never spend a queued message while offline: it would be lost without
         // an operation to look up later.
         if (current.connection != "connected") return
-        val running = current.live.turnId != null || current.live.daemonRunning
-        if (running || current.queuedMessages.isEmpty()) return
-        val next = current.queuedMessages.first()
+        val target = queues.pendingSessions().firstOrNull { (serverId, sessionId) ->
+            serverId == credential.serverId && sessionIsIdle(sessionId)
+        } ?: return
+        val sessionId = target.second
+        val text = queues.takeFirst(credential.serverId, sessionId) ?: return
         draining = true
         scope.launch {
-            setState { it.copy(queuedMessages = it.queuedMessages.drop(1), composerText = next) }
-            send()
-            draining = false
-            maybeDrainQueue()
+            store.saveQueue(credential.serverId, sessionId, queues.list(credential.serverId, sessionId))
+            if (_state.value.activeSessionId == sessionId) {
+                setState { it.copy(queuedMessages = queues.list(credential.serverId, sessionId)) }
+            }
+            try {
+                sendText(text, targetSessionId = sessionId, fromQueue = true)
+            } finally {
+                draining = false
+                maybeDrainQueue()
+            }
         }
+    }
+
+    /**
+     * Idle means source-backed: the live turn for the open session, or the
+     * session list status for any other one.
+     */
+    private fun sessionIsIdle(sessionId: String): Boolean {
+        val state = _state.value
+        if (state.activeSessionId == sessionId) {
+            return state.live.turnId == null && !state.live.daemonRunning
+        }
+        val summary = state.sessions.firstOrNull { it.sessionId == sessionId } ?: return false
+        return summary.status == "idle"
     }
 
     private fun notify(kind: String, title: String, body: String) {
@@ -653,12 +737,46 @@ class AppController(
         LocalNotifications.postIfBackgrounded(ctx, kind, sessionId, title, body)
     }
 
+    /**
+     * Reconcile one operation by id.
+     *
+     * A late `dispatching` update must not walk a terminal state backwards, and
+     * a `rejected`/`cancelled` operation proves the attempt never landed, so the
+     * pending entry clears and the text returns to the draft.
+     */
     private fun applyOperation(operation: OperationView) {
         if (operation.operationId.isEmpty()) return
-        setState { it.copy(operations = it.operations + (operation.operationId to operation)) }
+        val previous = _state.value.operations[operation.operationId]
+        if (OperationReconciler.isStaleEcho(previous, operation)) return
+
+        val credential = currentCredential()
+        val sessionId = _state.value.activeSessionId
         val pending = _state.value.pending
-        if (pending != null && pending.operationId == operation.operationId) {
-            setState { it.copy(pending = pending.copy(state = operation.state)) }
+        val isMine = pending != null && pending.operationId == operation.operationId
+        val outcome = OperationReconciler.reconcile(pending, operation)
+
+        setState {
+            it.copy(
+                operations = it.operations + (operation.operationId to operation),
+                pending = outcome.pending,
+                composerText = outcome.restoreComposerText ?: it.composerText,
+                sessionsError = outcome.errorMessage ?: it.sessionsError,
+            )
+        }
+        if (isMine && credential != null && sessionId != null) {
+            val settled = outcome.pending
+            val text = outcome.restoreComposerText
+            scope.launch {
+                if (settled == null) {
+                    store.clearPending(credential.serverId, sessionId)
+                    if (text != null) store.saveDraft(credential.serverId, sessionId, text)
+                } else {
+                    store.savePending(
+                        credential.serverId, sessionId,
+                        settled.operationId, settled.text, settled.state, settled.createdAt,
+                    )
+                }
+            }
         }
     }
 
@@ -703,7 +821,19 @@ class AppController(
                 scheduleSnapshot(400)
             }
         } catch (error: Exception) {
-            if (error is AdapterRequestError && error.code == "conflict") refreshSnapshot()
+            // A rejected stop is not a silent no-op: say so, and re-read the
+            // session so the status line is source-backed again.
+            val conflict = error is AdapterRequestError && error.code == "conflict"
+            setState {
+                it.copy(
+                    sessionsError = if (conflict) {
+                        "Stop conflicted with server state. Refreshing the session."
+                    } else {
+                        "Stop was rejected: ${error.message}"
+                    },
+                )
+            }
+            if (conflict || error is AdapterRequestError) refreshSnapshot()
         }
     }
 

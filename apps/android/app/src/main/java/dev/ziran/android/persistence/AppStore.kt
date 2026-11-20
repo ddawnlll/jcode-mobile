@@ -11,8 +11,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import dev.ziran.android.protocol.PairedCredential
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 
 private val Context.prefs: DataStore<Preferences> by preferencesDataStore(name = "ziran_prefs")
 
@@ -118,6 +120,48 @@ class AppStore(private val context: Context) {
             prefs.remove(stringKey(sessionKey(serverId, sessionId, "pendingState")))
             prefs.remove(stringKey(sessionKey(serverId, sessionId, "pendingAt")))
         }
+    }
+
+    // -- soft-interrupt queue, scoped exactly like drafts --------------------
+
+    /**
+     * Queue text is stored per session, and an index of sessions that hold
+     * queue is kept on the server. A message queued in thread A must survive a
+     * process kill and must never drain into thread B.
+     */
+    suspend fun saveQueue(serverId: String, sessionId: String, texts: List<String>) {
+        context.prefs.edit { prefs ->
+            val key = stringKey(sessionKey(serverId, sessionId, "queue"))
+            if (texts.isEmpty()) {
+                prefs.remove(key)
+                val index = readIndex(prefs[stringKey(serverKey(serverId, "queuedSessions"))])
+                    .filterNot { it == sessionId }
+                val indexKey = stringKey(serverKey(serverId, "queuedSessions"))
+                if (index.isEmpty()) prefs.remove(indexKey) else prefs[indexKey] = encodeList(index)
+            } else {
+                prefs[key] = encodeList(texts)
+                val index = readIndex(prefs[stringKey(serverKey(serverId, "queuedSessions"))])
+                if (sessionId !in index) {
+                    prefs[stringKey(serverKey(serverId, "queuedSessions"))] = encodeList(index + sessionId)
+                }
+            }
+        }
+    }
+
+    suspend fun loadQueue(serverId: String, sessionId: String): List<String> =
+        readIndex(context.prefs.data.first()[stringKey(sessionKey(serverId, sessionId, "queue"))])
+
+    suspend fun queuedSessionIds(serverId: String): List<String> =
+        readIndex(context.prefs.data.first()[stringKey(serverKey(serverId, "queuedSessions"))])
+
+    private fun encodeList(items: List<String>): String =
+        JsonArray(items.map { JsonPrimitive(it) }).toString()
+
+    private fun readIndex(raw: String?): List<String> {
+        if (raw.isNullOrEmpty()) return emptyList()
+        return runCatching {
+            Json.parseToJsonElement(raw).jsonArray.mapNotNull { element -> (element as? JsonPrimitive)?.content }
+        }.getOrDefault(emptyList())
     }
 
     suspend fun saveSessionListCache(serverId: String, rawJson: String) {
