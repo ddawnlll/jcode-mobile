@@ -15,6 +15,7 @@ daemon and the production adapter were never touched.
 | `restored-thread.png` | The thread: title block, prompt, history from the authoritative snapshot, composer |
 | `model-routes.png` | Model picker with the routes the staging daemon reports, effort brush row |
 | `keyboard-composer.png` | The composer rides the IME; the newest line stays in view |
+| `link-while-running.png` | An unusable pairing link opened while the app runs lands on the pair screen and says why |
 
 ## Motion (8 clips, app only)
 
@@ -33,6 +34,7 @@ board frame for frame".
 | `long-press.mp4` | 450 ms hold opens the action sheet with a haptic tick | Yes |
 | `pull-refresh.mp4` | Pulling at the top fills the ink ring, then the list reloads and settles | Yes |
 | `keyboard.mp4` | Tapping the composer raises the keyboard and the composer moves with it | Yes |
+| `kill-restore.mp4` | Force-stop and relaunch: the same server, the same thread, the same transcript | Yes |
 
 ## Verified behaviour, this build
 
@@ -46,7 +48,9 @@ board frame for frame".
 | Long press | PASS: sheet opens |
 | Pull to refresh | PASS: ring fills, list reloads |
 | Keyboard | PASS: composer rides the IME |
-| Relaunch | PASS: the app returns to the same server and the same thread |
+| Relaunch | PASS: force-stop and relaunch returns to the same server and thread (`kill-restore.mp4`) |
+| Link while running | PASS: an unusable link reaches the running app and shows the pairing error instead of being ignored |
+| Unusable link | PASS: the pair screen explains it, it does not fail silently |
 
 ## NOT_RUN or BLOCKED
 
@@ -65,9 +69,6 @@ board frame for frame".
 - **Notification fires while backgrounded:** NOT_RUN. The permission reason bar
   is on screen and asks once (see `keyboard-composer.png`), but a posted
   turn-done notification was not observed.
-- **Pairing link while the app is running:** NOT_RUN with the app already in the
-  foreground. The link path itself is verified cold-start and unit-tested
-  (`DeepLinkParseTest`).
 - **Frame pacing:** not measured in this run. No 120 Hz or physical-device claim.
 
 ## What changed in this pass

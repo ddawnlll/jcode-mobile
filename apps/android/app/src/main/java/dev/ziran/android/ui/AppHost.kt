@@ -174,8 +174,12 @@ fun ZiranApp(
                     stack = listOf(Screen.Threads, Screen.Thread(route.sessionId))
                     controller.openSession(route.sessionId)
                 }
-                // A link that cannot be used says so, instead of doing nothing.
-                DeepLinks.Route.Unknown -> controller.reportPairingLinkError()
+                // A link that cannot be used says so, on the screen where it can
+                // be fixed. Doing nothing would look like the link was ignored.
+                DeepLinks.Route.Unknown -> {
+                    stack = listOf(Screen.Start)
+                    controller.reportPairingLinkError()
+                }
             }
         }
     }
