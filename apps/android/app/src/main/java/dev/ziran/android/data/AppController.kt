@@ -135,6 +135,7 @@ class AppController(
         adapter.connect()
         scope.launch {
             adapter.status.collect { status ->
+                val revoked = adapter.lastCloseReason == "revoked"
                 setState {
                     it.copy(
                         connection = when (status) {
@@ -142,6 +143,8 @@ class AppController(
                             dev.ziran.android.connection.ConnectionStatus.Connected -> "connected"
                             dev.ziran.android.connection.ConnectionStatus.Offline -> "offline"
                         },
+                        // A revocation is a source-backed fact, not a guess.
+                        connectionMessage = if (revoked) "This device was revoked by the server." else null,
                         savedOnPhone = if (status == dev.ziran.android.connection.ConnectionStatus.Offline) true else it.savedOnPhone,
                         serverName = adapter.server.value?.name ?: it.serverName,
                     )
@@ -155,8 +158,9 @@ class AppController(
             }
         }
         scope.launch {
+            // One collector, in arrival order. The transport publishes on an
+            // unlimited channel precisely so nothing is conflated or dropped.
             adapter.events.collect { envelope ->
-                if (envelope == null) return@collect
                 handleEnvelope(envelope)
             }
         }
