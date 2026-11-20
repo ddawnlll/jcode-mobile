@@ -1,5 +1,13 @@
 package dev.ziran.android.ui
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -8,19 +16,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.background
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import dev.ziran.android.data.AppController
 import dev.ziran.android.design.InkRippleHost
+import dev.ziran.android.design.MotionMath
 import dev.ziran.android.design.Palette
+import dev.ziran.android.design.WuDurations
+import dev.ziran.android.design.WuEasing
 import dev.ziran.android.design.rememberAnimatorScale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** Hand-rolled back stack. State lives in the controller, not the screens. */
@@ -34,8 +43,11 @@ sealed interface Screen {
 
 /**
  * Application host. Day and night resolve from the saved theme mode and system
- * darkness. Every touch gets an ink ripple. Navigation never cancels a turn:
- * leaving a thread only changes which screen is painted.
+ * darkness. Every touch gets an ink ripple.
+ *
+ * Navigation never cancels a turn: leaving a thread only changes which screen is
+ * painted. System back is handled here through PredictiveBackHandler for every
+ * screen above the root, so the Activity is never finished from a child screen.
  */
 @Composable
 fun ZiranApp(controller: AppController, deepLink: String? = null) {
@@ -52,14 +64,71 @@ fun ZiranApp(controller: AppController, deepLink: String? = null) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val density = LocalDensity.current
     val paste: () -> Unit = {
         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
         val text = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
         if (text != null) controller.applyPairingLink(text)
     }
+
     var stack by remember { mutableStateOf(listOf<Screen>(Screen.Start)) }
-    val go: (Screen) -> Unit = { next -> stack = stack + next }
-    val back: () -> Unit = { if (stack.size > 1) stack = stack.dropLast(1) }
+    var transition by remember { mutableStateOf<NavTransition?>(null) }
+    val navProgress = remember { Animatable(1f) }
+    var lastTap by remember { mutableStateOf(Offset.Unspecified) }
+    var gestureActive by remember { mutableStateOf(false) }
+
+    // Forward navigation: pick the board transition for the pair of screens.
+    val go: (Screen, NavKind) -> Unit = { next, kind ->
+        val from = stack.last()
+        stack = stack + next
+        transition = NavTransition(kind, from, next, lastTap)
+        scope.launch {
+            runNavTransition(navProgress, kind, durationScale, reduced)
+            if (navProgress.value >= 0.999f) transition = null
+        }
+    }
+
+    // Back: 420 ms slide with the 22 percent parallax on the page beneath.
+    val back: () -> Unit = back@{
+        if (stack.size <= 1) return@back
+        val from = stack.last()
+        val to = stack[stack.size - 2]
+        stack = stack.dropLast(1)
+        transition = NavTransition(NavKind.Slide, from, to)
+        scope.launch {
+            runNavTransition(navProgress, NavKind.Slide, durationScale, reduced)
+            if (navProgress.value >= 0.999f) transition = null
+        }
+    }
+
+    // Predictive back for every screen above the root. The gesture drives the
+    // same offsets as the button; releasing past one third commits, otherwise
+    // it settles back in 320 ms.
+    PredictiveBackHandler(enabled = stack.size > 1) { progress ->
+        val from = stack.last()
+        val to = stack.getOrNull(stack.size - 2) ?: return@PredictiveBackHandler
+        transition = NavTransition(NavKind.Slide, from, to, predictive = true)
+        gestureActive = true
+        var last = 0f
+        try {
+            progress.collect { event ->
+                last = event.progress
+                navProgress.snapTo(event.progress.coerceIn(0f, 1f))
+            }
+        } catch (_: CancellationException) {
+            // The user let go short of the threshold.
+        }
+        gestureActive = false
+        if (MotionMath.shouldCommitBack(last)) {
+            navProgress.animateTo(1f, tween(120, easing = WuEasing.Default))
+            stack = stack.dropLast(1)
+            transition = null
+        } else {
+            navProgress.animateTo(0f, tween(WuDurations.PredictiveSettle, easing = WuEasing.Default))
+            transition = null
+        }
+    }
+
     var handledDeepLink by remember { mutableStateOf<String?>(null) }
 
     // Deep link: pair prefills and starts pairing; session opens the thread.
@@ -107,69 +176,85 @@ fun ZiranApp(controller: AppController, deepLink: String? = null) {
         focusManager.clearFocus()
         keyboard?.hide()
     }
+
+    val widthPx = with(density) { context.resources.displayMetrics.widthPixels.toFloat() }
+    val painted = transition
+
     Box(Modifier.fillMaxSize().background(palette.paper)) {
-        InkRippleHost(ink = palette.ink, durationScale = durationScale, reducedMotion = reduced) {
-            when (screen) {
-                Screen.Start -> StartScreen(
-                    palette = palette,
-                    sceneKey = state.scene,
-                    serverValue = state.pairServer,
-                    codeValue = state.pairCode,
-                    error = state.pairingError,
-                    onServerChange = controller::setPairServer,
-                    onCodeChange = controller::setPairCode,
-                    onPair = { scope.launch { controller.pairFromFields() } },
-                    onPaste = paste,
-                    reducedMotion = reduced,
-                )
-                Screen.Threads -> ThreadsScreen(
-                    palette = palette,
-                    sessions = state.sessions,
-                    serverName = state.serverName ?: "studio-vps",
-                    sceneKey = state.scene,
-                    onOpen = { id ->
-                        go(Screen.Thread(id))
-                        scope.launch { controller.openSession(id) }
-                    },
-                    onScenes = { go(Screen.Scenes) },
-                    onArchive = { id -> scope.launch { controller.archiveSession(id) } },
-                    onRestore = { id -> scope.launch { controller.restoreSession(id) } },
-                    onRename = { id, title -> scope.launch { controller.renameSession(id, title) } },
-                    onRefresh = { scope.launch { controller.refreshSessions() } },
-                    reducedMotion = reduced,
-                )
-                is Screen.Thread -> ThreadScreen(
-                    palette = palette,
-                    state = state,
-                    sceneKey = state.scene,
-                    onBack = back,
-                    onModel = { go(Screen.Model) },
-                    onScenes = { go(Screen.Scenes) },
-                    onTextChange = controller::setComposerText,
-                    onSend = { text -> scope.launch { controller.sendText(text) } },
-                    onStop = { scope.launch { controller.stop() } },
-                    onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
-                    imePadding = Modifier.imePadding(),
-                    reducedMotion = reduced,
-                )
-                Screen.Model -> ModelScreen(
-                    palette = palette,
-                    state = state,
-                    sceneKey = state.scene,
-                    onBack = back,
-                    onSelectModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
-                    onSetEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
-                    reducedMotion = reduced,
-                )
-                Screen.Scenes -> ScenesScreen(
-                    palette = palette,
-                    selectedScene = state.scene,
-                    themeMode = state.themeMode,
-                    onBack = back,
-                    onSelectScene = { key -> scope.launch { controller.setScene(key) } },
-                    onSelectTheme = { mode -> scope.launch { controller.setThemeMode(mode) } },
-                    reducedMotion = reduced,
-                )
+        InkRippleHost(
+            ink = palette.ink,
+            durationScale = durationScale,
+            reducedMotion = reduced,
+            onTapOrigin = { origin -> if (!gestureActive) lastTap = origin },
+        ) {
+            ScreenTransition(
+                current = screen,
+                transition = painted,
+                progress = navProgress.value,
+                widthPx = widthPx,
+            ) { target ->
+                when (target) {
+                    Screen.Start -> StartScreen(
+                        palette = palette,
+                        sceneKey = state.scene,
+                        serverValue = state.pairServer,
+                        codeValue = state.pairCode,
+                        error = state.pairingError,
+                        onServerChange = controller::setPairServer,
+                        onCodeChange = controller::setPairCode,
+                        onPair = { scope.launch { controller.pairFromFields() } },
+                        onPaste = paste,
+                        reducedMotion = reduced,
+                    )
+                    Screen.Threads -> ThreadsScreen(
+                        palette = palette,
+                        sessions = state.sessions,
+                        serverName = state.serverName ?: "studio-vps",
+                        sceneKey = state.scene,
+                        onOpen = { id ->
+                            go(Screen.Thread(id), NavKind.InkDrop)
+                            scope.launch { controller.openSession(id) }
+                        },
+                        onScenes = { go(Screen.Scenes, NavKind.Unroll) },
+                        onArchive = { id -> scope.launch { controller.archiveSession(id) } },
+                        onRestore = { id -> scope.launch { controller.restoreSession(id) } },
+                        onRename = { id, title -> scope.launch { controller.renameSession(id, title) } },
+                        onRefresh = { scope.launch { controller.refreshSessions() } },
+                        reducedMotion = reduced,
+                    )
+                    is Screen.Thread -> ThreadScreen(
+                        palette = palette,
+                        state = state,
+                        sceneKey = state.scene,
+                        onBack = back,
+                        onModel = { go(Screen.Model, NavKind.Unroll) },
+                        onScenes = { go(Screen.Scenes, NavKind.Unroll) },
+                        onTextChange = controller::setComposerText,
+                        onSend = { text -> scope.launch { controller.sendText(text) } },
+                        onStop = { scope.launch { controller.stop() } },
+                        onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
+                        imePadding = Modifier.imePadding(),
+                        reducedMotion = reduced,
+                    )
+                    Screen.Model -> ModelScreen(
+                        palette = palette,
+                        state = state,
+                        sceneKey = state.scene,
+                        onBack = back,
+                        onSelectModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
+                        onSetEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
+                        reducedMotion = reduced,
+                    )
+                    Screen.Scenes -> ScenesScreen(
+                        palette = palette,
+                        selectedScene = state.scene,
+                        themeMode = state.themeMode,
+                        onBack = back,
+                        onSelectScene = { key -> scope.launch { controller.setScene(key) } },
+                        onSelectTheme = { mode -> scope.launch { controller.setThemeMode(mode) } },
+                        reducedMotion = reduced,
+                    )
+                }
             }
         }
     }

@@ -14,10 +14,16 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,18 +39,23 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ziran.android.data.AppState
 import dev.ziran.android.data.LiveBlock
 import dev.ziran.android.data.LiveTool
+import dev.ziran.android.design.MotionMath
 import dev.ziran.android.design.Palette
 import dev.ziran.android.design.Seal
+import dev.ziran.android.design.WuEasing
 import dev.ziran.android.design.WuFonts
 import dev.ziran.android.protocol.AgentKind
 import dev.ziran.android.protocol.HistoryMessageView
@@ -114,7 +125,10 @@ fun ThreadScreen(
             }
             // History messages from the authoritative snapshot.
             if (snapshot != null) {
-                items(snapshot.messages) { message ->
+                items(
+                    snapshot.messages,
+                    key = { message -> "history-${message.index}-${message.role}" },
+                ) { message ->
                     HistoryRow(message, palette)
                 }
             }
@@ -127,12 +141,12 @@ fun ThreadScreen(
                 item { ThinkingFold(state.live.reasoning, palette) }
             }
             // Tool steps.
-            items(state.live.tools) { tool ->
-                ToolRow(tool, palette)
+            items(state.live.tools, key = { tool -> "tool-${tool.callId}" }) { tool ->
+                ToolRow(tool, palette, reducedMotion)
             }
             // Assistant answer, word by word.
             if (state.live.assistants.isNotEmpty()) {
-                item { AnswerBlock(state.live.assistants, palette) }
+                item { AnswerBlock(state.live.assistants, palette, reducedMotion) }
             }
             // Permission card inline.
             if (state.live.permission != null) {
@@ -141,7 +155,7 @@ fun ThreadScreen(
                 }
             }
             // Queued messages (sent while working = soft interrupt).
-            items(state.queuedMessages) { queued ->
+            itemsIndexed(state.queuedMessages, key = { index, _ -> "queued-$index" }) { _, queued ->
                 QueuedRow(queued, palette)
             }
         }
@@ -219,44 +233,117 @@ private fun ThinkingFold(reasoning: List<LiveBlock>, palette: Palette) {
 }
 
 @Composable
-private fun ToolRow(tool: LiveTool, palette: Palette) {
-    var expanded by remember { mutableStateOf(tool.status == "running") }
+private fun ToolRow(tool: LiveTool, palette: Palette, reducedMotion: Boolean) {
+    var expanded by remember(tool.callId) { mutableStateOf(tool.status == "running") }
+
+    // Ink drop, then the intent slides in: 550 ms in, one shared ease.
+    var appeared by remember(tool.callId) { mutableStateOf(reducedMotion) }
+    LaunchedEffect(tool.callId) {
+        if (reducedMotion) { appeared = true; return@LaunchedEffect }
+        kotlinx.coroutines.delay(16)
+        appeared = true
+    }
+    val entrance by animateFloatAsState(
+        targetValue = if (appeared) 1f else 0f,
+        animationSpec = tween(MotionMath.ToolInMs, easing = WuEasing.Default),
+        label = "tool-in-${tool.callId}",
+    )
+
+    // The drop becomes a red ring as the step finishes: 900 ms draw.
+    val ring by animateFloatAsState(
+        targetValue = if (tool.status == "done" || tool.status == "failed") 1f else 0f,
+        animationSpec = tween(MotionMath.RingDrawMs, easing = WuEasing.Default),
+        label = "ring-${tool.callId}",
+    )
+
     val number = tool.seq.toString().padStart(2, '0')
-    Row(Modifier.padding(vertical = 4.dp)) {
+    Row(
+        Modifier
+            .padding(vertical = 4.dp)
+            .graphicsLayer {
+                alpha = entrance
+                translationX = (1f - entrance) * -12f
+                translationY = (1f - entrance) * 6f
+            },
+    ) {
         Text(number, style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3), modifier = Modifier.width(24.dp))
         Column(Modifier.weight(1f)) {
             Row {
                 Text(tool.name, style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.5.sp, color = palette.ink3), modifier = Modifier.padding(end = 4.dp))
-                Text(tool.input.take(60), style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, lineHeight = 25.sp, color = palette.ink2), maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(tool.input.take(60), style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, lineHeight = 25.sp, color = palette.ink2), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (tool.status == "running") {
                 Box(Modifier.fillMaxWidth().height(1.5.dp).padding(top = 2.dp, start = 26.dp).background(palette.ink3.copy(alpha = 0.5f)))
             }
-            if (expanded && (tool.output.isNotEmpty() || tool.error != null)) {
-                Text(tool.output.take(400), style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3), modifier = Modifier.padding(top = 4.dp))
-                if (tool.error != null) Text(tool.error, style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.seal))
+            // Diff and output panels unfold under their row: 750 ms height ease.
+            AnimatedVisibility(
+                visible = expanded && (tool.output.isNotEmpty() || tool.error != null),
+                enter = expandVertically(
+                    animationSpec = tween(MotionMath.PanelMs, easing = WuEasing.Default),
+                    expandFrom = Alignment.Top,
+                ) + fadeIn(tween(MotionMath.PanelMs, easing = WuEasing.Default)),
+            ) {
+                Column {
+                    Text(tool.output.take(400), style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3), modifier = Modifier.padding(top = 4.dp))
+                    if (tool.error != null) Text(tool.error, style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.seal))
+                }
             }
         }
-        // Ink drop -> running hairline -> red ring.
-        if (tool.status == "done") {
-            Canvas(Modifier.size(13.dp)) {
-                drawArc(palette.seal, startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(1.6.dp.toPx()))
+        // Ink drop -> running hairline -> red ring drawn as the step finishes.
+        when (tool.status) {
+            "done" -> Canvas(Modifier.size(13.dp)) {
+                drawArc(palette.seal, startAngle = -90f, sweepAngle = 360f * ring, useCenter = false, style = Stroke(1.6.dp.toPx()))
             }
-        } else if (tool.status == "failed") {
-            Box(Modifier.size(13.dp).background(palette.seal, androidx.compose.foundation.shape.CircleShape))
-        } else if (tool.status == "running") {
-            Text("⠋", style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 13.sp, color = palette.blue))
-        } else {
-            Box(Modifier.size(8.dp).background(palette.ink, androidx.compose.foundation.shape.CircleShape))
+            "failed" -> Canvas(Modifier.size(13.dp)) {
+                drawArc(palette.seal, startAngle = -90f, sweepAngle = 360f * ring, useCenter = false, style = Stroke(1.6.dp.toPx()))
+            }
+            "running" -> Text("⠋", style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 13.sp, color = palette.blue))
+            else -> Box(Modifier.size(8.dp).background(palette.ink, androidx.compose.foundation.shape.CircleShape))
         }
     }
 }
 
 @Composable
-private fun AnswerBlock(assistants: List<LiveBlock>, palette: Palette) {
-    assistants.forEach { block ->
-        Text(block.text, style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.5.sp, lineHeight = 24.sp, fontStyle = FontStyle.Italic, color = palette.ink2), modifier = Modifier.padding(vertical = 4.dp))
+private fun AnswerBlock(assistants: List<LiveBlock>, palette: Palette, reducedMotion: Boolean) {
+    assistants.forEach { block -> AnswerWords(block, palette, reducedMotion) }
+}
+
+/**
+ * The answer settles word by word, 65 ms apart. The full text is present from
+ * the first frame: only the ink fades in, so a long answer is never hidden and
+ * screen readers always read the whole message.
+ */
+@Composable
+private fun AnswerWords(block: LiveBlock, palette: Palette, reducedMotion: Boolean) {
+    val words = remember(block.text) { block.text.split(' ') }
+    val cap = remember(words.size) { minOf(words.size, 80) }
+    var revealed by remember(block.id) { mutableStateOf(0) }
+    LaunchedEffect(block.text, reducedMotion) {
+        if (reducedMotion) {
+            revealed = words.size
+            return@LaunchedEffect
+        }
+        while (revealed < cap) {
+            kotlinx.coroutines.delay(MotionMath.WordStaggerMs.toLong())
+            revealed += 1
+        }
     }
+    val styled = androidx.compose.ui.text.buildAnnotatedString {
+        words.forEachIndexed { index, word ->
+            val alpha = when {
+                reducedMotion || index < revealed || revealed >= cap -> 1f
+                index == revealed -> 0.5f
+                else -> 0.15f
+            }
+            withStyle(SpanStyle(color = palette.ink2.copy(alpha = alpha))) { append(word) }
+            if (index != words.lastIndex) append(" ")
+        }
+    }
+    Text(
+        styled,
+        style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.5.sp, lineHeight = 24.sp, fontStyle = FontStyle.Italic, color = palette.ink2),
+        modifier = Modifier.padding(vertical = 4.dp),
+    )
 }
 
 @Composable

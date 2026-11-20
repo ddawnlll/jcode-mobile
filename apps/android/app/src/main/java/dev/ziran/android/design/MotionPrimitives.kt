@@ -91,6 +91,8 @@ fun InkRippleHost(
     ink: Color,
     durationScale: Float,
     reducedMotion: Boolean,
+    /** Reports each pointer-down in host coordinates, for the ink-drop origin. */
+    onTapOrigin: (androidx.compose.ui.geometry.Offset) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val ripples = remember { mutableStateListOf<Ripple>() }
@@ -106,6 +108,7 @@ fun InkRippleHost(
                     if (down != null) {
                         nextId[0] += 1
                         ripples.add(Ripple(nextId[0], down.position.x, down.position.y))
+                        onTapOrigin(down.position)
                     }
                 }
             }
