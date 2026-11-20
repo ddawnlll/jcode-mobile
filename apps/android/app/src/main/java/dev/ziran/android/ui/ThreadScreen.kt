@@ -73,6 +73,7 @@ import dev.ziran.android.protocol.HistoryMessageView
 fun ThreadScreen(
     palette: Palette,
     state: AppState,
+    modifier: Modifier = Modifier,
     sceneKey: String = "peaks",
     listState: LazyListState = rememberScrollState().let { LazyListState() },
     onBack: () -> Unit = {},
@@ -83,14 +84,13 @@ fun ThreadScreen(
     onStop: () -> Unit = {},
     onPermission: (String) -> Unit = {},
     onQueue: (String) -> Unit = {},
-    imePadding: Modifier = Modifier,
     reducedMotion: Boolean = false,
 ) {
     val snapshot = state.snapshot
     val title = snapshot?.session?.title ?: "Thread"
     val agent = snapshot?.session?.agentLabel ?: "fox"
     val statusLine = statusLineFor(state)
-    Box(Modifier.fillMaxSize().background(palette.paper).then(imePadding)) {
+    Box(modifier.fillMaxSize().background(palette.paper)) {
         ScreenChrome(sceneKey, palette, headerHeightDp = 340, reducedMotion = reducedMotion)
         // Back chevron
         Box(

@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import dev.ziran.android.data.AppController
@@ -77,7 +76,6 @@ fun ZiranApp(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val density = LocalDensity.current
     val paste: () -> Unit = {
         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
         val text = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
@@ -190,7 +188,7 @@ fun ZiranApp(
         keyboard?.hide()
     }
 
-    val widthPx = with(density) { context.resources.displayMetrics.widthPixels.toFloat() }
+    val widthPx = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toFloat()
     val painted = transition
 
     Box(Modifier.fillMaxSize().background(palette.paper)) {
@@ -253,7 +251,7 @@ fun ZiranApp(
                         onSend = { text -> scope.launch { controller.sendText(text) } },
                         onStop = { scope.launch { controller.stop() } },
                         onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
-                        imePadding = Modifier.imePadding(),
+                        modifier = Modifier.imePadding(),
                         reducedMotion = reduced,
                     )
                     Screen.Model -> ModelScreen(

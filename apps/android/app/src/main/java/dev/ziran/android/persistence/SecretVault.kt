@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.content.edit
 import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -56,7 +57,7 @@ object SecretVault {
             val packed = ByteArray(iv.size + encrypted.size)
             System.arraycopy(iv, 0, packed, 0, iv.size)
             System.arraycopy(encrypted, 0, packed, iv.size, encrypted.size)
-            prefs(context).edit().putString(key, Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
+            prefs(context).edit { putString(key, Base64.encodeToString(packed, Base64.NO_WRAP)) }
             true
         } catch (error: Exception) {
             Log.w(TAG, "could not store a vault value", error)
@@ -83,6 +84,6 @@ object SecretVault {
     fun has(context: Context, key: String): Boolean = prefs(context).contains(key)
 
     fun delete(context: Context, key: String) {
-        prefs(context).edit().remove(key).apply()
+        prefs(context).edit { remove(key) }
     }
 }

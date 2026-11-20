@@ -41,23 +41,22 @@ android {
         buildConfig = true
     }
     lint {
-        abortOnError = false
+        // A passing lint has to mean something.
+        abortOnError = true
+        warningsAsErrors = false
     }
 }
 
 dependencies {
-    implementation(libs.compose.bom)
+    // One BOM for every Compose artifact; the catalog entries are unversioned.
+    implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
-    implementation(libs.compose.ui.android)
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     implementation(libs.compose.runtime)
-    implementation(libs.compose.runtime.android)
     implementation(libs.compose.foundation)
-    implementation(libs.compose.foundation.android)
     implementation(libs.compose.animation)
-    implementation(libs.compose.animation.android)
     implementation(libs.activity.compose)
     implementation(libs.activity.ktx)
     implementation(libs.lifecycle.runtime.ktx)

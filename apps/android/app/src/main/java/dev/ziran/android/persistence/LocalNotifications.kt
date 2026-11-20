@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 
 /**
  * Local notifications only, posted when the app is backgrounded for turn-done
@@ -55,7 +56,7 @@ object LocalNotifications {
         if (!isBackgrounded(context)) return false
         if (!hasPermission(context)) return false
         ensureChannels(context)
-        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("ziran://session/$sessionId"))
+        val intent = Intent(Intent.ACTION_VIEW, "ziran://session/$sessionId".toUri())
         intent.setPackage(context.packageName)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         val pending = PendingIntent.getActivity(context, sessionId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)

@@ -18,12 +18,15 @@ import dev.ziran.android.ui.ZiranApp
  * The controller lives in [ZiranApplication]; this class only renders it and
  * forwards intents. It never owns a turn, and onDestroy does not close anything.
  */
+@android.annotation.SuppressLint("InlinedApi")
 class MainActivity : ComponentActivity() {
 
     /** Bumped on every intent so an identical link still re-runs the effect. */
     private var deepLinkSeq = mutableStateOf(0)
     private var deepLink = mutableStateOf<String?>(null)
 
+    // The permission constant is inlined from API 33; the launch is guarded
+    // by hasPermission(), which checks the SDK level first.
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
