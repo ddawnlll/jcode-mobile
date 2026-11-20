@@ -90,6 +90,22 @@ fun ThreadScreen(
     val title = snapshot?.session?.title ?: "Thread"
     val agent = snapshot?.session?.agentLabel ?: "fox"
     val statusLine = statusLineFor(state)
+    // Follow the newest line while a turn runs, but only when the reader is
+    // already at the bottom. Dragging someone away from the paragraph they are
+    // reading is not "following along".
+    LaunchedEffect(
+        state.lastSeq,
+        state.live.turnId,
+        state.live.assistants.size,
+        state.live.tools.size,
+        state.queuedMessages.size,
+    ) {
+        val info = listState.layoutInfo
+        val total = info.totalItemsCount
+        if (total == 0) return@LaunchedEffect
+        val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: return@LaunchedEffect
+        if (lastVisible >= total - 2) listState.animateScrollToItem(total - 1)
+    }
     Box(modifier.fillMaxSize().background(palette.paper)) {
         ScreenChrome(sceneKey, palette, headerHeightDp = 340, reducedMotion = reducedMotion)
         // Back chevron
