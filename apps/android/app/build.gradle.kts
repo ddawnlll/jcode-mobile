@@ -37,6 +37,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG decides whether 10.0.2.2 cleartext is allowed.
+        buildConfig = true
     }
     lint {
         abortOnError = false

@@ -4,6 +4,14 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -50,7 +58,12 @@ sealed interface Screen {
  * screen above the root, so the Activity is never finished from a child screen.
  */
 @Composable
-fun ZiranApp(controller: AppController, deepLink: String? = null) {
+fun ZiranApp(
+    controller: AppController,
+    deepLink: String? = null,
+    deepLinkNonce: Int = 0,
+    onRequestNotifications: () -> Unit = {},
+) {
     val state by controller.state.collectAsState()
     val dark = isSystemInDarkTheme()
     val palette = when (state.themeMode) {
@@ -132,8 +145,8 @@ fun ZiranApp(controller: AppController, deepLink: String? = null) {
     var handledDeepLink by remember { mutableStateOf<String?>(null) }
 
     // Deep link: pair prefills and starts pairing; session opens the thread.
-    LaunchedEffect(deepLink) {
-        if (deepLink != null && deepLink != handledDeepLink) {
+    LaunchedEffect(deepLink, deepLinkNonce) {
+        if (deepLink != null && (deepLink != handledDeepLink || deepLinkNonce > 0)) {
             handledDeepLink = deepLink
             when (val route = DeepLinks.parse(deepLink)) {
                 is DeepLinks.Route.Pair -> {
@@ -181,6 +194,13 @@ fun ZiranApp(controller: AppController, deepLink: String? = null) {
     val painted = transition
 
     Box(Modifier.fillMaxSize().background(palette.paper)) {
+        if (state.notificationsPrompt) {
+            NotificationReasonBar(
+                palette = palette,
+                onAllow = onRequestNotifications,
+                onDismiss = { controller.notificationsHandled(false) },
+            )
+        }
         InkRippleHost(
             ink = palette.ink,
             durationScale = durationScale,
@@ -256,6 +276,70 @@ fun ZiranApp(controller: AppController, deepLink: String? = null) {
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The reason for POST_NOTIFICATIONS, on screen, before the system dialog.
+ * Turn-done and approval notices are local only; nothing claims remote push.
+ */
+@Composable
+private fun NotificationReasonBar(
+    palette: Palette,
+    onAllow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Column(
+        Modifier
+            .fillMaxWidth()
+            .background(palette.paper2)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+    ) {
+        androidx.compose.material3.Text(
+            "Turn notices",
+            style = androidx.compose.ui.text.TextStyle(
+                fontFamily = dev.ziran.android.design.WuFonts.Garamond,
+                fontSize = 16.sp,
+                color = palette.ink,
+            ),
+        )
+        androidx.compose.material3.Text(
+            "A local notice when a turn finishes or an approval is needed while Ziran is in the background. Nothing is sent from a server.",
+            style = androidx.compose.ui.text.TextStyle(
+                fontFamily = dev.ziran.android.design.WuFonts.Garamond,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                color = palette.ink3,
+            ),
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        androidx.compose.foundation.layout.Row(Modifier.padding(top = 8.dp)) {
+            androidx.compose.material3.Text(
+                "not now",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = dev.ziran.android.design.WuFonts.Mono,
+                    fontSize = 12.sp,
+                    color = palette.ink3,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                ),
+                modifier = Modifier
+                    .padding(end = 18.dp)
+                    .semantics { role = androidx.compose.ui.semantics.Role.Button; contentDescription = "Not now" }
+                    .clickable { onDismiss() },
+            )
+            androidx.compose.material3.Text(
+                "allow",
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = dev.ziran.android.design.WuFonts.Mono,
+                    fontSize = 12.sp,
+                    color = palette.seal,
+                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                ),
+                modifier = Modifier
+                    .semantics { role = androidx.compose.ui.semantics.Role.Button; contentDescription = "Allow notifications" }
+                    .clickable { onAllow() },
+            )
         }
     }
 }

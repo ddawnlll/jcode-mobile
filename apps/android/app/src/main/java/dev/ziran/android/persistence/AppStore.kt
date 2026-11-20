@@ -179,6 +179,13 @@ class AppStore(private val context: Context) {
     suspend fun loadSnapshotCache(serverId: String, sessionId: String): String? =
         context.prefs.data.first()[stringKey(sessionKey(serverId, sessionId, "snapshot"))]
 
+    suspend fun setNotificationsAsked(value: Boolean) {
+        context.prefs.edit { it[boolKey("ui:notificationsAsked")] = value }
+    }
+
+    suspend fun notificationsAsked(): Boolean =
+        context.prefs.data.first()[boolKey("ui:notificationsAsked")] ?: false
+
     // Preferences: scene, theme, model choice.
     suspend fun setScene(sceneKey: String) {
         context.prefs.edit { it[stringKey("ui:scene")] = sceneKey }

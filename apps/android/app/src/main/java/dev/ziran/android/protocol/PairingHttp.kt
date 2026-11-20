@@ -19,7 +19,7 @@ object PairingHttp {
 
     suspend fun pair(baseUrl: String, code: String, deviceName: String, http: OkHttpClient): PairPayload =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val normalized = normalizeServerUrl(baseUrl).toString().trimEnd('/')
+        val normalized = dev.ziran.android.connection.ServerUrls.normalize(baseUrl)
         val body = JsonObject(
             mapOf(
                 "code" to JsonPrimitive(code.trim()),
@@ -31,20 +31,23 @@ object PairingHttp {
             .url("$normalized/v2/pair")
             .post(body)
             .build()
-        val response = http.newCall(request).execute()
-        val text = response.body?.string() ?: throw IllegalStateException("Empty pairing response.")
-        val obj = json.parseToJsonElement(text).jsonObject
-        if (!response.isSuccessful) {
-            val error = parseError(obj)
-            throw AdapterRequestError(error)
+        // `use` closes the response body on the success path and on a throw.
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string() ?: throw IllegalStateException("Empty pairing response.")
+            val obj = json.parseToJsonElement(text).jsonObject
+            if (!response.isSuccessful) throw AdapterRequestError(parseError(obj))
+            buildPayload(obj)
         }
+    }
+
+    private fun buildPayload(obj: JsonObject): PairPayload {
         val token = obj["token"]?.let { it.toString().trim('"') }
         val device = obj["device"]?.let { runCatching { it.jsonObject }.getOrNull() }
         val server = obj["server"]?.let { runCatching { it.jsonObject }.getOrNull() }
         if (token.isNullOrEmpty() || device == null || server == null) {
             throw IllegalStateException("The adapter returned an incomplete pairing response.")
         }
-        PairPayload(token, parseDeviceInfo(device), parseServerInfo(server))
+        return PairPayload(token, parseDeviceInfo(device), parseServerInfo(server))
     }
 }
 

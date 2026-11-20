@@ -12,7 +12,6 @@ import dev.ziran.android.protocol.PairingHttp
 import dev.ziran.android.protocol.PairPayload
 import dev.ziran.android.protocol.SessionSnapshot
 import dev.ziran.android.protocol.SessionSummary
-import dev.ziran.android.protocol.normalizeServerUrl
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -78,6 +77,9 @@ class AppController(
             val theme = store.getThemeMode()
             setState { it.copy(scene = scene, themeMode = theme) }
             context?.let { LocalNotifications.ensureChannels(it) }
+            // Ask once, after the first successful pairing, with the reason on
+            // screen. Never before pairing: nothing to notify about yet.
+            setState { it.copy(notificationsPrompt = false) }
             val serverIds = store.listServerIds()
             val first = serverIds.firstOrNull()
             if (first == null) {
@@ -102,7 +104,7 @@ class AppController(
     suspend fun pair(baseUrl: String, code: String, deviceName: String) {
         setState { it.copy(phase = "pairing", pairingStage = "pairing", pairingError = null, pairingMessage = "Exchanging the one-time pairing code.") }
         try {
-            val normalized = normalizeServerUrl(baseUrl).toString().trimEnd('/')
+            val normalized = dev.ziran.android.connection.ServerUrls.normalize(baseUrl)
             val response: PairPayload = PairingHttp.pair(normalized, code, deviceName, http)
             val credential = PairedCredential(
                 baseUrl = normalized,
@@ -116,6 +118,7 @@ class AppController(
             setState { it.copy(pairingStage = "connecting", pairingMessage = "Negotiating the authenticated mobile channel.") }
             startClient(credential, fresh = true)
             setState { it.copy(phase = "ready", pairingStage = "verified", pairingError = null) }
+            maybeAskForNotifications()
         } catch (error: Exception) {
             setState {
                 it.copy(
@@ -729,6 +732,30 @@ class AppController(
         }
         val summary = state.sessions.firstOrNull { it.sessionId == sessionId } ?: return false
         return summary.status == "idle"
+    }
+
+    /**
+     * On Android 13+ a notification needs a runtime permission. Ask once, after
+     * pairing, and say why on screen rather than firing a bare system dialog.
+     */
+    private suspend fun maybeAskForNotifications() {
+        val ctx = context ?: return
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        if (store.notificationsAsked()) return
+        if (LocalNotifications.hasPermission(ctx)) {
+            store.setNotificationsAsked(true)
+            return
+        }
+        setState { it.copy(notificationsPrompt = true) }
+    }
+
+    /** Record the user's answer; the prompt is not shown again. */
+    fun notificationsHandled(granted: Boolean) {
+        scope.launch {
+            store.setNotificationsAsked(true)
+            setState { it.copy(notificationsPrompt = false) }
+            if (granted) context?.let { LocalNotifications.ensureChannels(it) }
+        }
     }
 
     private fun notify(kind: String, title: String, body: String) {

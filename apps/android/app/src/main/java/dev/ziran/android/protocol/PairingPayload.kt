@@ -54,9 +54,9 @@ object PairingPayload {
             if (exp <= nowMs) throw IllegalArgumentException("This pairing link has expired.")
         }
         val serverRaw = params["url"]?.firstOrNull() ?: ""
-        val server = normalizeServerUrl(serverRaw) // throws on invalid
+        val server = java.net.URI(dev.ziran.android.connection.ServerUrls.normalize(serverRaw)) // throws on invalid
         val host = server.host?.lowercase() ?: throw IllegalArgumentException("This pairing link has an invalid server address.")
-        val loopback = isLoopbackHost(host)
+        val loopback = dev.ziran.android.connection.ServerUrls.isLoopbackHost(host)
         if (server.scheme == "http" && !loopback) {
             throw IllegalArgumentException("Remote pairing requires a trusted HTTPS address.")
         }
@@ -83,59 +83,6 @@ object PairingPayload {
         val base = "jcode://pair?v=2&url=" + URLEncoder.encode(server, "UTF-8") + "&code=" + URLEncoder.encode(code, "UTF-8")
         return if (name != null) base + "&name=" + URLEncoder.encode(name, "UTF-8") else base
     }
-}
-
-/** True for loopback hosts: localhost, 127.0.0.1, ::1, *.localhost. */
-fun isLoopbackHost(host: String?): Boolean {
-    if (host.isNullOrEmpty()) return false
-    val h = host.lowercase().trim('[', ']')
-    // 10.0.2.2 is the Android emulator's alias for the host loopback interface.
-    return h == "localhost" || h == "127.0.0.1" || h == "::1" ||
-        h == "10.0.2.2" || h.endsWith(".localhost")
-}
-
-/**
- * Normalize a pasted server address to its origin. Bare hosts get https, loopback
- * gets http. A pasted app URL is accepted and reduced to its origin.
- */
-fun normalizeServerUrl(input: String): URI {
-    var value = input.trim()
-    if (value.isEmpty()) throw IllegalArgumentException("Enter the adapter address.")
-    if (!value.startsWith("http://", ignoreCase = true) && !value.startsWith("https://", ignoreCase = true)) {
-        val bareHost = value.substringBefore('/').substringBefore(':')
-        value = (if (isLoopbackHost(bareHost)) "http" else "https") + "://" + value
-    }
-    val url = try {
-        URI(value)
-    } catch (_: Exception) {
-        throw IllegalArgumentException("This pairing link has an invalid server address.")
-    }
-    if (url.scheme != "http" && url.scheme != "https") {
-        throw IllegalArgumentException("This pairing link has an invalid server address.")
-    }
-    if (!url.userInfo.isNullOrEmpty()) {
-        throw IllegalArgumentException("This pairing link has an invalid server address.")
-    }
-    if (url.scheme == "http" && !isLoopbackHost(url.host)) {
-        throw IllegalArgumentException("Remote pairing requires a trusted HTTPS address.")
-    }
-    if ((url.path != null && url.path != "" && url.path != "/") || !url.query.isNullOrEmpty() || url.fragment != null) {
-        throw IllegalArgumentException("This pairing link has an invalid server address.")
-    }
-    // Rebuild origin only.
-    val port = url.port
-    val authority = if (port != -1 && !((url.scheme == "https" && port == 443) || (url.scheme == "http" && port == 80))) {
-        url.host + ":" + port
-    } else {
-        url.host ?: throw IllegalArgumentException("This pairing link has an invalid server address.")
-    }
-    return URI.create(url.scheme + "://" + authority)
-}
-
-fun wsUrlFor(baseUrl: String): String {
-    val url = URI(baseUrl)
-    val wsScheme = if (url.scheme == "https") "wss" else "ws"
-    return "$wsScheme://${url.host}:${if (url.port != -1) url.port else if (wsScheme == "wss") 443 else 80}/v2/ws"
 }
 
 fun hexUuid(prefix: String): String = prefix + "_" + java.util.UUID.randomUUID().toString()

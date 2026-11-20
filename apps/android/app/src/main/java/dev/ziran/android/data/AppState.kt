@@ -89,4 +89,6 @@ data class AppState(
     val queuedNotice: String? = null,
     val serverName: String? = null,
     val protocolVersion: Int? = null,
+    /** True when the POST_NOTIFICATIONS reason should be on screen. */
+    val notificationsPrompt: Boolean = false,
 )
