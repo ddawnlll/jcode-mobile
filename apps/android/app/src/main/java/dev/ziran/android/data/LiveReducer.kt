@@ -77,14 +77,21 @@ class LiveReducer {
                 } else {
                     reasoning[reasoning.lastIndex] = last.copy(text = last.text + event.text)
                 }
-                next.copy(live = next.live.copy(reasoning = reasoning, status = "thinking"))
+                val startMs = next.live.reasoningStartedAtMs ?: payload.observedAtMs.takeIf { it > 0 } ?: System.currentTimeMillis()
+                next.copy(live = next.live.copy(reasoning = reasoning, reasoningStartedAtMs = startMs, status = "thinking"))
             }
-            is SessionEvent.ReasoningDone -> next.copy(
-                live = next.live.copy(
-                    reasoning = next.live.reasoning.map { if (it.done) it else it.copy(done = true) },
-                    status = "working",
-                ),
-            )
+            is SessionEvent.ReasoningDone -> {
+                val secs = event.durationSecs ?: next.live.reasoningStartedAtMs?.let {
+                    ((System.currentTimeMillis() - it) / 1000L).coerceAtLeast(1L)
+                }
+                next.copy(
+                    live = next.live.copy(
+                        reasoning = next.live.reasoning.map { if (it.done) it else it.copy(done = true) },
+                        reasoningDurationSecs = secs ?: next.live.reasoningDurationSecs,
+                        status = "working",
+                    ),
+                )
+            }
             is SessionEvent.ToolStart -> upsertTool(next, event.callId, event.name, "started")
             is SessionEvent.ToolInputDelta -> {
                 val tool = next.live.tools.firstOrNull { it.callId == event.callId }

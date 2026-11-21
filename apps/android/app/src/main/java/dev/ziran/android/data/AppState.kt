@@ -21,6 +21,7 @@ data class LiveTool(
     val output: String,
     val error: String?,
     val status: String, // started | running | done | failed | unknown
+    val startedAtMs: Long = System.currentTimeMillis(),
 )
 
 data class LiveBlock(val seq: Long, val id: String, val text: String, val done: Boolean)
@@ -42,6 +43,8 @@ data class LiveState(
     val status: String = "idle",
     val phase: String = "",
     val startedAtMs: Long? = null,
+    val reasoningStartedAtMs: Long? = null,
+    val reasoningDurationSecs: Long? = null,
     val assistants: List<LiveBlock> = emptyList(),
     val reasoning: List<LiveBlock> = emptyList(),
     val tools: List<LiveTool> = emptyList(),

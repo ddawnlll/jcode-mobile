@@ -2,14 +2,38 @@ package dev.ziran.android
 
 import android.Manifest
 import android.content.Intent
+import android.graphics.Color as AndroidColor
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import dev.ziran.android.persistence.LocalNotifications
 import dev.ziran.android.ui.ZiranApp
+
+internal data class DisplayModeCandidate(
+    val modeId: Int,
+    val width: Int,
+    val height: Int,
+    val refreshRate: Float,
+)
+
+/**
+ * Pick the highest refresh-rate display mode matching the active physical
+ * resolution so 90/120/144 Hz phones render at full native frame rate without
+ * changing screen resolution.
+ */
+internal fun selectPeakRefreshMode(
+    modes: List<DisplayModeCandidate>,
+    currentWidth: Int,
+    currentHeight: Int,
+): DisplayModeCandidate? {
+    val sameRes = modes.filter { it.width == currentWidth && it.height == currentHeight }
+    return (if (sameRes.isNotEmpty()) sameRes else modes).maxByOrNull { it.refreshRate }
+}
 
 /**
  * One Activity, `singleTask`, so a pairing link that arrives while the app is
@@ -37,17 +61,27 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Edge to edge so WindowInsets.ime reaches Compose and the composer can
-        // ride the keyboard instead of hiding behind it.
-        enableEdgeToEdge()
+        // ride the keyboard frame by frame instead of hiding behind it.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+        )
+        requestHighestRefreshRate()
         readIntent(intent)
         val controller = (application as ZiranApplication).controller
         setContent {
             ZiranApp(
                 controller = controller,
-                // Compose state reads: a new intent recomposes and re-runs the
-                // deep link effect, even for the same link string.
                 deepLink = deepLink.value,
                 deepLinkNonce = deepLinkSeq.value,
+                onThemeNightChanged = { isNight ->
+                    val style = if (isNight) {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    }
+                    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                },
                 onRequestNotifications = {
                     if (LocalNotifications.hasPermission(this)) {
                         controller.notificationsHandled(true)
@@ -63,6 +97,24 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         readIntent(intent)
+    }
+
+    private fun requestHighestRefreshRate() {
+        val activeDisplay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val current = activeDisplay.mode
+        val candidates = activeDisplay.supportedModes.map {
+            DisplayModeCandidate(it.modeId, it.physicalWidth, it.physicalHeight, it.refreshRate)
+        }
+        val best = selectPeakRefreshMode(candidates, current.physicalWidth, current.physicalHeight) ?: return
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = best.modeId
+            preferredRefreshRate = best.refreshRate
+        }
     }
 
     private fun readIntent(intent: Intent?) {

@@ -1,19 +1,19 @@
 package dev.ziran.android.design
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -21,11 +21,12 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.ziran.android.protocol.AgentKind
+import kotlin.math.sin
 
 /**
  * Trigram seals, drawn on Canvas. Three strokes, solid is 1 and broken is 0,
- * read top to bottom. Strokes match Sessions.dc.html: viewBox 24, X 5 to 19,
- * Y 7, 12, 17, stroke 2.6, round caps. Broken strokes split 5-10.4, 13.6-19.
+ * read top to bottom. Strokes match Sessions.dc.html: viewBox 24 at 70% of seal box,
+ * X 5 to 19, Y 7, 12, 17, stroke 2.6, round caps. Broken strokes split 5-10.4, 13.6-19.
  */
 object Trigrams {
     val Crane = listOf(1, 1, 1)
@@ -51,6 +52,76 @@ val AgentKindsInBoardOrder = listOf(
     AgentKind.Crane, AgentKind.Fox, AgentKind.Heron, AgentKind.Owl, AgentKind.Moth,
 )
 
+/**
+ * Builds a deterministic slightly rough-edged seal rectangle path matching
+ * the SVG `#rough` filter on the boards, with zero runtime filter cost.
+ */
+private fun buildRoughSealPath(w: Float, h: Float): Path {
+    val p = Path()
+    val amp = (minOf(w, h) * 0.014f).coerceAtMost(1.8f)
+    val steps = 10
+    fun jitter(idx: Int, phase: Float): Float =
+        (sin(idx * 2.17f + phase) * 0.65f + sin(idx * 4.73f + phase * 1.9f) * 0.35f) * amp
+
+    p.moveTo(amp, amp)
+    // Top edge
+    for (i in 1..steps) {
+        val t = i.toFloat() / steps
+        p.lineTo(amp + (w - 2 * amp) * t, amp + jitter(i, 0.3f))
+    }
+    // Right edge
+    for (i in 1..steps) {
+        val t = i.toFloat() / steps
+        p.lineTo(w - amp + jitter(i, 1.7f), amp + (h - 2 * amp) * t)
+    }
+    // Bottom edge
+    for (i in 1..steps) {
+        val t = i.toFloat() / steps
+        p.lineTo(w - amp - (w - 2 * amp) * t, h - amp + jitter(i, 3.1f))
+    }
+    // Left edge
+    for (i in 1 until steps) {
+        val t = i.toFloat() / steps
+        p.lineTo(amp + jitter(i, 4.9f), h - amp - (h - 2 * amp) * t)
+    }
+    p.close()
+    return p
+}
+
+private fun DrawScope.drawSendStroke(strokeColor: Color) {
+    // Board: SVG viewBox 24x24 scaled to 62% of the seal square, centered.
+    val box = minOf(size.width, size.height)
+    val icon = box * 0.62f
+    val ox = (size.width - icon) / 2f
+    val oy = (size.height - icon) / 2f
+    val u = icon / 24f
+    val strokeW = 2.6f * u
+    val path = Path().apply {
+        moveTo(ox + 12f * u, oy + 19.5f * u)
+        cubicTo(
+            ox + 11.6f * u, oy + 15f * u,
+            ox + 12.2f * u, oy + 10f * u,
+            ox + 12f * u, oy + 5.2f * u,
+        )
+        moveTo(ox + 6.6f * u, oy + 10.4f * u)
+        cubicTo(
+            ox + 8.6f * u, oy + 8.6f * u,
+            ox + 10.4f * u, oy + 6.8f * u,
+            ox + 12f * u, oy + 5f * u,
+        )
+        cubicTo(
+            ox + 13.6f * u, oy + 6.8f * u,
+            ox + 15.4f * u, oy + 8.6f * u,
+            ox + 17.4f * u, oy + 10.4f * u,
+        )
+    }
+    drawPath(
+        path = path,
+        color = strokeColor,
+        style = Stroke(strokeW, cap = StrokeCap.Round, join = StrokeJoin.Round),
+    )
+}
+
 @Composable
 fun Seal(
     kind: AgentKind,
@@ -65,24 +136,32 @@ fun Seal(
     Box(
         modifier = modifier
             .size(size)
-            .then(if (backgroundColor != null) Modifier.background(backgroundColor, androidx.compose.foundation.shape.RoundedCornerShape(2.dp)) else Modifier)
             .semantics { role = Role.Image; contentDescription = "Agent $label" },
     ) {
         Canvas(Modifier.size(size)) {
-            val strokeW = size.toPx() * (2.6f / 24f)
-            val xs = size.toPx() * (5f / 24f)
-            val xe = size.toPx() * (19f / 24f)
-            val ys = listOf(7f, 12f, 17f).map { size.toPx() * (it / 24f) }
+            if (backgroundColor != null) {
+                drawPath(buildRoughSealPath(this.size.width, this.size.height), backgroundColor)
+            }
+            // Board: SVG viewBox 24x24 scaled to 70% of the seal square, centered.
+            val box = minOf(this.size.width, this.size.height)
+            val icon = box * 0.70f
+            val ox = (this.size.width - icon) / 2f
+            val oy = (this.size.height - icon) / 2f
+            val u = icon / 24f
+            val strokeW = 2.6f * u
+            val xs = ox + 5f * u
+            val xe = ox + 19f * u
+            val xm1 = ox + 10.4f * u
+            val xm2 = ox + 13.6f * u
+            val ys = floatArrayOf(oy + 7f * u, oy + 12f * u, oy + 17f * u)
             val color = strokeColor ?: Color.White
             bits.forEachIndexed { index, bit ->
                 val y = ys[index]
                 if (bit == 1) {
-                    drawLine(color, Offset(xs, y), Offset(xe, y), strokeW, androidx.compose.ui.graphics.StrokeCap.Round)
+                    drawLine(color, Offset(xs, y), Offset(xe, y), strokeW, StrokeCap.Round)
                 } else {
-                    val xm1 = size.toPx() * (10.4f / 24f)
-                    val xm2 = size.toPx() * (13.6f / 24f)
-                    drawLine(color, Offset(xs, y), Offset(xm1, y), strokeW, androidx.compose.ui.graphics.StrokeCap.Round)
-                    drawLine(color, Offset(xm2, y), Offset(xe, y), strokeW, androidx.compose.ui.graphics.StrokeCap.Round)
+                    drawLine(color, Offset(xs, y), Offset(xm1, y), strokeW, StrokeCap.Round)
+                    drawLine(color, Offset(xm2, y), Offset(xe, y), strokeW, StrokeCap.Round)
                 }
             }
         }
@@ -90,8 +169,8 @@ fun Seal(
 }
 
 /**
- * Send seal as a button: one node owns size, background, the brush stroke and
- * the click, so nothing sits between the finger and the handler.
+ * Send seal as a button: Wu wei press sink (90% + -3° tilt + CONTEXT_CLICK haptic),
+ * rough vermilion square, 62% rising brush stroke, optional stamp animation.
  */
 @Composable
 fun SealButton(
@@ -100,44 +179,33 @@ fun SealButton(
     backgroundColor: Color,
     strokeColor: Color,
     label: String = "Send",
+    stampTrigger: Int = 0,
+    stampDelayMs: Int = WuDurations.StampDelay,
+    animateStamp: Boolean = true,
+    reducedMotion: Boolean = false,
     onClick: () -> Unit,
 ) {
     val size = sizeDp.dp
+    val stampMod = if (animateStamp) {
+        Modifier.wuStamp(trigger = stampTrigger, initialDelayMs = stampDelayMs, reducedMotion = reducedMotion)
+    } else {
+        Modifier
+    }
     Box(
         modifier = modifier
+            .then(stampMod)
             .size(size)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-            .background(backgroundColor)
-            .clickable(onClick = onClick)
+            .wuClickable(isSeal = true, reducedMotion = reducedMotion, onClick = onClick)
             .semantics { role = Role.Button; contentDescription = label },
     ) {
         Canvas(Modifier.size(size)) {
-            val strokeW = size.toPx() * (2.6f / 24f)
-            val path = Path().apply {
-                moveTo(size.toPx() * (12f / 24f), size.toPx() * (19.5f / 24f))
-                cubicTo(
-                    size.toPx() * (11.6f / 24f), size.toPx() * (15f / 24f),
-                    size.toPx() * (12.2f / 24f), size.toPx() * (10f / 24f),
-                    size.toPx() * (12f / 24f), size.toPx() * (5.2f / 24f),
-                )
-                moveTo(size.toPx() * (6.6f / 24f), size.toPx() * (10.4f / 24f))
-                cubicTo(
-                    size.toPx() * (8.6f / 24f), size.toPx() * (8.6f / 24f),
-                    size.toPx() * (10.4f / 24f), size.toPx() * (6.8f / 24f),
-                    size.toPx() * (12f / 24f), size.toPx() * (5f / 24f),
-                )
-                cubicTo(
-                    size.toPx() * (13.6f / 24f), size.toPx() * (6.8f / 24f),
-                    size.toPx() * (15.4f / 24f), size.toPx() * (8.6f / 24f),
-                    size.toPx() * (17.4f / 24f), size.toPx() * (10.4f / 24f),
-                )
-            }
-            drawPath(path, strokeColor, style = Stroke(strokeW, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            drawPath(buildRoughSealPath(this.size.width, this.size.height), backgroundColor)
+            drawSendStroke(strokeColor)
         }
     }
 }
 
-/** Send seal: a single rising brush stroke, as drawn on Start and Main. */
+/** Non-interactive send seal drawing (used when parent handles click). */
 @Composable
 fun SendSeal(
     modifier: Modifier = Modifier,
@@ -150,32 +218,11 @@ fun SendSeal(
     Box(
         modifier = modifier
             .size(size)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-            .background(backgroundColor)
             .semantics { role = Role.Button; contentDescription = label },
     ) {
         Canvas(Modifier.size(size)) {
-            val strokeW = size.toPx() * (2.6f / 24f)
-            val path = Path().apply {
-                moveTo(size.toPx() * (12f / 24f), size.toPx() * (19.5f / 24f))
-                cubicTo(
-                    size.toPx() * (11.6f / 24f), size.toPx() * (15f / 24f),
-                    size.toPx() * (12.2f / 24f), size.toPx() * (10f / 24f),
-                    size.toPx() * (12f / 24f), size.toPx() * (5.2f / 24f),
-                )
-                moveTo(size.toPx() * (6.6f / 24f), size.toPx() * (10.4f / 24f))
-                cubicTo(
-                    size.toPx() * (8.6f / 24f), size.toPx() * (8.6f / 24f),
-                    size.toPx() * (10.4f / 24f), size.toPx() * (6.8f / 24f),
-                    size.toPx() * (12f / 24f), size.toPx() * (5f / 24f),
-                )
-                cubicTo(
-                    size.toPx() * (13.6f / 24f), size.toPx() * (6.8f / 24f),
-                    size.toPx() * (15.4f / 24f), size.toPx() * (8.6f / 24f),
-                    size.toPx() * (17.4f / 24f), size.toPx() * (10.4f / 24f),
-                )
-            }
-            drawPath(path, strokeColor, style = Stroke(strokeW, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+            drawPath(buildRoughSealPath(this.size.width, this.size.height), backgroundColor)
+            drawSendStroke(strokeColor)
         }
     }
 }
