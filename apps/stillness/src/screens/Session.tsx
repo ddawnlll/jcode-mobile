@@ -422,10 +422,32 @@ function Composer({ state }: { state: AppState }) {
         </button>
       </div>
       {recoveryOpen ? (
-        <Sheet title="Tool/task control" onClose={() => setRecoveryOpen(false)}>
-          <p>Force-stop for an individual tool or background task is unavailable in this app. No verified scoped action is exposed here.</p>
-          <p>Stop targets the active turn, not an individual tool or background task. Refresh state checks the session without stopping work.</p>
-          {state.connection.status !== 'connected' ? <p>Reconnect to refresh the session state.</p> : null}
+        <Sheet title="Interrupt / tool controls" onClose={() => setRecoveryOpen(false)}>
+          <p>Stop the current agent turn (like Esc in JCode CLI). This does not force-stop an individual tool or background task, or automatically send a queued follow-up.</p>
+          <button
+            type="button"
+            className="primary-btn compact"
+            disabled={!hasTurn || state.connection.status !== 'connected'}
+            onClick={() => {
+              setRecoveryOpen(false);
+              void controller.stop();
+            }}
+            data-testid="interrupt-active-turn"
+          >
+            <IconStop size={16} /> Stop active turn
+          </button>
+          {!hasTurn ? <p>No active turn is reported for this session.</p> : null}
+          {state.connection.status !== 'connected' ? <p>Reconnect before stopping or refreshing the session.</p> : null}
+          <p>Refresh state checks the session without stopping work.</p>
+          <button
+            type="button"
+            className="tiny-action"
+            onClick={() => void controller.refreshSnapshot()}
+            disabled={state.connection.status !== 'connected' || !state.activeSessionId}
+            data-testid="interrupt-refresh-state"
+          >
+            <IconRefresh size={14} /> Refresh state
+          </button>
         </Sheet>
       ) : null}
     </div>

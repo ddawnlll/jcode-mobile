@@ -66,8 +66,8 @@ test.describe('self-contained resources', () => {
       const body = getComputedStyle(document.body).fontFamily;
       return { heading, body };
     });
-    expect(families.heading.toLowerCase()).toMatch(/bricolage|hanken|plex/);
-    expect(families.body.toLowerCase()).toMatch(/bricolage|hanken|plex|sans-serif/);
+    expect(families.heading.toLowerCase()).toMatch(/garamond|jetbrains|serif/);
+    expect(families.body.toLowerCase()).toMatch(/garamond|jetbrains|serif/);
   });
 
   test('keeps the CTA and internal anchors valid', async ({ page }) => {

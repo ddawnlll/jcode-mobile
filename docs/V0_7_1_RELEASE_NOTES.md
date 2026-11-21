@@ -45,9 +45,19 @@ Visual, layout, gesture, and frame-pacing fixes for the native Android client (`
 
 ## Verification
 
+```text
+ziran-0.7.1-android-release.apk
+11,624,585 bytes (11.09 MiB)
+SHA-256 e1612a7071399c3f116b2718ec18aadd22c68f726d3653b2d9d4b188f4f62f6b
+package dev.ziran.android
+versionCode 71, versionName 0.7.1
+minSdk 26, targetSdk 37, compileSdk 37
+APK Signature Scheme v2 and v3, Android Debug certificate
+```
+
 ```sh
 cd apps/android
-./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease
 ```
 
 - All unit tests pass (90 JVM tests, including 7 new tests in `RefreshRateAndMotionTest`).

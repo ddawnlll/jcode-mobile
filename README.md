@@ -1,20 +1,22 @@
 <p align="center">
-  <img src="docs/evidence/v0.4.0/android-emulator-home.png" alt="JCode Mobile on an Android API 36 emulator: Harness online and the session list" width="320" />
+  <img src="docs/evidence/v0.7.1/ziran-live-day.png" alt="Ziran 0.7.1 live thread on Android API 36 showing folded thinking, tool rings, and unfolding diff" width="280" />
+  &nbsp;&nbsp;
+  <img src="docs/evidence/v0.7.1/ziran-sessions-day.png" alt="Ziran 0.7.1 Threads list on Android API 36 with pavilion painting and vermilion agent seals" width="280" />
 </p>
 
-<p align="center"><sub><code>JCODE MOBILE / STILLNESS 12 / 0.6.0</code></sub></p>
+<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.1</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
 <p align="center">
-  <strong>Your server runs JCode. The phone is the return surface.</strong><br />
-  <sub>A Tauri 2 client for <a href="https://github.com/1jehuang/jcode">JCode</a> on your own Linux server.</sub>
+  <strong>Your server runs JCode. Ziran is the return surface.</strong><br />
+  <sub>A native Kotlin and Jetpack Compose Android client for <a href="https://github.com/1jehuang/jcode">JCode</a> on your own Linux server.</sub>
 </p>
 
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/ddawnlll/jcode-mobile/check.yml?style=flat-square&label=CI" alt="CI status" /></a>
-  <a href="docs/ADAPTER_V4.md"><img src="https://img.shields.io/badge/API-Adapter_v4-2F6F52?style=flat-square" alt="Adapter v4 API" /></a>
+  <a href="docs/ADAPTER_V4.md"><img src="https://img.shields.io/badge/API-Adapter_v4-A8322B?style=flat-square" alt="Adapter v4 API" /></a>
   <br />
   <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the site</strong></a>
 </p>
@@ -22,155 +24,118 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ANDROID / 0.6.0 / 12.14 MiB</code></sub><br /><br />
+      <sub><code>ZIRAN ANDROID / 0.7.1 / 11.09 MiB</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><strong>Download the APK</strong></a><br />
-      <sub>Debug-signed sideload. No Play Store listing.</sub>
+      <sub>Native Kotlin + Compose. Debug-signed sideload.</sub>
     </td>
     <td width="33%" align="center" valign="top">
       <sub><code>SERVER / JCODE + ADAPTER V4</code></sub><br /><br />
       <a href="docs/GETTING_STARTED.md"><strong>Run the adapter</strong></a><br />
-      <sub>One pairing code. Then a device token.</sub>
+      <sub>One pairing code or <code>ziran://pair</code> link.</sub>
     </td>
     <td width="33%" align="center" valign="top">
-      <sub><code>SOURCE / TAURI 2 + RUST</code></sub><br /><br />
+      <sub><code>SOURCE / KOTLIN + RUST</code></sub><br /><br />
       <a href="docs/DEVELOPMENT.md"><strong>Build from source</strong></a><br />
-      <sub>Android, native Linux, and a browser verification surface.</sub>
+      <sub>Standalone Gradle app in <code>apps/android/</code> + Rust Adapter v4.</sub>
     </td>
   </tr>
 </table>
 
-> **0.6.0 is a development preview.** It ships Adapter v4, source-backed tool
-> intent, structured command/file evidence, semantic motion and the native
-> Android bridge. The Android APK is debug-signed for sideloading. The native
-> Linux shell builds from source. There is no iOS artifact and no Play Store
-> listing.
+> **Ziran 0.7.1 ("Wu wei")** replaces the earlier Tauri/WebView client as the
+> flagship Android app. It is built natively in Kotlin and Jetpack Compose with
+> bundled EB Garamond and JetBrains Mono typography, twelve open-access painting
+> scenes in Day and Night ink, 120 Hz display-mode support, and full Adapter v4
+> continuity. The APK is debug-signed for sideloading; there is no Play Store
+> listing or iOS client.
 
-## What 0.6.0 is
+## What Ziran 0.7.1 is
 
-JCode Mobile is two processes:
+Ziran is two processes:
 
-1. **Adapter v4** is one Rust binary on your server. It opens bounded native
-   JCode session links, applies the exact model/provider/API route, keeps the
-   durable SQLite event journal, and exposes an authenticated mobile WebSocket.
-   Protocol 4, minimum 2: a v2 phone still pairs and never receives a v4 frame.
-2. **Stillness 12** is the Tauri 2 client. It paints the cached session before
-   the handshake, applies stream updates once per animation frame, reconciles
-   through journal replay or an authoritative snapshot, and restores the exact
-   server and session you left.
-
-0.6.0 makes the transcript explain what actually happened. JCode's required
-model-supplied `intent` is the primary tool label; file tools are filename-first;
-commands show the exact shell text, output and only source-reported exit codes;
-file mutations show requested input and JCode's authoritative diff. Motion is
-event-driven and replay-safe: active tools animate, settled history does not,
-and System/Full/Subtle/Off preferences are honored. The opening JavaScript
-bundle is 129.12 kB gzip, still below the 0.5.0-era 166.37 kB baseline.
-
-The previous 0.5.0 release added per-session native links, exact route
-selection, live runtime and swarm state, delta coalescing, bounded binary
-WebSocket packages, deferred Markdown and paged long output. 0.6.0 keeps that
-transport, journal, image attachments, push registration and Android shell.
-
-Nothing above is inferred from the browser surface: native Android evidence is
-tracked separately in [`docs/ANDROID_NATIVE.md`](docs/ANDROID_NATIVE.md).
+1. **Adapter v4** (`crates/adapter-*`) is one Rust binary on your Linux server.
+   It opens bounded native JCode session links, applies the exact model,
+   provider, and reasoning effort route, keeps the durable SQLite event journal,
+   and exposes an authenticated mobile WebSocket (Protocol 4, minimum 2).
+2. **Ziran** (`apps/android/`) is a native Kotlin and Jetpack Compose Android
+   client (`dev.ziran.android`, `minSdk 26`, `targetSdk 37`). It speaks the
+   Adapter v4 protocol directly over OkHttp WebSockets, encrypts paired device
+   tokens in Android Keystore, restores the exact server and session after
+   process death, and renders the Wu wei design system natively on GPU
+   `graphicsLayer` passes.
 
 The phone never runs the agent. Prompts, tools, files, and long turns stay on
 the server. Navigation, backgrounding, socket close, and app kill never send
 Cancel. Only the explicit **Stop** control targets the current turn.
 
+## What changed in 0.7.1
+
+- **Native Kotlin + Jetpack Compose (`apps/android/`)**: Standalone Gradle
+  project with zero WebView, zero animation library dependencies, and strict
+  `lint { abortOnError = true }`.
+- **Wu wei visual system (`design/wu-wei/`)**: Xuan paper and vermilion seal
+  tokens in Day and Night (`ColorMatrix` `brightness(0.58) saturate(0.85)`),
+  pre-scaled 256 dp tiled paper grain, twelve Met Museum open-access painting
+  crops with 1.2 s cross-fades and 34 s Ken Burns drift, and bundled EB Garamond
+  and JetBrains Mono fonts.
+- **Wu wei motion and gestures**:
+  - Single easing (`CubicBezierEasing(0.22f, 1f, 0.36f, 1f)`), single call-site
+    transitions with zero screen-teardown flashes.
+  - Ink drop (900 ms) from the tapped row or Pair seal; Model and Scenes
+    unroll top-down (800 ms) and roll up (700 ms) behind a 6 dp ink rod.
+  - Back slide (420 ms, `-22%` parallax) and Android 14+ predictive back
+    (1:1 edge shrink to 90%, 30 dp rounded corners, 320 ms cancel settle, 300 ms
+    commit).
+  - Live turn timeline: growing/folding thinking bar, tool rows with ink dot →
+    flowing blue hairline → self-drawing vermilion ring, unfolding diff and test
+    panels, and zero-recomposition `withFrameNanos` word streaming.
+  - Composer rides the Android IME frame by frame; swipe-to-archive with undo,
+    long-press lift + action sheet, pull-to-refresh ink ring, and 120 ms reduced
+    motion fades (`ANIMATOR_DURATION_SCALE = 0`).
+- **120 Hz ready**: `MainActivity` requests the display's peak refresh-rate mode
+  matching the active physical resolution (`preferredDisplayModeId` /
+  `preferredRefreshRate`). Measured UI thread p50 is `0.5–2.0 ms` (p90
+  `0.9–4.4 ms`) and RenderThread `IssueDraw` p50 is `0.4–1.8 ms`—well inside the
+  `8.33 ms` 120 Hz budget.
+
 | Surface | State |
 | --- | --- |
-| Android | Tauri 2 APK, `arm64-v8a` and `armeabi-v7a`, minSdk 24 |
-| Native Linux | Tauri 2 release binary, Secret Service credentials |
-| Web | Verification surface only; browser token in `localStorage` |
-| iOS | Not built on this host; no IPA |
+| Ziran Android (`apps/android/`) | Native Kotlin + Jetpack Compose APK, `dev.ziran.android`, minSdk 26, targetSdk 37, 120 Hz ready |
+| Adapter v4 (`crates/adapter-*`) | Rust binary `jcode-adapter-v4`, protocol 4 (min 2), SQLite WAL journal |
+| Linux desktop (`apps/stillness/`) | Legacy 0.6.0 Tauri 2 shell, builds from source, compatible with Adapter v4 |
+| iOS | Not built; no Swift client or IPA |
 
-## Verified for 0.6.0
-
-The 0.6.0 candidate was built and tested against the
-pinned JCode daemon `0abff12c`. The full stack (daemon, harness bridge, native
-link, Adapter v3 and v4, and the web UI) ran end to end on macOS with a
-deterministic local Responses fixture. The fixture is not a model and makes no
-network calls, so the transport and UI numbers do not depend on a provider.
-
-The Android candidate was installed on an API 36 arm64 emulator at 360 dp and
-exercised with a real provider turn, Stop recovery, adapter-loss reconnect and
-drawer/system-back navigation. Physical-device, TalkBack, 10k/1 MB Android and
-120 Hz checks remain `NOT_RUN` and are listed in the
-[0.6.0 release notes](docs/V0_6_0_RELEASE_NOTES.md).
+## Verified for 0.7.1
 
 | Check | Result |
 | --- | --- |
-| Adapter v4 Rust tests | PASS, 96 tests (42 core + 10 protocol + 25 server lib + 19 integration) |
-| Rust formatting and clippy | PASS, `cargo fmt --check` and `cargo clippy -D warnings` |
-| Legacy JavaScript tests | PASS, 14 suites / 139 tests |
-| Stillness UX checks | PASS, 23/23 |
-| Controller reconciliation | PASS, 16/16 |
-| TypeScript and ESLint | PASS |
-| Stillness production build | PASS, 129.12 kB gzip initial JavaScript / 13.09 kB gzip CSS |
-| Stream coalescing | PASS, 12,009 frames / 6,595,348 B to 745 frames / 780,810 B on the same 384,000-byte response |
-| Large UTF-8 payload | PASS, one descriptor + four binary frames, 200,514 B reassembled to valid JSON and UTF-8 across a 64 KiB boundary |
-| Full stack on the pinned daemon | PASS, isolated daemon + harness bridge + native link + Adapter v3/v4 |
-| Pairing and session browser e2e | PASS, 5 passed / 3 skipped against isolated Adapter v4 |
-| Android release APK static verification | PASS, versionCode 6000, versionName 0.6.0, v2 + v3 signatures |
-| Android emulator install and real provider tool turn | PASS, API 36 arm64, 360 dp, gpt-5.6-luna |
-| Android Stop recovery and adapter-loss reconnect | PASS with documented delay; composer recovered |
-| Android drawer tap, system back and focus restore | PASS |
-| Android emulator frame timing | MEASURED, p50 53 ms / p95 69 ms / p99 85 ms on software-rendered emulator; not a physical-device claim |
-| Physical Android device, TalkBack, 10k/1 MB Android, 120 Hz | NOT_RUN |
-| FCM delivery | PARTIAL, registration only; `not_configured`, no Firebase credentials |
-| Battery and physical-device cold start | NOT_RUN; emulator cold start 579 ms |
-
-The 0.4.0 on-device captures remain in
-[`docs/evidence/v0.4.0/README.md`](docs/evidence/v0.4.0/README.md). They are
-0.4.0 evidence and are not presented as a 0.6.0 device run. The full 0.5.0
-benchmark remains in [`docs/evidence/v0.5.0/benchmark/REPORT.md`](docs/evidence/v0.5.0/benchmark/REPORT.md).
-
-## The transcript is fenced
-
-The transcript is fenced by `session_id`, `epoch`, `seq`, `turn_id`, and
-`operation_id`. A slow answer cannot overwrite newer work. A journal gap or
-epoch mismatch triggers an authoritative snapshot instead of a guessed patch.
-Drafts, reading positions, favorites, and pending sends are scoped to the
-server and session.
-
-## Command Code, in the route list
-
-<p align="center">
-  <img src="docs/evidence/v0.4.0/ui/09-model-search.png" alt="Model sheet with instant search, provider chips, and duplicate route names disambiguated by provider" width="300" />
-</p>
-
-The pinned JCode fork exposes Command Code as a native provider. The adapter
-lists routes from `ListModels` and `GetRuntimeInfo`. It does not infer
-entitlement from a catalog, invent a provider key, or proxy a credential.
-Reasoning effort is sent as the discrete value the server accepts.
-
-## The desktop shell
-
-The same build runs as a three-pane Tauri window on Linux. The sidebar, central
-session, and inspector read one shared connection. The inspector exposes only
-what the server reported: plan, context, activity, runtime, and provider.
+| Ziran Android build, unit tests, lint | PASS, `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` (90 JVM unit tests, 0 lint errors) |
+| Ziran release APK signing & badging | PASS, `dev.ziran.android`, versionCode 71, versionName 0.7.1, v2 + v3 signatures, zipaligned |
+| Side-by-side Wu wei visual & motion audit | PASS, all 9 flows recorded and verified side-by-side against `design/wu-wei/` at 1x and 0.25x, plus 10 Day/Night screen comparisons ([evidence](docs/evidence/v0.7.1/README.md)) |
+| Android emulator frame timing (`gfxinfo`) | PASS on Metal GPU emulator (`emulator-5554`, API 36): UI p50 `0.5–2.0 ms` (p90 `0.9–4.4 ms`), RenderThread `IssueDraw` p50 `0.4–1.8 ms`, jank `0.17–2.36%` across Flows 1–8 |
+| 120 Hz mode selection | PASS (unit-tested in `RefreshRateAndMotionTest`; emulator virtual display exposes 60 Hz only, physical 120 Hz presentation requires hardware) |
+| Adapter v4 Rust tests & checks | PASS, 96 tests (`cargo test --workspace`), `cargo fmt --check`, `cargo clippy -D warnings` |
+| Rebranded Ziran website (`website/`) | PASS, `bun run marketing:test` (static build, unit tests, full Playwright matrix) |
+| Physical Android device & TalkBack | NOT_RUN for 0.7.1 |
 
 ## Install the Android APK
 
 ```text
-jcode-mobile-0.6.0-android-release.apk
-12,726,721 bytes (12.14 MiB)
-SHA-256 2d76b6793960df4070c21cd3960d3dc374e38c9821102a32565d8a4e3c0f3941
-package dev.jcode.stillness
-versionCode 6000, versionName 0.6.0
-minSdk 24, targetSdk 37, compileSdk 37
-arm64-v8a + armeabi-v7a
+ziran-0.7.1-android-release.apk
+11,624,585 bytes (11.09 MiB)
+SHA-256 e1612a7071399c3f116b2718ec18aadd22c68f726d3653b2d9d4b188f4f62f6b
+package dev.ziran.android
+versionCode 71, versionName 0.7.1
+minSdk 26, targetSdk 37, compileSdk 37
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r jcode-mobile-0.6.0-android-release.apk
+adb install -r ziran-0.7.1-android-release.apk
 ```
 
-The package identifier and signing key are unchanged from 0.4.0, so the app
-updates in place and keeps its device token. The APK and its `.sha256` are built
-to `artifacts/` and attached to the GitHub release once it is published.
+Because Ziran uses its own package identifier (`dev.ziran.android`), it installs
+cleanly alongside older Stillness (`dev.jcode.stillness`) installs. Pair once
+with your Adapter v4 server using a one-time code or `ziran://pair` link.
 
 ## Run the server side
 
@@ -184,98 +149,66 @@ JCODE_ADAPTER_BIND=127.0.0.1:7646 \
 ./target/release/jcode-adapter-v4
 ```
 
-`jcode-adapter-v3` and `jcode-adapter-v2` are rollback aliases that run the same
-versioned server, so existing service units keep working. The adapter prints its
-pairing code and the roots it will expose. It discovers the JCode harness socket
-from `JCODE_API_SOCKET` or the platform runtime directory. Adapter v4 also opens
-the native `JCODE_SOCKET` for the same runtime. Data lives in
-`~/.local/share/jcode-mobile-adapter-v2` unless `JCODE_ADAPTER_DATA_DIR` is set;
-the directory name is retained from v2 and its schema is extended in place.
-
-For a remote phone, terminate TLS at a reverse proxy and keep the adapter on
-loopback:
+`jcode-adapter-v3` and `jcode-adapter-v2` remain rollback aliases for existing
+systemd units. Put a TLS reverse proxy (such as Caddy) in front of the adapter
+for remote phones:
 
 ```caddyfile
-dawnll.example.com {
+studio-vps.example.com {
     reverse_proxy 127.0.0.1:7646
 }
 ```
 
-Then enter `https://dawnll.example.com` in the app. The adapter does not ship a
-TLS terminator, VPN client, or SSH client for the phone.
-
-Full setup, environment variables, troubleshooting, and local staging:
-[`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md). Upgrade, rollback, and
-the v4 contract: [`docs/ADAPTER_V4.md`](docs/ADAPTER_V4.md).
+Full setup, `JCODE_SOCKET`, environment variables, and troubleshooting:
+[`docs/GETTING_STARTED.md`](docs/GETTING_STARTED.md). Adapter v4 wire contract:
+[`docs/ADAPTER_V4.md`](docs/ADAPTER_V4.md).
 
 ## Build from source
 
 ```sh
-bun install --frozen-lockfile
-cd apps/stillness && bun install --frozen-lockfile && cd ../..
+# Ziran Android (JDK 17+/21 + Android SDK 37)
+cd apps/android
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
+cd ../..
+bash scripts/build-android-release.sh   # writes artifacts/ziran-0.7.1-android-release.apk + .sha256
 
-cargo test --workspace
+# Adapter v4 (Rust)
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-bun run typecheck
-bun run lint
-bun run test
+cargo test --workspace
 
-cd apps/stillness && bun run build
-cd ../..
-bash scripts/build-android-release.sh   # JDK + Android SDK
-bash scripts/build-tauri-linux.sh       # GTK 3 + WebKitGTK 4.1
+# Website
+bun install --frozen-lockfile
+bun run marketing:test
 ```
-
-The Android release script builds, zipaligns, signs, verifies, and writes a
-`.sha256` beside the APK. The Linux script accepts a user-space `TAURI_SYSROOT`
-when the host has no system GTK/WebKit development packages.
 
 ## Limits
 
 - The Android APK is debug-signed and sideload-only. There is no Play Store
-  release, release keystore, auto-update channel, or signed iOS build.
-- The 0.5.0 candidate was exercised with a deterministic local provider on
-  macOS. A real provider/model turn and on-device install, turn timing, battery,
-  and frame pacing are `NOT_RUN` for 0.5.0.
-- The release APK is ARM-only. The 0.4.0 Android runtime checks used the
-  arm64-v8a API 36 emulator on macOS. 0.5.0 on-device validation is `NOT_RUN`.
-- FCM delivery is `not_configured` without `JCODE_FCM_PROJECT_ID` and
-  `JCODE_FCM_ACCESS_TOKEN`. Payloads contain no transcript content.
-- The scheduled background check is an unauthenticated `GET /health`. It reports
-  reachability, not authenticated session reconciliation.
-- `sessions.delete` is refused because the daemon has no delete operation.
-  Archive is the supported alternative.
-- JCode's curated API exposes aggregate edit statistics, not a verified per-file
-  diff. The Changes screen says so.
-- Upstream cancellation is session-scoped. The adapter verifies the expected
-  turn before stopping and reports `atomic_turn_scope: false`.
-- The adapter journal stores event payloads with bounded retention. It is not an
-  unbounded transcript archive; authoritative history comes from the daemon.
-- Attachments accept four inline images per message, 4 MiB each. Provider
-  credentials are not implemented in the mobile composer.
-- A human screen-reader pass, battery measurement, frame pacing, and native
-  cold-start measurements remain `NOT_RUN` for 0.5.0.
+  release, release keystore, auto-update channel, or iOS build.
+- 120 Hz refresh-rate mode selection is wired and unit-tested, and UI +
+  RenderThread frame times fit inside the 8.33 ms budget, but the emulator
+  virtual display exposes 60 Hz only.
+- Physical-device battery measurement, TalkBack manual pass, and FCM push
+  delivery remain `NOT_RUN` / unconfigured.
+- `sessions.delete` is refused because the JCode daemon has no delete operation;
+  archive (with undo) is the supported path.
 
 ## Documentation
 
 | Read | Why |
 | --- | --- |
-| [Getting started](docs/GETTING_STARTED.md) | Adapter, TLS, pairing, Android, Linux, troubleshooting |
-| [Adapter v4](docs/ADAPTER_V4.md) | Native links, exact routes, coalescing, binary transport, migration, verification |
+| [Getting started](docs/GETTING_STARTED.md) | Adapter v4, TLS, pairing, Ziran Android install, troubleshooting |
+| [Ziran 0.7.1 release notes](docs/V0_7_0_RELEASE_NOTES.md) | 0.7.1 scope, Wu wei fixes, APK checksum, verification, limits |
+| [Wu wei motion notes](docs/V0_7_1_RELEASE_NOTES.md) | Detailed visual, motion, and 120 Hz frame-pacing pass |
+| [Side-by-side evidence](docs/evidence/v0.7.1/README.md) | All 9 flows at 1x and 0.25x + 10 Day/Night screen comparisons |
+| [Adapter v4](docs/ADAPTER_V4.md) | Native links, exact routes, coalescing, binary transport, migration |
 | [Adapter contract](docs/ADAPTER_CONTRACT.md) | Source evidence, operation states, security boundaries |
-| [Android native](docs/ANDROID_NATIVE.md) | Kotlin bridge, commands, permission and capability matrix |
-| [Migration](docs/ADAPTER_V4.md) | 0.4.x → 0.5.0 adapter and phone upgrade, rollback |
-| [Tool presentation](docs/TOOL_PRESENTATION.md) | Source intent, files, commands, diff and output provenance |
-| [Motion](docs/MOTION.md) | Animation ownership, tokens, replay rules and bundle impact |
-| [Accessibility](docs/ACCESSIBILITY.md) | Motion preferences, focus, live regions and TalkBack status |
-| [Audit](docs/V0_4_0_AUDIT.md) | Battery, privacy, permissions, accessibility and startup history |
-| [Development](docs/DEVELOPMENT.md) | Repository layout, commands, tests, release builds |
-| [Verification](docs/VERIFICATION.md) | The 0.3.1 matrix, kept as history; 0.4.0 and 0.5.0 evidence are in the release notes |
-| [Build state](docs/BUILD_STATE.md) | Versions, artifacts, checksums, resumption point |
-| [Release notes](docs/V0_6_0_RELEASE_NOTES.md) | 0.6.0 scope, Android evidence, artifact and known limits |
+| [Development](docs/DEVELOPMENT.md) | Repository layout, Gradle/Rust/website commands, invariants |
+| [Build state](docs/BUILD_STATE.md) | Versions, signed APK checksum, toolchain, test status |
 
 Historical release notes remain in `docs/`, including
+[0.6.0](docs/V0_6_0_RELEASE_NOTES.md),
 [0.5.0](docs/V0_5_0_RELEASE_NOTES.md),
 [0.4.0](docs/V0_4_0_RELEASE_NOTES.md),
 [0.3.1](docs/V0_3_1_RELEASE_NOTES.md), and
@@ -284,9 +217,9 @@ Historical release notes remain in `docs/`, including
 ---
 
 <p align="center">
-  <sub><strong>JCODE MOBILE</strong> / Stillness 12 / Work in orbit.</sub><br />
+  <sub><strong>ZIRAN</strong> / Wu wei / Native Android client for JCode.</sub><br />
   <sub>An independent companion for <a href="https://github.com/1jehuang/jcode">JCode</a>. Not an official JCode release.</sub><br />
-  <sub>JCode, Bricolage Grotesque, Hanken Grotesk, IBM Plex Mono, and Lucide keep their own licenses. See <a href="THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</sub>
+  <sub>EB Garamond and JetBrains Mono (SIL OFL) and Met Museum Open Access (CC0) painting details keep their own licenses. See <a href="THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</sub>
 </p>
 
 ## Ziran 0.7.0
