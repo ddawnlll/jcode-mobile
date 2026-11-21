@@ -11,8 +11,8 @@ android {
         applicationId = "dev.ziran.android"
         minSdk = 26
         targetSdk = 37
-        versionCode = 70
-        versionName = "0.7.0"
+        versionCode = 71
+        versionName = "0.7.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

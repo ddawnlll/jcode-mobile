@@ -2,20 +2,19 @@ package dev.ziran.android.ui
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,17 +28,37 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.ziran.android.data.AppController
 import dev.ziran.android.design.InkRippleHost
 import dev.ziran.android.design.MotionMath
 import dev.ziran.android.design.Palette
+import dev.ziran.android.design.ReducedFadeScale
 import dev.ziran.android.design.WuDurations
 import dev.ziran.android.design.WuEasing
+import dev.ziran.android.design.WuFonts
+import dev.ziran.android.design.rememberAnimatedPalette
 import dev.ziran.android.design.rememberAnimatorScale
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Hand-rolled back stack. State lives in the controller, not the screens. */
+/** Back kind: Model & Scenes roll up and away (700 ms); Thread slides right with 22% parallax (420 ms). */
+internal fun backKindFor(screen: Screen): NavKind = when (screen) {
+    Screen.Model, Screen.Scenes -> NavKind.Roll
+    else -> NavKind.Slide
+}
+
 sealed interface Screen {
     object Start : Screen
     object Threads : Screen
@@ -49,8 +68,8 @@ sealed interface Screen {
 }
 
 /**
- * Application host. Day and night resolve from the saved theme mode and system
- * darkness. Every touch gets an ink ripple.
+ * Application host. Day and night ease smoothly over 600 ms. Every touch leaves
+ * a radial ink ripple. Paper grain sits cleanly over all content.
  *
  * Navigation never cancels a turn: leaving a thread only changes which screen is
  * painted. System back is handled here through PredictiveBackHandler for every
@@ -61,17 +80,22 @@ fun ZiranApp(
     controller: AppController,
     deepLink: String? = null,
     deepLinkNonce: Int = 0,
+    onThemeNightChanged: (Boolean) -> Unit = {},
     onRequestNotifications: () -> Unit = {},
 ) {
     val state by controller.state.collectAsState()
     val dark = isSystemInDarkTheme()
-    val palette = when (state.themeMode) {
-        "day" -> Palette.Day
-        "night" -> Palette.Night
-        else -> if (dark) Palette.Night else Palette.Day
+    val isNight = when (state.themeMode) {
+        "day" -> false
+        "night" -> true
+        else -> dark
     }
+    LaunchedEffect(isNight) { onThemeNightChanged(isNight) }
+
     val durationScale = rememberAnimatorScale()
     val reduced = durationScale <= 0.01f
+    val palette = rememberAnimatedPalette(isNight = isNight, reducedMotion = reduced)
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -85,76 +109,128 @@ fun ZiranApp(
     var stack by remember { mutableStateOf(listOf<Screen>(Screen.Start)) }
     var transition by remember { mutableStateOf<NavTransition?>(null) }
     val navProgress = remember { Animatable(1f) }
+    var navJob by remember { mutableStateOf<Job?>(null) }
     var lastTap by remember { mutableStateOf(Offset.Unspecified) }
     var gestureActive by remember { mutableStateOf(false) }
 
+    val containerSize = LocalWindowInfo.current.containerSize
+    val widthPx = containerSize.width.toFloat().coerceAtLeast(1f)
+    val heightPx = containerSize.height.toFloat().coerceAtLeast(1f)
+
     // Forward navigation: pick the board transition for the pair of screens.
-    val go: (Screen, NavKind) -> Unit = { next, kind ->
+    val go: (Screen, NavKind, Offset) -> Unit = { next, kind, origin ->
         val from = stack.last()
-        stack = stack + next
-        transition = NavTransition(kind, from, next, lastTap)
-        android.util.Log.i("ZiranNav", "go $from -> $next kind=$kind")
-        scope.launch {
-            try {
-                runNavTransition(navProgress, kind, durationScale, reduced)
-                android.util.Log.i("ZiranNav", "progress=${navProgress.value}")
-                if (navProgress.value >= 0.999f) transition = null
-            } catch (t: Throwable) {
-                android.util.Log.e("ZiranNav", "transition failed", t)
+        if (from != next) {
+            navJob?.cancel()
+            stack = stack + next
+            transition = NavTransition(kind, from, next, origin)
+            navJob = scope.launch {
+                try {
+                    runNavTransition(navProgress, kind, durationScale, reduced)
+                    transition = null
+                } catch (_: CancellationException) {
+                    // Superseded by a newer transition.
+                }
             }
         }
     }
 
-    // Back: 420 ms slide with the 22 percent parallax on the page beneath.
     val back: () -> Unit = back@{
         if (stack.size <= 1) return@back
+        navJob?.cancel()
         val from = stack.last()
         val to = stack[stack.size - 2]
+        val kind = backKindFor(from)
         stack = stack.dropLast(1)
-        transition = NavTransition(NavKind.Slide, from, to)
-        scope.launch {
-            runNavTransition(navProgress, NavKind.Slide, durationScale, reduced)
-            if (navProgress.value >= 0.999f) transition = null
+        transition = NavTransition(kind, from, to)
+        navJob = scope.launch {
+            try {
+                runNavTransition(navProgress, kind, durationScale, reduced)
+                transition = null
+            } catch (_: CancellationException) {
+                // Superseded.
+            }
         }
     }
 
-    // Predictive back for every screen above the root. The gesture drives the
-    // same offsets as the button; releasing past one third commits, otherwise
-    // it settles back in 320 ms.
+    // Predictive back for every screen above the root. Dragging from the left edge
+    // shrinks the screen to 90%, rounds corners to 30 dp, reveals beneath page with
+    // -40 dp parallax, and shows the floating back chip. Past 1/3 commits (300 ms);
+    // short of 1/3 settles back cleanly (320 ms). Instant back key runs Slide/Roll.
     PredictiveBackHandler(enabled = stack.size > 1) { progress ->
         val from = stack.last()
         val to = stack.getOrNull(stack.size - 2) ?: return@PredictiveBackHandler
-        transition = NavTransition(NavKind.Slide, from, to, predictive = true)
+        navJob?.cancel()
         gestureActive = true
-        // -1 means the flow ended without a single progress reading, which is
-        // what a plain back press (key or toolbar) looks like: that commits.
         var last = -1f
+        var lastY = heightPx * 0.5f
         var cancelled = false
         try {
             progress.collect { event ->
-                last = event.progress
-                navProgress.snapTo(event.progress.coerceIn(0f, 1f))
+                val p = event.progress.coerceIn(0f, 1f)
+                last = p
+                lastY = if (event.touchY > 0f) event.touchY else lastY
+                transition = NavTransition(
+                    kind = NavKind.Slide,
+                    from = from,
+                    to = to,
+                    predictive = true,
+                    touchY = lastY,
+                )
+                navProgress.snapTo(p)
             }
         } catch (_: CancellationException) {
-            // The gesture was released short of the threshold.
             cancelled = true
         } finally {
             gestureActive = false
         }
-        val commit = !cancelled && (last < 0f || MotionMath.shouldCommitBack(last))
+
+        if (last < 0f && !cancelled) {
+            // Instant system back button (no gesture progress frames): use normal Back transition.
+            val kind = backKindFor(from)
+            stack = stack.dropLast(1)
+            transition = NavTransition(kind, from, to)
+            try {
+                runNavTransition(navProgress, kind, durationScale, reduced)
+            } catch (_: CancellationException) {
+            } finally {
+                transition = null
+            }
+            return@PredictiveBackHandler
+        }
+
+        val commit = !cancelled
         try {
             if (commit) {
-                navProgress.animateTo(1f, tween(120, easing = WuEasing.Default))
+                transition = NavTransition(
+                    kind = NavKind.Slide,
+                    from = from,
+                    to = to,
+                    predictive = true,
+                    touchY = lastY,
+                    predictiveCommitting = true,
+                    commitStartProgress = last.coerceIn(0f, 1f),
+                )
+                navProgress.snapTo(0f)
+                if (reduced) {
+                    withContext(ReducedFadeScale) {
+                        navProgress.animateTo(1f, tween(WuDurations.ReducedFade, easing = LinearEasing))
+                    }
+                } else {
+                    navProgress.animateTo(1f, tween(WuDurations.PredictiveCommit, easing = LinearEasing))
+                }
                 stack = stack.dropLast(1)
             } else {
-                navProgress.animateTo(0f, tween(WuDurations.PredictiveSettle, easing = WuEasing.Default))
+                if (reduced) {
+                    withContext(ReducedFadeScale) {
+                        navProgress.animateTo(0f, tween(WuDurations.ReducedFade, easing = WuEasing.Default))
+                    }
+                } else {
+                    navProgress.animateTo(0f, tween(WuDurations.PredictiveSettle, easing = WuEasing.Default))
+                }
             }
         } catch (_: CancellationException) {
-            // The handler coroutine is being torn down; the sheet is still
-            // committed below so no half-painted transition can survive.
         } finally {
-            // Always clear the transition: a stuck hand-off would paint two
-            // screens at once and swallow every touch behind them.
             transition = null
         }
     }
@@ -168,14 +244,12 @@ fun ZiranApp(
             when (val route = DeepLinks.parse(deepLink)) {
                 is DeepLinks.Route.Pair -> {
                     stack = listOf(Screen.Start)
-                    controller.pairFromLink(route.server, route.code)
+                    controller.scope().launch { controller.pairFromLink(route.server, route.code) }
                 }
                 is DeepLinks.Route.Session -> {
                     stack = listOf(Screen.Threads, Screen.Thread(route.sessionId))
-                    controller.openSession(route.sessionId)
+                    controller.scope().launch { controller.openSession(route.sessionId) }
                 }
-                // A link that cannot be used says so, on the screen where it can
-                // be fixed. Doing nothing would look like the link was ignored.
                 DeepLinks.Route.Unknown -> {
                     stack = listOf(Screen.Start)
                     controller.reportPairingLinkError()
@@ -184,20 +258,39 @@ fun ZiranApp(
         }
     }
 
-    // First load and successful pairing land on Threads.
+    // Pairing success lands on Threads with an ink drop spreading from the Pair seal.
+    var sawStart by remember { mutableStateOf(false) }
     LaunchedEffect(state.phase) {
+        if (state.phase == "unpaired" || state.phase == "pairing") {
+            sawStart = true
+        }
         if (state.phase == "ready" && stack.lastOrNull() == Screen.Start) {
-            stack = listOf(Screen.Threads)
+            if (sawStart) {
+                val origin = lastTap.takeIf { it != Offset.Unspecified }
+                    ?: Offset(widthPx * 0.86f, heightPx * 0.90f)
+                navJob?.cancel()
+                stack = listOf(Screen.Threads)
+                transition = NavTransition(NavKind.InkDrop, Screen.Start, Screen.Threads, origin)
+                navJob = scope.launch {
+                    try {
+                        runNavTransition(navProgress, NavKind.InkDrop, durationScale, reduced)
+                        transition = null
+                    } catch (_: CancellationException) {
+                    }
+                }
+            } else {
+                // Returning cold-launch already paired: go straight to Threads without Start flash.
+                stack = listOf(Screen.Threads)
+            }
         }
     }
 
-    // The controller restores the last session after the list loads. Follow it
-    // once, into the exact thread. Going back to the list stays on the list.
+    // Restore the last session once after initial ready load (cold relaunch only).
     var autoOpened by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(state.activeSessionId) {
         val id = state.activeSessionId
         if (state.phase == "ready" && id != null && autoOpened != id &&
-            stack == listOf(Screen.Threads)
+            stack == listOf(Screen.Threads) && !sawStart
         ) {
             autoOpened = id
             stack = listOf(Screen.Threads, Screen.Thread(id))
@@ -205,24 +298,14 @@ fun ZiranApp(
     }
 
     val screen = stack.last()
-    // A screen change drops focus and the IME: no field should keep a caret
-    // across navigation, and the keyboard must not linger on a read-only view.
     LaunchedEffect(screen) {
         focusManager.clearFocus()
         keyboard?.hide()
     }
 
-    val widthPx = androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.width.toFloat()
     val painted = transition
 
     Box(Modifier.fillMaxSize().background(palette.paper)) {
-        if (state.notificationsPrompt) {
-            NotificationReasonBar(
-                palette = palette,
-                onAllow = onRequestNotifications,
-                onDismiss = { controller.notificationsHandled(false) },
-            )
-        }
         InkRippleHost(
             ink = palette.ink,
             durationScale = durationScale,
@@ -234,11 +317,13 @@ fun ZiranApp(
                 transition = painted,
                 progress = navProgress.value,
                 widthPx = widthPx,
+                palette = palette,
+                reducedMotion = reduced,
             ) { target ->
                 when (target) {
                     Screen.Start -> StartScreen(
                         palette = palette,
-                        sceneKey = state.scene,
+                        sceneKey = "butterfly",
                         serverValue = state.pairServer,
                         codeValue = state.pairCode,
                         error = state.pairingError,
@@ -252,16 +337,17 @@ fun ZiranApp(
                         palette = palette,
                         sessions = state.sessions,
                         serverName = state.serverName ?: "studio-vps",
-                        sceneKey = state.scene,
+                        sceneKey = "pavilion",
                         onOpen = { id ->
-                            go(Screen.Thread(id), NavKind.InkDrop)
+                            go(Screen.Thread(id), NavKind.InkDrop, lastTap)
                             scope.launch { controller.openSession(id) }
                         },
-                        onScenes = { go(Screen.Scenes, NavKind.Unroll) },
+                        onScenes = { go(Screen.Scenes, NavKind.Unroll, Offset.Unspecified) },
                         onArchive = { id -> scope.launch { controller.archiveSession(id) } },
                         onRestore = { id -> scope.launch { controller.restoreSession(id) } },
                         onRename = { id, title -> scope.launch { controller.renameSession(id, title) } },
                         onRefresh = { scope.launch { controller.refreshSessions() } },
+                        onCreateThread = { title -> scope.launch { controller.createSession(null, title) } },
                         reducedMotion = reduced,
                     )
                     is Screen.Thread -> ThreadScreen(
@@ -269,19 +355,21 @@ fun ZiranApp(
                         state = state,
                         sceneKey = state.scene,
                         onBack = back,
-                        onModel = { go(Screen.Model, NavKind.Unroll) },
-                        onScenes = { go(Screen.Scenes, NavKind.Unroll) },
+                        onModel = {
+                            go(Screen.Model, NavKind.Unroll, Offset.Unspecified)
+                            scope.launch { controller.refreshModels() }
+                        },
+                        onScenes = { go(Screen.Scenes, NavKind.Unroll, Offset.Unspecified) },
                         onTextChange = controller::setComposerText,
                         onSend = { text -> scope.launch { controller.sendText(text) } },
                         onStop = { scope.launch { controller.stop() } },
                         onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
-                        modifier = Modifier.imePadding(),
                         reducedMotion = reduced,
                     )
                     Screen.Model -> ModelScreen(
                         palette = palette,
                         state = state,
-                        sceneKey = state.scene,
+                        sceneKey = "riders",
                         onBack = back,
                         onSelectModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
                         onSetEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
@@ -299,6 +387,16 @@ fun ZiranApp(
                 }
             }
         }
+        // Tiled 256 dp paper grain sits above screens (non-interactive, z-index: 5).
+        GrainOverlay(nightFactor = palette.nightFactor)
+        if (state.notificationsPrompt) {
+            NotificationReasonBar(
+                palette = palette,
+                onAllow = onRequestNotifications,
+                onDismiss = { controller.notificationsHandled(false) },
+                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+            )
+        }
     }
 }
 
@@ -311,55 +409,56 @@ private fun NotificationReasonBar(
     palette: Palette,
     onAllow: () -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    androidx.compose.foundation.layout.Column(
-        Modifier
+    Column(
+        modifier
             .fillMaxWidth()
             .background(palette.paper2)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
-        androidx.compose.material3.Text(
+        Text(
             "Turn notices",
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = dev.ziran.android.design.WuFonts.Garamond,
+            style = TextStyle(
+                fontFamily = WuFonts.Garamond,
                 fontSize = 16.sp,
                 color = palette.ink,
             ),
         )
-        androidx.compose.material3.Text(
+        Text(
             "A local notice when a turn finishes or an approval is needed while Ziran is in the background. Nothing is sent from a server.",
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = dev.ziran.android.design.WuFonts.Garamond,
+            style = TextStyle(
+                fontFamily = WuFonts.Garamond,
                 fontSize = 13.sp,
                 lineHeight = 19.sp,
                 color = palette.ink3,
             ),
             modifier = Modifier.padding(top = 2.dp),
         )
-        androidx.compose.foundation.layout.Row(Modifier.padding(top = 8.dp)) {
-            androidx.compose.material3.Text(
+        Row(Modifier.padding(top = 8.dp)) {
+            Text(
                 "not now",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = dev.ziran.android.design.WuFonts.Mono,
+                style = TextStyle(
+                    fontFamily = WuFonts.Mono,
                     fontSize = 12.sp,
                     color = palette.ink3,
-                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    textDecoration = TextDecoration.Underline,
                 ),
                 modifier = Modifier
                     .padding(end = 18.dp)
-                    .semantics { role = androidx.compose.ui.semantics.Role.Button; contentDescription = "Not now" }
+                    .semantics { role = Role.Button; contentDescription = "Not now" }
                     .clickable { onDismiss() },
             )
-            androidx.compose.material3.Text(
+            Text(
                 "allow",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = dev.ziran.android.design.WuFonts.Mono,
+                style = TextStyle(
+                    fontFamily = WuFonts.Mono,
                     fontSize = 12.sp,
                     color = palette.seal,
-                    textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                    textDecoration = TextDecoration.Underline,
                 ),
                 modifier = Modifier
-                    .semantics { role = androidx.compose.ui.semantics.Role.Button; contentDescription = "Allow notifications" }
+                    .semantics { role = Role.Button; contentDescription = "Allow notifications" }
                     .clickable { onAllow() },
             )
         }
