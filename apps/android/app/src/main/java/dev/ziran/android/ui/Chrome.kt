@@ -1,22 +1,18 @@
 package dev.ziran.android.ui
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
+import dev.ziran.android.design.Grain
+import dev.ziran.android.design.Painting
 import dev.ziran.android.design.Palette
 import dev.ziran.android.design.sceneByKey
 
 /**
- * Shared screen chrome: painting header, mist, paper fade and grain.
- * Sizes come straight from the board inline styles.
+ * Shared screen header chrome: full-width clipped painting with 1.2 s scene
+ * cross-fade, 34 s Ken Burns drift, drifting mist band, and smooth paper fade.
  */
 @Composable
 fun ScreenChrome(
@@ -27,39 +23,21 @@ fun ScreenChrome(
 ) {
     val scene = sceneByKey(sceneKey)
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .width(390.dp)
-                .height(headerHeightDp.dp)
-                .align(androidx.compose.ui.Alignment.TopCenter)
-                .background(palette.paper),
-        ) {
-            dev.ziran.android.design.Painting(
-                scene = scene,
-                isNight = palette.isNight,
-                modifier = Modifier.fillMaxSize(),
-                heightDp = headerHeightDp,
-                reducedMotion = reducedMotion,
-            )
-            // Paper fade: gradient from transparent to paper.
-            Box(
-                Modifier.fillMaxSize().background(
-                    androidx.compose.ui.graphics.Brush.verticalGradient(
-                        0f to androidx.compose.ui.graphics.Color.Transparent,
-                        0.55f to androidx.compose.ui.graphics.Color.Transparent,
-                        0.98f to palette.paper,
-                    ),
-                ),
-            )
-        }
-        // Grain overlay, 256 dp tiles, above all content but non-interactive.
-        Image(
-            painter = painterResource(
-                if (palette.isNight) dev.ziran.android.R.drawable.grain_night else dev.ziran.android.R.drawable.grain_day,
-            ),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
+        Painting(
+            scene = scene,
+            palette = palette,
+            modifier = Modifier.align(Alignment.TopCenter),
+            heightDp = headerHeightDp,
+            reducedMotion = reducedMotion,
         )
     }
+}
+
+/**
+ * Full-screen 256 dp tiled paper grain overlay, rendered above screen content
+ * (matching CSS z-index: 5, pointer-events: none).
+ */
+@Composable
+fun GrainOverlay(nightFactor: Float) {
+    Grain(nightFactor = nightFactor, modifier = Modifier.fillMaxSize())
 }

@@ -1,5 +1,11 @@
 package dev.ziran.android.design
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -35,6 +41,7 @@ object Tokens {
 }
 
 /** Resolved palette for one screen, always applied explicitly by the caller. */
+@Immutable
 data class Palette(
     val paper: Color,
     val paper2: Color,
@@ -47,17 +54,58 @@ data class Palette(
     val blue: Color,
     val green: Color,
     val isNight: Boolean,
+    val nightFactor: Float = if (isNight) 1f else 0f,
 ) {
     companion object {
         val Day = Palette(
             Tokens.DayPaper, Tokens.DayPaper2, Tokens.DayInk, Tokens.DayInk2,
             Tokens.DayInk3, Tokens.DayLine, Tokens.DaySeal, Tokens.DayOnSeal,
-            Tokens.DayBlue, Tokens.DayGreen, isNight = false,
+            Tokens.DayBlue, Tokens.DayGreen, isNight = false, nightFactor = 0f,
         )
         val Night = Palette(
             Tokens.NightPaper, Tokens.NightPaper2, Tokens.NightInk, Tokens.NightInk2,
             Tokens.NightInk3, Tokens.NightLine, Tokens.NightSeal, Tokens.NightOnSeal,
-            Tokens.NightBlue, Tokens.NightGreen, isNight = true,
+            Tokens.NightBlue, Tokens.NightGreen, isNight = true, nightFactor = 1f,
         )
     }
+}
+
+/**
+ * Eases all palette colours and the night painting factor over 600 ms
+ * (or 120 ms under reduced motion), matching Motion.dc.html.
+ */
+@Composable
+fun rememberAnimatedPalette(isNight: Boolean, reducedMotion: Boolean): Palette {
+    val target = if (isNight) Palette.Night else Palette.Day
+    val duration = if (reducedMotion) WuDurations.ReducedFade else WuDurations.Theme
+    val spec = tween<Color>(duration, easing = WuEasing.Default)
+    val paper by animateColorAsState(target.paper, spec, label = "theme-paper")
+    val paper2 by animateColorAsState(target.paper2, spec, label = "theme-paper2")
+    val ink by animateColorAsState(target.ink, spec, label = "theme-ink")
+    val ink2 by animateColorAsState(target.ink2, spec, label = "theme-ink2")
+    val ink3 by animateColorAsState(target.ink3, spec, label = "theme-ink3")
+    val line by animateColorAsState(target.line, spec, label = "theme-line")
+    val seal by animateColorAsState(target.seal, spec, label = "theme-seal")
+    val onSeal by animateColorAsState(target.onSeal, spec, label = "theme-onseal")
+    val blue by animateColorAsState(target.blue, spec, label = "theme-blue")
+    val green by animateColorAsState(target.green, spec, label = "theme-green")
+    val nightFactor by animateFloatAsState(
+        targetValue = if (isNight) 1f else 0f,
+        animationSpec = tween(duration, easing = WuEasing.Default),
+        label = "theme-night-factor",
+    )
+    return Palette(
+        paper = paper,
+        paper2 = paper2,
+        ink = ink,
+        ink2 = ink2,
+        ink3 = ink3,
+        line = line,
+        seal = seal,
+        onSeal = onSeal,
+        blue = blue,
+        green = green,
+        isNight = isNight,
+        nightFactor = nightFactor,
+    )
 }
