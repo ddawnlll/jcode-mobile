@@ -221,3 +221,12 @@ Historical release notes remain in `docs/`, including
   <sub>An independent companion for <a href="https://github.com/1jehuang/jcode">JCode</a>. Not an official JCode release.</sub><br />
   <sub>EB Garamond and JetBrains Mono (SIL OFL) and Met Museum Open Access (CC0) painting details keep their own licenses. See <a href="THIRD_PARTY_NOTICES.md">THIRD_PARTY_NOTICES.md</a>.</sub>
 </p>
+
+## Ziran 0.7.0
+
+A native Android client for jcode, built with Kotlin and Jetpack Compose. The
+phone stays a client; the daemon owns execution. Ziran lives in
+[`apps/android/`](apps/android/) as a standalone Gradle project. Application
+id `dev.ziran.android`, version 0.7.0, compile and target SDK 37, min SDK 26.
+
+See [`docs/V0_7_0_RELEASE_NOTES.md`](docs/V0_7_0_RELEASE_NOTES.md).
