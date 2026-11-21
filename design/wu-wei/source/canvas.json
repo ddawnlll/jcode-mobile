@@ -1,0 +1,319 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Flow.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "Flow · tap through, with transitions",
+      "w": 390,
+      "x": -640,
+      "y": 0
+    },
+    "Live-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "live work · tool calls and thinking · night",
+      "w": 390,
+      "x": 2350,
+      "y": 1300
+    },
+    "Live.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "live work · tool calls and thinking · day",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "Main-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "session · night",
+      "w": 390,
+      "x": 940,
+      "y": 1300
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "session · day",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Model-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "model · night",
+      "w": 390,
+      "x": 1410,
+      "y": 1300
+    },
+    "Model.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "model · day",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "Motion.dc.html": {
+      "h": 2380,
+      "title": "Motion · symbols and every movement",
+      "w": 390,
+      "x": -1110,
+      "y": 0
+    },
+    "Scenes-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "scenes · night",
+      "w": 390,
+      "x": 1880,
+      "y": 1300
+    },
+    "Scenes.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "scenes · day",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "Sessions-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "sessions · night",
+      "w": 390,
+      "x": 470,
+      "y": 1300
+    },
+    "Sessions.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "sessions · day",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Start-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "get started · night",
+      "w": 390,
+      "x": 0,
+      "y": 1300
+    },
+    "Start.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "get started · day",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Mac-Native.dc.html": {
+      "h": 2300,
+      "title": "Mac · native build notes (SwiftUI, AppKit)",
+      "w": 900,
+      "x": -1000,
+      "y": 3000
+    },
+    "Mac-Main.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · main window · day",
+      "w": 1280,
+      "x": 0,
+      "y": 3000
+    },
+    "Mac-Live.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · live work · day",
+      "w": 1280,
+      "x": 1360,
+      "y": 3000
+    },
+    "Mac-Start.dc.html": {
+      "h": 540,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · pairing window · day",
+      "w": 760,
+      "x": 2720,
+      "y": 3000
+    },
+    "Mac-Settings.dc.html": {
+      "h": 600,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · settings · day",
+      "w": 780,
+      "x": 3560,
+      "y": 3000
+    },
+    "Mac-MenuBar.dc.html": {
+      "h": 640,
+      "is_interactive": true,
+      "title": "Mac · menu bar companion · day",
+      "w": 400,
+      "x": 4420,
+      "y": 3000
+    },
+    "Mac-Main-Night.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · main window · night",
+      "w": 1280,
+      "x": 0,
+      "y": 4220
+    },
+    "Mac-Live-Night.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · live work · night",
+      "w": 1280,
+      "x": 1360,
+      "y": 4220
+    },
+    "Mac-Start-Night.dc.html": {
+      "h": 540,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · pairing window · night",
+      "w": 760,
+      "x": 2720,
+      "y": 4220
+    },
+    "Mac-Settings-Night.dc.html": {
+      "h": 600,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · settings · night",
+      "w": 780,
+      "x": 3560,
+      "y": 4220
+    },
+    "Mac-MenuBar-Night.dc.html": {
+      "h": 640,
+      "is_interactive": true,
+      "title": "Mac · menu bar companion · night",
+      "w": 400,
+      "x": 4420,
+      "y": 4220
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-16T17:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "day",
+    "night",
+    "flow",
+    "flowhow",
+    "motion",
+    "macos",
+    "macnight",
+    "machow"
+  ],
+  "notes": {
+    "day": {
+      "kind": "title1",
+      "maxW": 2740,
+      "text": "day",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "flow": {
+      "kind": "title1",
+      "maxW": 390,
+      "text": "Flow",
+      "w": 240,
+      "x": -640,
+      "y": -300
+    },
+    "flowhow": {
+      "text": "Press Play. Seal → threads. Tap fox → thread (ink drop). Drag from the left edge for predictive back; the menu or back button slides back. On threads: swipe a row left to archive (undo bar), long-press for actions, pull down to refresh. Every tap leaves an ink ripple.",
+      "w": 390,
+      "x": -640,
+      "y": 880
+    },
+    "motion": {
+      "kind": "title1",
+      "maxW": 390,
+      "text": "Motion",
+      "w": 240,
+      "x": -1110,
+      "y": -300
+    },
+    "night": {
+      "kind": "title1",
+      "maxW": 2740,
+      "text": "night",
+      "w": 240,
+      "x": 0,
+      "y": 1000
+    },
+    "macos": {
+      "kind": "title1",
+      "maxW": 5820,
+      "text": "macOS · day",
+      "x": -1000,
+      "y": 2700
+    },
+    "macnight": {
+      "kind": "title1",
+      "maxW": 4820,
+      "text": "macOS · night",
+      "x": 0,
+      "y": 3920
+    },
+    "machow": {
+      "text": "Main window: press Play. Click threads in the sidebar; the scene cross-fades. Search icon opens Go to (type, ↑↓, ↩, esc). The model chip opens the brush popover. Sidebar and inspector icons fold their columns. In crane, allow or deny the command. Type and press ↩ to queue a message while fox works.",
+      "w": 520,
+      "x": 5000,
+      "y": 3000
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Main-Night.dc.html",
+    "Start.dc.html",
+    "Start-Night.dc.html",
+    "Sessions.dc.html",
+    "Sessions-Night.dc.html",
+    "Model.dc.html",
+    "Model-Night.dc.html",
+    "Scenes.dc.html",
+    "Scenes-Night.dc.html",
+    "Flow.dc.html",
+    "Live.dc.html",
+    "Live-Night.dc.html",
+    "Motion.dc.html",
+    "Mac-Native.dc.html",
+    "Mac-Main.dc.html",
+    "Mac-Live.dc.html",
+    "Mac-Start.dc.html",
+    "Mac-Settings.dc.html",
+    "Mac-MenuBar.dc.html",
+    "Mac-Main-Night.dc.html",
+    "Mac-Live-Night.dc.html",
+    "Mac-Start-Night.dc.html",
+    "Mac-Settings-Night.dc.html",
+    "Mac-MenuBar-Night.dc.html"
+  ],
+  "pages": [],
+  "title": "JCode Mobile Wu wei"
+}

@@ -1,37 +1,34 @@
 # Getting started
 
-> **Current release: 0.5.0, Adapter v4.** The live deployment this guide is
-> calibrated against now runs `jcode-adapter-v4` (0.5.0, protocol 4, minimum 2)
-> behind `https://dawnll.duckdns.org`. See
-> [`ADAPTER_V4_DEPLOYMENT.md`](ADAPTER_V4_DEPLOYMENT.md) for that cutover,
-> its verification and its rollback. The walkthrough below still names Adapter
-> v2 because the v2 binary is the documented rollback path. To run Adapter v4
-> instead, build `--bin jcode-adapter-v4` and also set `JCODE_SOCKET` to the
-> daemon's own native socket, because v4 opens native per-session links on it.
-> Without that variable the default is a `jcode.sock` beside
-> `JCODE_API_SOCKET`, which does not exist.
+> **Current release: Ziran 0.7.1 ("Wu wei") + Adapter v4.** Ziran is the native
+> Kotlin + Jetpack Compose Android client (`dev.ziran.android`) paired with the
+> Rust Adapter v4 (`jcode-adapter-v4`, protocol 4, minimum 2). The live
+> deployment this guide is calibrated against runs `jcode-adapter-v4` behind
+> `https://dawnll.duckdns.org` (see [`ADAPTER_V4_DEPLOYMENT.md`](ADAPTER_V4_DEPLOYMENT.md)).
+> When running Adapter v4, set `JCODE_SOCKET` to the daemon's native socket in
+> addition to `JCODE_API_SOCKET`, because v4 opens native per-session links on
+> it. `jcode-adapter-v2` remains available as a rollback alias.
 
-JCode Mobile 0.3.1 is the Stillness 12 Tauri client paired with the Rust
-Adapter v2. The phone is the surface. The adapter and the JCode daemon do the
-work on your server.
+Ziran 0.7.1 is the native Android client paired with the Rust Adapter v4. The
+phone is the return surface; the adapter and JCode daemon own execution on your
+Linux server.
 
 This guide covers the supported path on Linux:
 
-1. Build and run Adapter v2 beside JCode.
+1. Build and run Adapter v4 beside JCode.
 2. Put TLS in front of the adapter.
-3. Install and pair the Android APK, or build the native Linux shell.
+3. Install `ziran-0.7.1-android-release.apk` and pair via one-time code or `ziran://pair` link.
 4. Send a turn, leave, and return to the same session.
 
 ## What you need
 
 | Piece | Version or note |
 | --- | --- |
-| JCode daemon | The pinned fork at `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8`, with the harness API socket available |
-| Rust | Stable toolchain for the adapter and the Tauri shell |
-| Bun | 1.4.4 for the Stillness web build and repository tooling |
+| JCode daemon | The pinned fork at `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8`, with both native and harness API sockets available |
+| Rust | Stable toolchain for Adapter v4 (`jcode-adapter-v4`) |
+| JDK + Android SDK | Only if building Ziran from source (`apps/android/`, SDK 37, Gradle 9.6.1) |
 | TLS | A certificate and key at a reverse proxy, or a reviewed private tunnel |
-| Android | 7.0 or newer, `arm64-v8a` or `armeabi-v7a`, with sideloading enabled |
-| Linux desktop | GTK 3 and WebKitGTK 4.1 development packages, or a `TAURI_SYSROOT` prefix |
+| Android | 8.0 (API 26) or newer, with sideloading enabled (supports 90/120/144 Hz displays) |
 
 The adapter does not run a second agent, keep a second canonical transcript, or
 call a provider directly. It uses the curated `jcode-sdk` and harness API.

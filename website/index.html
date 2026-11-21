@@ -1,80 +1,80 @@
 <!doctype html>
-<html lang="en" class="no-js">
+<html lang="en" class="no-js" data-ink="day">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#111F20">
-  <title>JCode Mobile · Leave the desk. Keep the thread.</title>
-  <meta name="description" content="A Tauri client for JCode on your own Linux server. Send work, leave the phone, and return to the same session, plan, and tool trail. Android 0.5.0 APK available for sideload.">
+  <meta name="theme-color" content="#E5EBE0">
+  <title>Ziran · Leave the desk. Keep the thread.</title>
+  <meta name="description" content="Ziran is a native Android client for JCode on your own Linux server. Built in Kotlin and Jetpack Compose with Wu wei motion and Adapter v4 continuity. Android 0.7.1 APK ready to sideload.">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/icon.png">
-  <link rel="preload" href="assets/fonts/BricolageGrotesque-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="preload" href="assets/fonts/HankenGrotesk-Regular.ttf" as="font" type="font/ttf" crossorigin>
-  <link rel="preload" href="assets/fonts/IBMPlexMono-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/ebgaramond_regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/ebgaramond_medium.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/jetbrainsmono_regular.ttf" as="font" type="font/ttf" crossorigin>
   <style>
     @font-face {
-      font-family: "Bricolage Grotesque";
-      src: url("assets/fonts/BricolageGrotesque-SemiBold.ttf") format("truetype");
-      font-weight: 600;
-      font-style: normal;
-      font-display: swap;
-    }
-    @font-face {
-      font-family: "Hanken Grotesk";
-      src: url("assets/fonts/HankenGrotesk-Regular.ttf") format("truetype");
+      font-family: "EB Garamond";
+      src: url("assets/fonts/ebgaramond_regular.ttf") format("truetype");
       font-weight: 400;
       font-style: normal;
       font-display: swap;
     }
     @font-face {
-      font-family: "Hanken Grotesk";
-      src: url("assets/fonts/HankenGrotesk-Medium.ttf") format("truetype");
+      font-family: "EB Garamond";
+      src: url("assets/fonts/ebgaramond_medium.ttf") format("truetype");
       font-weight: 500;
       font-style: normal;
       font-display: swap;
     }
     @font-face {
-      font-family: "Hanken Grotesk";
-      src: url("assets/fonts/HankenGrotesk-SemiBold.ttf") format("truetype");
-      font-weight: 600;
-      font-style: normal;
+      font-family: "EB Garamond";
+      src: url("assets/fonts/ebgaramond_italic.ttf") format("truetype");
+      font-weight: 400;
+      font-style: italic;
       font-display: swap;
     }
     @font-face {
-      font-family: "IBM Plex Mono";
-      src: url("assets/fonts/IBMPlexMono-Regular.ttf") format("truetype");
+      font-family: "JetBrains Mono";
+      src: url("assets/fonts/jetbrainsmono_regular.ttf") format("truetype");
       font-weight: 400;
       font-style: normal;
       font-display: swap;
     }
-    html { background: #F3F6F5; }
+    @font-face {
+      font-family: "JetBrains Mono";
+      src: url("assets/fonts/jetbrainsmono_medium.ttf") format("truetype");
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    html { background: #E5EBE0; }
     body { margin: 0; }
-    .boot-fallback { padding: 24px; color: #173B3A; font: 16px/1.5 sans-serif; }
+    .boot-fallback { padding: 24px; color: #16231D; font: 16px/1.5 serif; }
   </style>
   <link rel="stylesheet" href="styles.css">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="JCode Mobile · Leave the desk. Keep the thread.">
-  <meta property="og:description" content="A Tauri client for JCode on your own Linux server. The server executes while the phone disconnects. Return to the exact session, plan, and tool trail.">
+  <meta property="og:title" content="Ziran · Leave the desk. Keep the thread.">
+  <meta property="og:description" content="A native Android client for JCode on your own Linux server. Kotlin, Jetpack Compose, Adapter v4, and effortless Wu wei continuity.">
   <meta property="og:image" content="assets/social-card.png">
-  <meta property="og:image:alt" content="JCode Mobile with a real session and the words Leave the desk. Keep the thread.">
+  <meta property="og:image:alt" content="Ziran 0.7.1 live thread capture on Xuan paper with the vermilion seal and the words Leave the desk. Keep the thread.">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="JCode Mobile · Leave the desk. Keep the thread.">
-  <meta name="twitter:description" content="A Tauri client for JCode on your own Linux server. Android 0.5.0 APK available for sideload.">
+  <meta name="twitter:title" content="Ziran · Leave the desk. Keep the thread.">
+  <meta name="twitter:description" content="A native Kotlin and Jetpack Compose Android client for JCode on your own Linux server. Ziran 0.7.1 APK available for sideload.">
   <meta name="twitter:image" content="assets/social-card.png">
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      "name": "JCode Mobile",
+      "name": "Ziran",
       "applicationCategory": "DeveloperApplication",
       "applicationSubCategory": "Remote development client",
       "operatingSystem": "Android",
-      "softwareVersion": "0.5.0",
-      "downloadUrl": "https://github.com/ddawnlll/jcode-mobile/releases/download/v0.5.0/jcode-mobile-0.5.0-android-release.apk",
+      "softwareVersion": "0.7.1",
+      "downloadUrl": "https://github.com/ddawnlll/jcode-mobile/releases/download/v0.7.1/ziran-0.7.1-android-release.apk",
       "codeRepository": "https://github.com/ddawnlll/jcode-mobile",
       "softwareHelp": "https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md",
-      "releaseNotes": "https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.5.0"
+      "releaseNotes": "https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.7.1"
     }
   </script>
 </head>
@@ -83,24 +83,30 @@
 
   <header class="masthead" id="site-header">
     <div class="wrap masthead-inner">
-      <a class="brand" href="#top" aria-label="JCode Mobile, back to top">
-        <img src="assets/mark/jcode-mark.png" width="28" height="28" alt="">
-        <span class="brand-name">JCode Mobile</span>
-        <span class="brand-edition mono">Stillness 12</span>
+      <a class="brand" href="#top" aria-label="Ziran, back to top">
+        <img src="assets/mark/ziran-seal.png" width="28" height="28" alt="">
+        <span class="brand-name">Ziran</span>
+        <span class="brand-edition mono">Wu wei · 0.7.1</span>
       </a>
-      <nav id="site-nav" aria-label="Primary">
-        <a class="nav-link" href="#premise">Premise</a>
-        <a class="nav-link" href="#how">Continuity</a>
-        <a class="nav-link" href="#inspect">Inspect</a>
-        <a class="nav-link" href="#setup">Setup</a>
-        <a class="nav-link" href="#release">Release</a>
-        <a class="nav-link nav-link--github" data-link="github" href="https://github.com/ddawnlll/jcode-mobile">
-          GitHub
-          <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-            <path d="M2 10 10 2M4 2h6v6" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="square"/>
-          </svg>
-        </a>
-      </nav>
+      <div class="masthead-right">
+        <nav id="site-nav" aria-label="Primary">
+          <a class="nav-link" href="#premise">Premise</a>
+          <a class="nav-link" href="#how">Continuity</a>
+          <a class="nav-link" href="#inspect">Inspect</a>
+          <a class="nav-link" href="#setup">Setup</a>
+          <a class="nav-link" href="#release">Release</a>
+          <a class="nav-link nav-link--github" data-link="github" href="https://github.com/ddawnlll/jcode-mobile">
+            GitHub
+            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+              <path d="M2 10 10 2M4 2h6v6" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="square"/>
+            </svg>
+          </a>
+        </nav>
+        <div class="ink-switch" role="group" aria-label="Ink theme">
+          <button class="ink-pill" type="button" data-set-ink="day" aria-pressed="true">day</button>
+          <button class="ink-pill" type="button" data-set-ink="night" aria-pressed="false">night</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -108,90 +114,85 @@
 
   <main id="main">
     <section class="hero" id="top" aria-labelledby="hero-title">
-      <div class="wrap hero-lines" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span><span></span>
-        <span></span><span></span><span></span><span></span><span></span><span></span>
+      <div class="hero-canopy" aria-hidden="true">
+        <img class="canopy-img is-active" data-canopy="pavilion" src="assets/media/painting_pavilion.jpg" width="1200" height="720" alt="">
+        <img class="canopy-img" data-canopy="peaks" src="assets/media/painting_peaks.jpg" width="1200" height="720" alt="">
+        <img class="canopy-img" data-canopy="misty" src="assets/media/painting_misty_peaks.jpg" width="1200" height="720" alt="">
+        <img class="canopy-img" data-canopy="riders" src="assets/media/painting_riders.jpg" width="1200" height="720" alt="">
+        <div class="canopy-mist"></div>
+        <div class="canopy-fade"></div>
       </div>
+
       <div class="wrap hero-grid">
         <div class="hero-copy">
           <div class="hero-kicker">
-            <p class="mono eyebrow">A Tauri client for JCode on your own server</p>
-            <p class="mono hero-edition">Stillness 12 · Adapter v4 · 0.5.0</p>
+            <p class="mono eyebrow">Native Android client for JCode</p>
+            <p class="mono">Wu wei · Adapter v4 · 0.7.1</p>
           </div>
           <h1 class="hero-title" id="hero-title">
             <span class="hero-line">Leave the desk.</span>
             <span class="hero-line hero-line--second">Keep the <span class="thread-word">thread.</span></span>
           </h1>
-          <p class="hero-lede">JCode keeps working on your Linux server. The phone is how you send an instruction, leave, and return to the exact session, plan, and tool trail.</p>
+          <p class="hero-lede">JCode keeps working on your Linux server. Ziran is ink, paper, and effortless action in native Kotlin and Jetpack Compose—send an instruction, walk away, and return to the exact session and live tool trail.</p>
           <div class="hero-actions">
-            <a class="button button--primary" id="download-apk" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.5.0/jcode-mobile-0.5.0-android-release.apk" referrerpolicy="no-referrer">
+            <a class="button button--primary" id="download-apk" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.7.1/ziran-0.7.1-android-release.apk" referrerpolicy="no-referrer">
               <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
                 <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12v2h10v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
               </svg>
-              <span>Download Android 0.5.0</span>
-              <span class="button-meta mono">APK</span>
+              <span>Download Ziran 0.7.1</span>
+              <span class="button-meta mono">Android APK</span>
             </a>
-            <a class="button button--text" href="#how">See the return path <span class="arrow" aria-hidden="true">↓</span></a>
+            <a class="button button--text" href="#how">See the return path <span aria-hidden="true">↓</span></a>
           </div>
-          <p class="caveat"><span class="caveat-mark" aria-hidden="true">!</span> 12.1 MiB. Debug-signed APK for arm64-v8a and armeabi-v7a. No Play Store listing. iOS is not built on this Linux host.</p>
+          <p class="caveat">11.09 MiB. Native Kotlin + Jetpack Compose APK (dev.ziran.android, Android 8.0+, 120 Hz ready). Debug-signed for sideloading. No Play Store listing or iOS build.</p>
+
           <dl class="hero-facts">
-            <div><dt class="mono">Adapter</dt><dd>Rust v4</dd></div>
-            <div><dt class="mono">Provider</dt><dd>Command Code</dd></div>
-            <div><dt class="mono">Client</dt><dd>Stillness 12</dd></div>
+            <div><dt class="mono">Client</dt><dd>Kotlin + Compose</dd></div>
+            <div><dt class="mono">Adapter</dt><dd>Rust v4 · SQLite</dd></div>
+            <div><dt class="mono">Motion</dt><dd>Wu wei · 120 Hz</dd></div>
           </dl>
+
+          <div class="canopy-picker" role="group" aria-label="Hero painting scene">
+            <span class="mono canopy-picker-label">Scene</span>
+            <button class="scene-chip" type="button" data-pick-canopy="pavilion" aria-pressed="true">
+              <img src="assets/media/painting_pavilion.jpg" width="28" height="20" alt=""><span>pavilion</span>
+            </button>
+            <button class="scene-chip" type="button" data-pick-canopy="peaks" aria-pressed="false">
+              <img src="assets/media/painting_peaks.jpg" width="28" height="20" alt=""><span>peaks</span>
+            </button>
+            <button class="scene-chip" type="button" data-pick-canopy="misty" aria-pressed="false">
+              <img src="assets/media/painting_misty_peaks.jpg" width="28" height="20" alt=""><span>misty peaks</span>
+            </button>
+            <button class="scene-chip" type="button" data-pick-canopy="riders" aria-pressed="false">
+              <img src="assets/media/painting_riders.jpg" width="28" height="20" alt=""><span>riders</span>
+            </button>
+          </div>
         </div>
 
         <figure class="hero-figure" id="hero-orbit-figure" aria-labelledby="hero-figure-caption">
-          <div class="orbit-plate" data-theme="night">
+          <div class="orbit-plate">
             <div class="plate-head">
-              <span class="mono">Orbit plate / 01</span>
-              <span class="mono">Specimen / continuous</span>
+              <span class="mono">Ziran / 0.7.1</span>
+              <span class="mono">Adapter v4 timeline</span>
             </div>
             <canvas id="hero-orbit" class="orbit-canvas" aria-hidden="true" data-canvas-state="paused" data-canvas-frame="0"></canvas>
-            <div class="orbit-static" data-orbit-fallback aria-hidden="true">
-              <pre> .%.%#  ..=. :.....           ....., ; -= +.* * # .*  .+=.
-@ . .  *+ =;.:...               ....::;- =+ * # .## * * .
-. % %#.*  .;.....                 ...,; -+ * * #   #  *.+=
-@ .. . .+.=;:....                   .: ;= + * # ##.# *.  +
- .  %# *.+..: ..                     .:;-= +.*# . # . #*..
-% % . . ..=;:...                     .,:- +* #.## %.#  .*+
-  . % #* += ;...                      .:-=+ * # .%. # #
-.%% .. .. ...:..                       .;-=* ##% % %.  #*.
-  ..#.#.*+.=;:..                        .;+ *# %%.%% # .
-.% %    .. =....                         -=+*#. %   %% #*
-%    #.#*.+.;:,.                         ,-+#.#%% % .% # *
- .%% .. . +.=;:,                          -* #%% %% % .
-%. . .##.* ..-:..                         ;+*#%% @@.%% # *
-    % . .* +=. ,.                          =*#.%. @ %% #.*
-.% % .# * ...=-:,.                         +*#%@.@..%%
-# .. #.   * +..-;,                         =##%@ @@    # *
-   # . #.*.. += .;.                        =#%%@@.@%.%.#*
-.##.  #. . *.. =-.:,                       =#%%@@ @% %# ..
-#   # . #.* . + .-;,.                      =#%@ @@ %% . *
- ..#  .#. .**. += -;,.                     *%%@@.@% % # *
- *#.. # . * ..+. =..;:                     #% %@@.%. #.  +
-*.  #. .#.. * . + =- -:                   *#%%%.%%.% # *+
- ..*.  #   * . + +. =.-:;                 #%%%%%%  %#.* .
-. * . * ..* . * +. =.=.-,-:               #%%%%.% %#  * +</pre>
-            </div>
-            <div class="plate-annot plate-annot--a mono" aria-hidden="true">ADAPTER V2<br>= TRUE</div>
-            <div class="plate-annot plate-annot--b mono" aria-hidden="true">SITE SPECIMEN<br>30 FPS CAP</div>
+            <div class="orbit-static" data-orbit-fallback aria-hidden="true"></div>
             <div class="device-sheet device-sheet--hero">
-              <img src="assets/media/session-v040.png" width="860" height="1800" alt="JCode Mobile session with a real answer, the model route, tool timeline and composer." decoding="async">
+              <img id="hero-phone-img" src="assets/media/ziran-live-day.png" data-day-src="assets/media/ziran-live-day.png" data-night-src="assets/media/ziran-live-night.png" width="720" height="1600" alt="Ziran 0.7.1 live thread showing folded thinking, grep and read rings drawn, and an edit diff unfolding above the composer." decoding="async">
             </div>
             <div class="plate-foot">
-              <span class="mono plate-provenance">Real capture / v0.4.0</span>
-              <button class="motion-toggle" id="motion-toggle" type="button" aria-pressed="true" aria-label="Pause orbit animation" data-playing="true">
+              <span class="mono plate-provenance">Real capture · Android API 36</span>
+              <button class="motion-toggle" id="motion-toggle" type="button" aria-pressed="true" aria-label="Pause ambient ink motion" data-playing="true">
                 <span class="motion-glyph" aria-hidden="true">
                   <svg class="glyph-pause" viewBox="0 0 14 14" width="14" height="14" focusable="false"><path d="M4 2v10M10 2v10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/></svg>
                   <svg class="glyph-play" viewBox="0 0 14 14" width="14" height="14" focusable="false"><path d="M4 2l7 5-7 5V2Z" fill="currentColor"/></svg>
                 </span>
-                <span class="motion-label">Pause orbit</span>
+                <span class="motion-label">Pause motion</span>
               </button>
-              <span class="sr-only" id="motion-status" role="status" aria-live="polite">Orbit animation running.</span>
+              <span class="sr-only" id="motion-status" role="status" aria-live="polite">Ambient ink motion running.</span>
             </div>
           </div>
-          <figcaption class="figure-caption" id="hero-figure-caption">A real capture from an isolated adapter on this release. The answer, model route, and delivery state came from the running stack. The torus is a design specimen, not a live status display.</figcaption>
+          <figcaption class="figure-caption" id="hero-figure-caption">Real capture of Ziran 0.7.1 on Android API 36. Thinking folds, tool rows draw vermilion rings, and diffs unfold in place.</figcaption>
         </figure>
       </div>
     </section>
@@ -203,37 +204,37 @@
       </div>
       <div class="wrap premise-grid">
         <div class="premise-statement">
-          <h2 id="premise-title">The work runs on your server. The phone is how you return.</h2>
+          <h2 id="premise-title">The work runs on your server. Ziran is how you return.</h2>
         </div>
         <div class="premise-body">
-          <p class="lead">Adapter v4 is one Rust process beside JCode. It opens bounded native session links, applies the exact model/provider/API route, keeps a durable SQLite event journal with cursor replay, coalesces ready deltas before sequence assignment, and exposes an authenticated mobile WebSocket. It does not run a second agent or proxy a provider key.</p>
-          <p>Navigation, backgrounding, socket close, and force-quit are not cancellation. The adapter keeps the operation journal. When you reopen, the client reconciles the same server and the same session, or shows an honest recovery state.</p>
+          <p class="lead">Adapter v4 is one Rust process beside JCode. It opens bounded native session links, applies the exact model and effort route, keeps a durable SQLite event journal with cursor replay, and serves an authenticated WebSocket. Ziran speaks that protocol natively in Kotlin and Jetpack Compose—no WebView, no wrapper, no second agent.</p>
+          <p>Navigation, backgrounding, socket close, and force-quit are never cancellation. Only the explicit Stop control targets the current turn. When you reopen, Ziran restores the exact server and session, or shows an honest recovery state.</p>
         </div>
       </div>
       <div class="wrap ledger" role="list">
         <div class="ledger-row" role="listitem">
-          <span class="mono ledger-index">A</span>
+          <span class="ledger-seal" aria-hidden="true">I</span>
           <h3>The server executes.</h3>
           <p>Prompts, tools, plans, and file reads stay with JCode on your Linux server.</p>
           <span class="mono ledger-tag">Owner / daemon</span>
         </div>
         <div class="ledger-row" role="listitem">
-          <span class="mono ledger-index">B</span>
+          <span class="ledger-seal" aria-hidden="true">II</span>
           <h3>The adapter journals.</h3>
           <p>Reserve, dispatch, accepted, rejected, unknown, and observed in history stay distinct.</p>
           <span class="mono ledger-tag">Source / fenced</span>
         </div>
         <div class="ledger-row" role="listitem">
-          <span class="mono ledger-index">C</span>
-          <h3>The return is exact.</h3>
-          <p>Server, session, draft, and reading position are scoped and restored together.</p>
-          <span class="mono ledger-tag">Seam / continuous</span>
+          <span class="ledger-seal" aria-hidden="true">III</span>
+          <h3>Effortless motion.</h3>
+          <p>Ink drops, unrolling pickers, predictive back, and 120 Hz GPU-layer animations—or calm 120 ms fades under reduced motion.</p>
+          <span class="mono ledger-tag">Wu wei / 0.7.1</span>
         </div>
       </div>
-      <div class="wrap signal-path" aria-label="Signal path from the phone to your repository">
-        <span class="signal-node">Phone</span>
+      <div class="wrap signal-path" aria-label="Signal path from Ziran to your repository">
+        <span class="signal-node">Ziran Android</span>
         <span class="signal-link" aria-hidden="true"></span>
-        <span class="signal-node">WSS + token</span>
+        <span class="signal-node">WSS + Keystore</span>
         <span class="signal-link" aria-hidden="true"></span>
         <span class="signal-node">Adapter v4</span>
         <span class="signal-link" aria-hidden="true"></span>
@@ -246,47 +247,48 @@
     </section>
 
     <section class="section section--night narrative" id="how" aria-labelledby="how-title">
+      <div class="narrative-wash" aria-hidden="true"></div>
       <div class="wrap narrative-head">
         <div>
           <p class="mono eyebrow">02 / Continuity</p>
           <h2 id="how-title">Your phone can leave.<br><span class="sage">The work does not.</span></h2>
         </div>
         <div class="narrative-intro">
-          <p class="lead">Three states from the real v0.3.1 stack. They show what the adapter and client preserve when attention stops.</p>
-          <p class="mono disclaimer">Real captures. Isolated adapter.</p>
+          <p class="lead">Three real captures from Ziran 0.7.1 on Android API 36. Every state stays calm, fenced, and honest when attention stops.</p>
+          <p class="mono disclaimer">Real captures · Native Compose</p>
         </div>
       </div>
 
       <div class="wrap narrative-grid">
         <div class="narrative-copy">
           <article class="scene-step" data-scene="send" id="step-send" aria-labelledby="step-send-title">
-            <p class="mono scene-state">Staged → Reserved → Dispatching → Accepted</p>
-            <h3 id="step-send-title">Four states, not one spinner.</h3>
-            <p>The composer does not blur writing, acceptance, and ambiguity. A lost write becomes an explicit unknown state. It is never resent automatically.</p>
+            <p class="mono scene-state">Live turn / thinking → tools → diff → answer</p>
+            <h3 id="step-send-title">Watch the turn settle in place.</h3>
+            <p>Thinking grows along a thin line and folds when finished. Each tool drops in as an ink dot, streams a flowing hairline while active, unfolds diffs and test output, and closes into a vermilion ring without jumping the layout.</p>
             <ul class="scene-list">
-              <li>Draft saved locally, scoped to the server and session.</li>
-              <li>Accepted only after authoritative JCode evidence.</li>
-              <li>Stop is explicit. Navigation is not cancel.</li>
+              <li>Drafts and queued prompts stay scoped to server and session.</li>
+              <li>Lost writes stay explicitly unconfirmed and never auto-resend.</li>
+              <li>Stop is explicit. Back navigation is never cancel.</li>
             </ul>
           </article>
           <article class="scene-step" data-scene="away" id="step-away" aria-labelledby="step-away-title">
             <p class="mono scene-state">Session scope / epoch + seq</p>
             <h3 id="step-away-title">The phone can go dark.</h3>
-            <p>JCode keeps the turn. Events carry a session scope, an adapter epoch, and a monotonic sequence. A slow answer cannot overwrite newer work.</p>
+            <p>JCode keeps the turn. Events carry a session scope, adapter epoch, and monotonic sequence so a slow response cannot overwrite newer work. Swipe any thread to archive with undo, long-press for actions, or pull to refresh.</p>
             <ul class="scene-list">
-              <li>The daemon owns execution, history, and the live runtime.</li>
-              <li>Cached content paints first and is labelled as saved.</li>
-              <li>A gap forces a snapshot, not a guessed patch.</li>
+              <li>The daemon owns execution, history, and live runtime state.</li>
+              <li>Saved threads paint immediately and reconcile on reconnect.</li>
+              <li>Predictive back tracks the finger 1:1 with rounded corners.</li>
             </ul>
           </article>
           <article class="scene-step" data-scene="return" id="step-return" aria-labelledby="step-return-title">
-            <p class="mono scene-state">Exact server + session / reconcile</p>
+            <p class="mono scene-state">Exact server + session / day and night</p>
             <h3 id="step-return-title">Return to the same thread.</h3>
-            <p>Reopening restores the exact server and session. If the target is gone, the app shows a recovery state instead of creating a replacement.</p>
+            <p>Reopening restores the exact server and session. Twelve museum landscape details cross-fade softly behind each screen, and day and night palettes ease every ink and paper token together.</p>
             <ul class="scene-list">
-              <li>Reading anchor and draft are restored in scope.</li>
-              <li>Plan, context, and activity stay source-backed.</li>
-              <li>Missing data stays unknown. It is not zero.</li>
+              <li>Hardware Keystore encrypts the paired device token.</li>
+              <li>Requests the display's peak refresh rate (up to 120 Hz).</li>
+              <li>Reduced motion turns transitions into calm 120 ms fades.</li>
             </ul>
           </article>
           <p class="narrative-end mono">End of sequence / <a href="#inspect">Inspect the work ↓</a></p>
@@ -294,52 +296,27 @@
 
         <div class="narrative-stage" data-scene="send">
           <canvas id="orbit-canvas" class="orbit-canvas orbit-canvas--stage" aria-hidden="true" data-canvas-state="paused" data-canvas-frame="0"></canvas>
-          <div class="orbit-static orbit-static--stage" data-orbit-fallback aria-hidden="true">
-            <pre> .%.%#  ..=. :.....           ....., ; -= +.* * # .*  .+=.
-@ . .  *+ =;.:...               ....::;- =+ * # .## * * .
-. % %#.*  .;.....                 ...,; -+ * * #   #  *.+=
-@ .. . .+.=;:....                   .: ;= + * # ##.# *.  +
- .  %# *.+..: ..                     .:;-= +.*# . # . #*..
-% % . . ..=;:...                     .,:- +* #.## %.#  .*+
-  . % #* += ;...                      .:-=+ * # .%. # #
-.%% .. .. ...:..                       .;-=* ##% % %.  #*.
-  ..#.#.*+.=;:..                        .;+ *# %%.%% # .
-.% %    .. =....                         -=+*#. %   %% #*
-%    #.#*.+.;:,.                         ,-+#.#%% % .% # *
- .%% .. . +.=;:,                          -* #%% %% % .
-%. . .##.* ..-:..                         ;+*#%% @@.%% # *
-    % . .* +=. ,.                          =*#.%. @ %% #.*
-.% % .# * ...=-:,.                         +*#%@.@..%%
-# .. #.   * +..-;,                         =##%@ @@    # *
-   # . #.*.. += .;.                        =#%%@@.@%.%.#*
-.##.  #. . *.. =-.:,                       =#%%@@ @% %# ..
-#   # . #.* . + .-;,.                      =#%@ @@ %% . *
- ..#  .#. .**. += -;,.                     *%%@@.@% % # *
- *#.. # . * ..+. =..;:                     #% %@@.%. #.  +
-*.  #. .#.. * . + =- -:                   *#%%%.%%.% # *+
- ..*.  #   * . + +. =.-:;                 #%%%%%%  %#.* .
-. * . * ..* . * +. =.=.-,-:               #%%%%.% %#  * +</pre>
-          </div>
+          <div class="orbit-static orbit-static--stage" data-orbit-fallback aria-hidden="true"></div>
           <div class="stage-panel" id="scene-panel" role="tabpanel" aria-labelledby="tab-send" tabindex="0">
             <div class="stage-device">
               <div class="scene-images">
-                <img class="scene-image is-active" data-scene-image="send" src="assets/media/session-v031.png" width="860" height="1800" alt="JCode Mobile 0.3.1 session with a real answer, model route, and the composer." decoding="async">
-                <img class="scene-image" data-scene-image="away" src="assets/media/home-v031.png" width="860" height="1800" alt="JCode Mobile 0.3.1 home screen with Harness online and the sessions list." decoding="async">
-                <img class="scene-image" data-scene-image="return" src="assets/media/settings-v031.png" width="860" height="1800" alt="JCode Mobile 0.3.1 preferences with theme, glass, motion, reasoning visibility, and connection state." decoding="async">
+                <img class="scene-image is-active" data-scene-image="send" src="assets/media/ziran-live-day.png" width="720" height="1600" alt="Ziran 0.7.1 live thread with folded thinking, tool rings, and unfolding diff." decoding="async">
+                <img class="scene-image" data-scene-image="away" src="assets/media/ziran-sessions-day.png" width="720" height="1600" alt="Ziran 0.7.1 threads list with pavilion painting, vermilion agent seals, and live status marks." decoding="async">
+                <img class="scene-image" data-scene-image="return" src="assets/media/ziran-scenes-night.png" width="720" height="1600" alt="Ziran 0.7.1 Scene picker in Night ink with twelve landscape details and day/night switch." decoding="async">
                 <div class="motion-scene-images" id="motion-scene-images" aria-hidden="true"></div>
               </div>
             </div>
             <div class="stage-caption">
-              <span class="mono stage-scene" id="stage-scene">01 / Send</span>
-              <span id="stage-caption-text">Staged, reserved, dispatching, accepted. Four states, one explicit path.</span>
-              <span class="mono stage-provenance" id="stage-provenance">Real capture / v0.3.1</span>
+              <span class="mono stage-scene" id="stage-scene">01 / Live turn</span>
+              <span id="stage-caption-text">Thinking grows and folds, tool calls draw red rings, diffs unfold, and answers stream word by word.</span>
+              <span class="mono stage-provenance" id="stage-provenance">Real capture / Ziran 0.7.1</span>
               <div class="motion-caption" id="motion-caption"></div>
             </div>
           </div>
-          <div class="scene-tabs" id="scene-tabs" role="tablist" aria-label="Illustrative continuity states">
-            <button class="scene-tab" id="tab-send" type="button" role="tab" aria-selected="true" aria-controls="scene-panel" data-scene="send" tabindex="0"><span class="mono">01</span> Send</button>
-            <button class="scene-tab" id="tab-away" type="button" role="tab" aria-selected="false" aria-controls="scene-panel" data-scene="away" tabindex="-1"><span class="mono">02</span> Step away</button>
-            <button class="scene-tab" id="tab-return" type="button" role="tab" aria-selected="false" aria-controls="scene-panel" data-scene="return" tabindex="-1"><span class="mono">03</span> Return</button>
+          <div class="scene-tabs" id="scene-tabs" role="tablist" aria-label="Ziran continuity states">
+            <button class="scene-tab" id="tab-send" type="button" role="tab" aria-selected="true" aria-controls="scene-panel" data-scene="send" tabindex="0"><span class="mono">01</span> Live turn</button>
+            <button class="scene-tab" id="tab-away" type="button" role="tab" aria-selected="false" aria-controls="scene-panel" data-scene="away" tabindex="-1"><span class="mono">02</span> Threads</button>
+            <button class="scene-tab" id="tab-return" type="button" role="tab" aria-selected="false" aria-controls="scene-panel" data-scene="return" tabindex="-1"><span class="mono">03</span> Night ink</button>
           </div>
           <div class="scene-progress" id="scene-progress" aria-hidden="true"></div>
         </div>
@@ -349,115 +326,66 @@
     <section class="section inspect" id="inspect" aria-labelledby="inspect-title">
       <div class="wrap section-index">
         <span class="mono">03 / Inspect</span>
-        <span class="mono">Models / Context / Preferences</span>
+        <span class="mono">Model / Effort / Scenes</span>
       </div>
       <div class="wrap inspect-head">
         <h2 id="inspect-title">Read the work. Not a status guess.</h2>
-        <p class="lead">The model sheet reads routes from JCode. Context reports the last request, not a lifetime guess. Preferences stay local and do not change execution.</p>
+        <p class="lead">The Model picker unrolls behind a thin ink rod and reads live routes from JCode. Effort sets how much ink the next turn spends. Scenes and day/night ink stay local to the phone.</p>
       </div>
       <div class="wrap inspect-grid">
         <figure class="specimen specimen--work">
           <div class="specimen-sheet">
-            <img src="assets/media/models-v031.png" width="860" height="1800" alt="Model sheet from v0.3.1 with Command Code routes and the gpt-6.1-sol route selected." decoding="async">
+            <img src="assets/media/ziran-model-day.png" width="720" height="1600" alt="Ziran 0.7.1 Model picker showing daemon routes, self-drawing selection ring, and six ink-density effort dots." decoding="async">
           </div>
           <figcaption>
-            <span class="mono">Specimen A / Models</span>
-            <span>Command Code is a native provider. The selected route is `gpt-6.1-sol`. Entitlement is not inferred from the catalog.</span>
+            <span class="mono">Specimen A / Model &amp; effort</span>
+            <span>Routes come from JCode's live model list. Unavailable routes stay dimmed and honest; effort maps directly to the server's reasoning levels.</span>
           </figcaption>
         </figure>
         <div class="inspect-notes">
           <div class="inspect-note">
             <span class="mono">01</span>
-            <h3>Models</h3>
-            <p>Routes come from `ListModels` and `GetRuntimeInfo`. The adapter reports availability and provider. It never proxies a key.</p>
+            <h3>Models &amp; effort</h3>
+            <p>Routes come from `ListModels` and `GetRuntimeInfo`. Six ink-density dots select reasoning effort from minimal to max without inventing options.</p>
           </div>
           <div class="inspect-note">
             <span class="mono">02</span>
-            <h3>Context</h3>
-            <p>Input, output, cache, and effective budget are shown when reported. A missing value stays unknown, never zero.</p>
+            <h3>Twelve scenes</h3>
+            <p>Details from open-access Song and Ming landscape paintings drift gently behind every thread and cross-fade over 1.2 s when changed.</p>
           </div>
           <div class="inspect-note">
             <span class="mono">03</span>
-            <h3>Preferences</h3>
-            <p>Theme, glass, motion, and reasoning visibility are local. Drafts and pending operations stay scoped to the server and session.</p>
+            <h3>Day &amp; night ink</h3>
+            <p>Follows Android dark mode or switches manually. All ten paper, ink, and seal tokens plus the painting brightness matrix ease smoothly over 600 ms.</p>
           </div>
         </div>
         <figure class="specimen specimen--plan">
           <div class="specimen-sheet">
-            <img src="assets/media/settings-v031.png" width="860" height="1800" alt="Preferences from v0.3.1 showing theme, glass, motion, reasoning visibility, model, provider, and connection state." decoding="async">
+            <img src="assets/media/ziran-scenes-day.png" width="720" height="1600" alt="Ziran 0.7.1 Scene picker in Day ink with twelve painting thumbnails and the day/night switch." decoding="async">
           </div>
           <figcaption>
-            <span class="mono">Specimen B / Preferences</span>
-            <span>Reduced motion is a first-class setting. The connection panel reports verified capabilities and the credential store.</span>
+            <span class="mono">Specimen B / Scenes &amp; ink</span>
+            <span>Bundled EB Garamond, JetBrains Mono, tiled paper grain, and pre-decoded painting crops keep UI frame times under 4 ms for 120 Hz phones.</span>
           </figcaption>
         </figure>
       </div>
     </section>
 
-    <section class="section section--night release" id="release" aria-labelledby="release-title">
-      <div class="wrap section-index">
-        <span class="mono">04 / Release ledger</span>
-        <span class="mono">Source-backed</span>
-      </div>
-      <div class="wrap release-head">
-        <h2 id="release-title">What exists today.</h2>
-        <p class="lead">The repository is public. The Android artifact is real. The native Linux shell builds from source. There is no signed iOS IPA or Play Store listing.</p>
-      </div>
-      <div class="wrap table-wrap">
-        <table>
-          <caption class="sr-only">Current JCode Mobile release artifacts and their honest state</caption>
-          <thead>
-            <tr><th scope="col">Artifact</th><th scope="col">Version</th><th scope="col">State</th><th scope="col">Notes</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td data-label="Artifact">Android APK</td>
-              <td data-label="Version" class="mono">0.5.0</td>
-              <td data-label="State"><span class="state-mark state-mark--available" aria-hidden="true"></span> Available</td>
-              <td data-label="Notes">12.1 MiB. Debug-signed, sideload only. arm64-v8a and armeabi-v7a.</td>
-            </tr>
-            <tr>
-              <td data-label="Artifact">Native Linux shell</td>
-              <td data-label="Version" class="mono">0.5.0</td>
-              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Source build</td>
-              <td data-label="Notes">Tauri 2 and Secret Service. 0.5.0 native Linux verification is not run.</td>
-            </tr>
-            <tr>
-              <td data-label="Artifact">Web preview</td>
-              <td data-label="Version" class="mono">0.5.0</td>
-              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Verification</td>
-              <td data-label="Notes">Browser token in localStorage. Not a product surface or keystore.</td>
-            </tr>
-            <tr>
-              <td data-label="Artifact">iOS</td>
-              <td data-label="Version" class="mono">—</td>
-              <td data-label="State"><span class="state-mark state-mark--preview" aria-hidden="true"></span> Not built</td>
-              <td data-label="Notes">Requires macOS and Xcode. No IPA is provided.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="wrap release-foot">
-        <p class="mono">Not here yet</p>
-        <p>Signed iOS IPA / Play Store listing / FCM push delivery / live public demo. The app needs a reachable server.</p>
-      </div>
-    </section>
-
     <section class="section setup" id="setup" aria-labelledby="setup-title">
       <div class="wrap section-index">
-        <span class="mono">05 / Setup</span>
+        <span class="mono">04 / Setup</span>
         <span class="mono">Server first</span>
       </div>
       <div class="wrap setup-grid">
         <div class="setup-intro">
           <h2 id="setup-title">Three moves. One server.</h2>
-          <p class="lead">The phone cannot start work on its own. You need a reachable JCode daemon on a Linux server, Adapter v4, and TLS for any remote connection.</p>
-          <p class="mono setup-prereq">Prerequisite / JCode pinned fork + Rust + TLS</p>
+          <p class="lead">The phone cannot start work on its own. Run JCode and Adapter v4 on your Linux server behind TLS, then pair Ziran with a one-time code or `ziran://pair` link.</p>
+          <p class="mono setup-prereq">Prerequisite / JCode daemon + Rust + TLS</p>
           <figure class="setup-plate">
             <div class="specimen-sheet specimen-sheet--compact">
-              <img src="assets/media/pair-v031.png" width="860" height="1800" alt="Pairing screen from v0.3.1 with server address, pairing code, and device name fields." decoding="async">
+              <img src="assets/media/ziran-start-day.png" width="720" height="1600" alt="Ziran 0.7.1 pairing screen with butterfly dream painting, server field, one-time code field, and vermilion pair seal." decoding="async">
             </div>
-            <figcaption class="mono">Pairing screen / v0.3.1</figcaption>
+            <figcaption class="mono">Pairing screen / Ziran 0.7.1</figcaption>
           </figure>
         </div>
         <ol class="setup-steps">
@@ -473,18 +401,67 @@ JCODE_ADAPTER_BIND=127.0.0.1:7646 \
           </li>
           <li>
             <div class="step-head"><span class="mono step-num">02</span><h3>Read the pairing code.</h3></div>
-            <p>The adapter prints a single-use code for this run. It expires after ten minutes and is exchanged once for a device token.</p>
+            <p>The adapter prints a single-use code valid for ten minutes, or use a `ziran://pair` link to fill both fields at once.</p>
             <pre><code>Pairing code (valid for 10 minutes, single use):
-ABCD-EFGH-JKLM</code></pre>
-            <p class="step-note">`jcode pair` is the 0.2.x path. Adapter v4 generates and hashes its own code.</p>
+K7QM-P2XA-9B4C</code></pre>
+            <p class="step-note">The code is exchanged once for a device token stored in Android Keystore.</p>
           </li>
           <li>
-            <div class="step-head"><span class="mono step-num">03</span><h3>Install and pair the phone.</h3></div>
-            <p>Install the Android APK, allow sideloading, then enter the TLS hostname and the code. The token goes into Android Keystore or Linux Secret Service.</p>
-            <pre><code>adb install -r jcode-mobile-0.5.0-android-release.apk</code></pre>
+            <div class="step-head"><span class="mono step-num">03</span><h3>Install and pair Ziran.</h3></div>
+            <p>Sideload the native Android APK, enter your HTTPS server address and one-time code, and press the vermilion seal.</p>
+            <pre><code>adb install -r ziran-0.7.1-android-release.apk</code></pre>
             <p class="step-note"><a class="inline-link" data-link="docs" href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md">Read the full setup and TLS notes</a></p>
           </li>
         </ol>
+      </div>
+    </section>
+
+    <section class="section section--night release" id="release" aria-labelledby="release-title">
+      <div class="wrap section-index">
+        <span class="mono">05 / Release ledger</span>
+        <span class="mono">Source-backed</span>
+      </div>
+      <div class="wrap release-head">
+        <h2 id="release-title">What ships in 0.7.1.</h2>
+        <p class="lead">Ziran 0.7.1 is the native Android client in `apps/android/`. Adapter v4 remains the server binary in `crates/adapter-*`. Earlier Stillness and Expo code stays in the repository as history.</p>
+      </div>
+      <div class="wrap table-wrap">
+        <table>
+          <caption class="sr-only">Current Ziran 0.7.1 release artifacts and their honest state</caption>
+          <thead>
+            <tr><th scope="col">Artifact</th><th scope="col">Version</th><th scope="col">State</th><th scope="col">Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="Artifact">Ziran Android APK</td>
+              <td data-label="Version" class="mono">0.7.1</td>
+              <td data-label="State"><span class="state-mark state-mark--available" aria-hidden="true"></span> Available</td>
+              <td data-label="Notes">11.09 MiB. Native Kotlin + Jetpack Compose (`dev.ziran.android`, minSdk 26, targetSdk 37, 120 Hz ready). Debug-signed, sideload only.</td>
+            </tr>
+            <tr>
+              <td data-label="Artifact">Adapter v4 (Rust)</td>
+              <td data-label="Version" class="mono">0.7.1</td>
+              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Source build</td>
+              <td data-label="Notes">Single Rust binary (`jcode-adapter-v4`), protocol 4 (min 2), SQLite WAL journal, 96 passing tests.</td>
+            </tr>
+            <tr>
+              <td data-label="Artifact">Linux desktop (Stillness)</td>
+              <td data-label="Version" class="mono">0.6.0</td>
+              <td data-label="State"><span class="state-mark state-mark--source" aria-hidden="true"></span> Legacy source</td>
+              <td data-label="Notes">Earlier Tauri 2 shell in `apps/stillness`, compatible with Adapter v4.</td>
+            </tr>
+            <tr>
+              <td data-label="Artifact">iOS</td>
+              <td data-label="Version" class="mono">—</td>
+              <td data-label="State"><span class="state-mark state-mark--preview" aria-hidden="true"></span> Not built</td>
+              <td data-label="Notes">No native Swift/iOS client or IPA is provided yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="wrap release-foot">
+        <p class="mono">Not here yet</p>
+        <p>Signed iOS client / Play Store listing / release keystore / FCM push delivery. Ziran needs a reachable Adapter v4 server.</p>
       </div>
     </section>
 
@@ -493,18 +470,18 @@ ABCD-EFGH-JKLM</code></pre>
         <div class="closing-copy">
           <p class="mono eyebrow">06 / Return</p>
           <h2 id="closing-title">The thread is already running.</h2>
-          <p class="lead">Download the Android build, or read the setup path first. The server does the work. The phone is how you return.</p>
+          <p class="lead">Download Ziran 0.7.1 for Android, or read the server setup first. The daemon does the work. Ziran is how you return.</p>
         </div>
         <div class="closing-action">
-          <a class="button button--primary button--primary-night" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.5.0/jcode-mobile-0.5.0-android-release.apk" referrerpolicy="no-referrer">
+          <a class="button button--primary" data-cta="download" href="https://github.com/ddawnlll/jcode-mobile/releases/download/v0.7.1/ziran-0.7.1-android-release.apk" referrerpolicy="no-referrer">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M8 2v8m0 0 3-3m-3 3L5 7M3 12v2h10v-2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square"/>
             </svg>
-            <span>Download Android 0.5.0</span>
-            <span class="button-meta mono">APK</span>
+            <span>Download Ziran 0.7.1</span>
+            <span class="button-meta mono">Android APK</span>
           </a>
-          <p class="caveat caveat--night">Sideload only. Debug-signed. No Play Store listing. No signed iOS IPA.</p>
-          <p class="mono closing-meta">12.1 MiB / arm64-v8a + armeabi-v7a</p>
+          <p class="caveat">Sideload only. Debug-signed. Package dev.ziran.android. No Play Store listing.</p>
+          <p class="mono closing-meta">11.09 MiB / Android 8.0+ / Kotlin + Compose / 120 Hz ready</p>
         </div>
       </div>
       <div class="wrap seam" aria-hidden="true">
@@ -518,32 +495,32 @@ ABCD-EFGH-JKLM</code></pre>
   <footer class="site-footer">
     <div class="wrap footer-grid">
       <div class="footer-brand">
-        <img src="assets/mark/jcode-mark.png" width="32" height="32" alt="">
+        <img src="assets/mark/ziran-seal.png" width="32" height="32" alt="">
         <div>
-          <p class="footer-name">JCode Mobile</p>
-          <p>Independent companion for JCode. Not an official JCode release.</p>
+          <p class="footer-name">Ziran</p>
+          <p>Independent native Android client for JCode. Not an official JCode release.</p>
         </div>
       </div>
       <nav class="footer-nav" aria-label="Footer">
         <a data-link="github" href="https://github.com/ddawnlll/jcode-mobile">GitHub</a>
         <a href="https://github.com/1jehuang/jcode">JCode upstream</a>
         <a data-link="docs" href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/GETTING_STARTED.md">Getting started</a>
-        <a href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/API.md">API</a>
-        <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.5.0">Release v0.5.0</a>
+        <a href="https://github.com/ddawnlll/jcode-mobile/blob/main/docs/ADAPTER_V4.md">Adapter v4</a>
+        <a href="https://github.com/ddawnlll/jcode-mobile/releases/tag/v0.7.1">Release v0.7.1</a>
       </nav>
       <div class="footer-meta">
-        <p class="mono">Android 0.5.0 / Debug-signed / Sideload only</p>
-        <p class="mono">Source / main / 15 November 2026</p>
+        <p class="mono">Ziran Android 0.7.1 / Debug-signed / Sideload only</p>
+        <p class="mono">Source / main / 21 November 2026</p>
       </div>
     </div>
     <div class="wrap footer-legal">
-      <p>Bricolage Grotesque, Hanken Grotesk, and IBM Plex Mono are bundled under the SIL Open Font License. The JCode mark keeps its own license. Product captures are from v0.3.1 and v0.4.0 and are labelled as real captures.</p>
+      <p>EB Garamond and JetBrains Mono are bundled under the SIL Open Font License. Painting details are open-access works from the Metropolitan Museum of Art (CC0). Product captures are from Ziran 0.7.1 on Android API 36.</p>
       <p><a href="https://github.com/ddawnlll/jcode-mobile/blob/main/THIRD_PARTY_NOTICES.md">Third-party notices</a></p>
     </div>
   </footer>
 
   <noscript>
-    <p class="boot-fallback">The orbit animation is paused because JavaScript is off. All product information remains available.</p>
+    <p class="boot-fallback">Ambient motion is paused because JavaScript is off. All Ziran 0.7.1 information and the APK download remain available.</p>
   </noscript>
   <script src="main.js" defer></script>
   <script type="module" src="assets/motion.js"></script>

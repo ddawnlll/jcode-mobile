@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One ink stroke inside the seal square: the wu-wei mark, drawn as a vector
+     so the launcher icon needs no bitmap density buckets. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M34,42 C46,34 62,34 74,42"
+        android:strokeColor="#F4EBD6"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M34,54 C46,46 62,46 74,54"
+        android:strokeColor="#F4EBD6"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M34,66 C46,58 62,58 74,66"
+        android:strokeColor="#F4EBD6"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+</vector>

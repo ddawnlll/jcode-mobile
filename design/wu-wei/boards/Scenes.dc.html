@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jcode · scene · day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+</style>
+</helmet>
+<div class="s" style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#E5EBE0;--paper2:#D6E0D3;--ink:#16231D;--ink2:#2D3C34;--ink3:#56685D;--line:#BCCBBE;--seal:#A8322B;--onseal:#F1F4EC;--blue:#3F7484;--green:#3B7A5C;--mist:#E5EBE0;--imgf:saturate(1)">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<sc-if value="{{show.peaks}}" hint-placeholder-val="{{true}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-peaks.jpg" alt="Detail of an old blue-and-green landscape painting: mountain peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.jade_peaks}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-jade-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: jade peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.pavilion}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-pavilion.jpg" alt="Detail of an old blue-and-green landscape painting: a pavilion under pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.river_valley}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-river-valley.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a river valley" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.blue_hills}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-blue-hills.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: blue hills" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.riders}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-riders.jpg" alt="Detail of an old blue-and-green landscape painting: two riders beneath the pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.misty_peaks}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-misty-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: peaks in mist" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.lone_boat}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-lone-boat.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a lone boat" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.sage_under_pine}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-sage-under-pine.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a sage resting under a pine" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.green_woods}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-green-woods.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: green woods" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.quiet_river}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-quiet-river.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a quiet river" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><sc-if value="{{show.butterfly}}" hint-placeholder-val="{{false}}"><div class="bleedin"><div style="position:absolute;left:0;top:0;width:390px;height:230px;overflow:hidden"><img class="kb" src="../assets/painting-butterfly.jpg" alt="Detail of Zhuang Zhou Dreaming of a Butterfly, attributed to Lu Zhi, Ming dynasty" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div></div></sc-if><a href="Sessions.dc.html" class="" aria-label="Back to threads" style="position:absolute;left:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5c-3 2.5-5.5 4.6-7 7 1.5 2.4 4 4.5 7 7"></path></svg></a><div style="position:absolute;left:22px;right:22px;top:180px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Scene</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">behind every thread</div></div></div>
+  <div style="position:absolute;left:22px;right:22px;top:232px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:17px;color:var(--ink)">Ink</span>
+      <div role="group" aria-label="Theme" style="display:flex;gap:4px;padding:3px;border-radius:22px;border:1px solid var(--line)"><a href="Scenes.dc.html" aria-label="Day" class="mono" style="height:34px;padding:0 14px;border-radius:18px;font-size:12px;display:flex;align-items:center;background:var(--ink);color:var(--paper)">day</a><a href="Scenes-Night.dc.html" aria-label="Night" class="mono" style="height:34px;padding:0 14px;border-radius:18px;font-size:12px;display:flex;align-items:center;color:var(--ink2)">night</a></div>
+    </div>
+    <div role="radiogroup" aria-label="Scene" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 12px">
+      <button role="radio" aria-checked="{{sel.peaks}}" onClick="{{pick.peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.peaks}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">peaks</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.jade_peaks}}" onClick="{{pick.jade_peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.jade_peaks}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-jade-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">jade peaks</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.pavilion}}" onClick="{{pick.pavilion}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.pavilion}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-pavilion.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">pavilion</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.river_valley}}" onClick="{{pick.river_valley}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.river_valley}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-river-valley.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">river valley</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.blue_hills}}" onClick="{{pick.blue_hills}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.blue_hills}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-blue-hills.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">blue hills</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.riders}}" onClick="{{pick.riders}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.riders}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-riders.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">riders</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.misty_peaks}}" onClick="{{pick.misty_peaks}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.misty_peaks}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-misty-peaks.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">misty peaks</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.lone_boat}}" onClick="{{pick.lone_boat}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.lone_boat}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-lone-boat.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">lone boat</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.sage_under_pine}}" onClick="{{pick.sage_under_pine}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.sage_under_pine}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-sage-under-pine.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">sage under pine</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.green_woods}}" onClick="{{pick.green_woods}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.green_woods}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-green-woods.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">green woods</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.quiet_river}}" onClick="{{pick.quiet_river}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.quiet_river}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-quiet-river.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">quiet river</span>
+      </button>
+      <button role="radio" aria-checked="{{sel.butterfly}}" onClick="{{pick.butterfly}}" style="display:flex;flex-direction:column;gap:5px;text-align:left;min-width:0">
+        <span style="position:relative;display:block;height:78px;border-radius:4px;overflow:hidden;background:var(--paper2);outline:1.6px solid {{ring.butterfly}};outline-offset:3px;transition:outline-color .3s">
+          <img src="../assets/painting-butterfly.jpg" alt="" style="width:100%;height:100%;object-fit:cover;filter:var(--imgf)">
+        </span>
+        <span class="clip" style="font-size:13.5px;line-height:16px;color:var(--ink)">butterfly dream</span>
+      </button>
+    </div>
+    <p style="margin:0;font-size:15px;line-height:21px;color:var(--ink3);font-style:italic">Details from old paintings. Left alone, the scene changes with the hour.</p>
+  </div>
+<div aria-hidden="true" class="grain grain-day"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p){ super(p); this.state = { scene: 'peaks' }; }
+  renderVals(){
+    const keys = ['peaks','jade_peaks','pavilion','river_valley','blue_hills','riders','misty_peaks','lone_boat','sage_under_pine','green_woods','quiet_river','butterfly'];
+    const sel = {}, ring = {}, pick = {}, show = {};
+    keys.forEach(k => { const on = this.state.scene === k; sel[k] = on; show[k] = on; ring[k] = on ? 'var(--seal)' : 'transparent'; pick[k] = () => this.setState({ scene: k }); });
+    return { sel, ring, pick, show };
+  }
+}
+</script>
+</body>
+</html>

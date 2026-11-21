@@ -1,38 +1,39 @@
 # Build state
 
-Updated: 2026-11-16
+Updated: 2026-11-21
 
 ## Current line
 
 | Item | Value |
 | --- | --- |
-| Branch | `release/0.6.0` |
-| Head | `release/0.6.0` (`git log -1`) |
-| Commits since `v0.3.1` | see `git log --oneline v0.3.1..HEAD` |
-| Release | `v0.6.0`, prepared 2026-11-16 |
-| App version | 0.6.0 |
+| Branch | `main` (`release/0.7.1-ziran`) |
+| Release | `v0.7.1` (Ziran — Wu wei), prepared 2026-11-21 |
+| App version | 0.7.1 |
 | Adapter | Rust Adapter v4, protocol 4, minimum 2 |
 | Binary names | `jcode-adapter-v4` (preferred), `jcode-adapter-v3` and `jcode-adapter-v2` (aliases) |
-| Client | Stillness 12, Tauri 2 |
-| Android package | `dev.jcode.stillness` |
-| Android versionCode | 6000 |
+| Client | Ziran (native Kotlin + Jetpack Compose, `apps/android/`) |
+| Android package | `dev.ziran.android` |
+| Android versionCode | 71 (`minSdk 26`, `targetSdk 37`, `compileSdk 37`) |
+| Signed APK | `artifacts/ziran-0.7.1-android-release.apk` (`11,624,585` bytes / `11.09 MiB`) |
+| APK SHA-256 | `e1612a7071399c3f116b2718ec18aadd22c68f726d3653b2d9d4b188f4f62f6b` |
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
 | JCode harness API | v1.11 |
-| Runtime | Bun 1.4.4, Rust 1.96.0-nightly |
+| Runtime | JDK 24 / Gradle 9.6.1, Bun 1.4.4, Rust 1.96.0-nightly |
 | Live deployment | `https://dawnll.duckdns.org` → `127.0.0.1:7644`, unit `jcode-mobile-adapter-v4.service` |
-| Live adapter version | 0.5.0, protocol 4, minimum 2; unchanged by this client release |
 | Repository | `https://github.com/ddawnlll/jcode-mobile` |
 
-The detailed checks and artifact sections below describe the 0.4.0 build and
-are kept as history. The 0.6.0 results are in
-[`V0_6_0_RELEASE_NOTES.md`](V0_6_0_RELEASE_NOTES.md): 96 Rust tests, 139
-JavaScript tests, 23 Stillness UX checks, 16 reconciliation tests, 129.11 kB
-gzip initial JavaScript, an API 36 emulator real-provider tool turn, Stop
-recovery and adapter-loss reconnect. The 0.5.0 results remain in
-[`V0_5_0_RELEASE_NOTES.md`](V0_5_0_RELEASE_NOTES.md) and
-`docs/evidence/v0.5.0/benchmark/REPORT.md`: 75 Rust tests, 139 JavaScript tests,
-15 Stillness UX checks, 121.50 kB gzip initial JavaScript, 16.1x fewer stream
-frames, and a reassembled 200 KB binary transport package.
+Ziran 0.7.1 results are recorded in
+[`V0_7_0_RELEASE_NOTES.md`](V0_7_0_RELEASE_NOTES.md),
+[`V0_7_1_RELEASE_NOTES.md`](V0_7_1_RELEASE_NOTES.md), and
+[`evidence/v0.7.1/README.md`](evidence/v0.7.1/README.md): 90 Android JVM unit
+tests, strict `lintDebug` (0 errors), signed and zipaligned `ziran-0.7.1-android-release.apk`
+(v2 + v3 signatures), all 9 Wu wei flows verified side-by-side at 1x and 0.25x,
+10 Day/Night screen comparisons, 120 Hz peak refresh-rate mode selection,
+UI p50 `0.5–2.0 ms` on Metal GPU emulator, 96 Adapter v4 Rust tests, and full
+`bun run marketing:test` pass on the rebranded Ziran website.
+
+The detailed checks and artifact sections below describe earlier 0.4.0–0.6.0
+Stillness builds and are kept as history.
 
 The live host was moved from the pre-v4 adapter to Adapter v4 on 2026-11-15.
 That cutover, its checks and its rollback are recorded in

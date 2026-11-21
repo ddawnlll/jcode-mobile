@@ -1,4 +1,4 @@
-/* JCode Mobile marketing site
+/* Ziran ("Wu wei") marketing site
    Orbit specimen renderer, scene tabs, and motion policy.
    Native scroll only. No wheel, touch, or key scroll interception. */
 
@@ -570,19 +570,19 @@
 
   const SCENE_COPY = {
     send: {
-      label: "01 / Send",
-      caption: "Staged, reserved, dispatching, accepted. Four states, one explicit path.",
-      provenance: "Real capture / v0.3.1"
+      label: "01 / Live turn",
+      caption: "Thinking grows and folds, tool calls draw red rings, diffs unfold, and answers stream word by word.",
+      provenance: "Real capture / Ziran 0.7.1"
     },
     away: {
       label: "02 / Step away",
       caption: "Session scope, epoch, and sequence keep a slow answer from overwriting newer work.",
-      provenance: "Real capture / v0.3.1"
+      provenance: "Real capture / Ziran 0.7.1"
     },
     return: {
       label: "03 / Return",
-      caption: "Models, context, and preferences stay source-backed after the return.",
-      provenance: "Real capture / v0.3.1"
+      caption: "Models, effort, scenes, and day/night themes stay source-backed and local after the return.",
+      provenance: "Real capture / Ziran 0.7.1"
     }
   };
 
@@ -699,6 +699,43 @@
   window.addEventListener("scroll", queueScroll, { passive: true });
   window.addEventListener("resize", queueScroll, { passive: true });
 
+  /* Ziran Day / Night ink switcher + interactive painting canopy */
+  const inkButtons = Array.from(document.querySelectorAll("[data-set-ink]"));
+  const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+  function setInkTheme(mode) {
+    const next = mode === "night" ? "night" : "day";
+    root.dataset.ink = next;
+    for (const btn of inkButtons) {
+      btn.setAttribute("aria-pressed", String(btn.dataset.setInk === next));
+    }
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute("content", next === "night" ? "#0E1613" : "#E5EBE0");
+    }
+    const heroImg = document.getElementById("hero-phone-img");
+    if (heroImg) {
+      const targetSrc = next === "night" ? heroImg.dataset.nightSrc : heroImg.dataset.daySrc;
+      if (targetSrc && heroImg.getAttribute("src") !== targetSrc) heroImg.setAttribute("src", targetSrc);
+    }
+    try { localStorage.setItem("ziran.ink", next); } catch {}
+  }
+  for (const btn of inkButtons) {
+    btn.addEventListener("click", () => setInkTheme(btn.dataset.setInk));
+  }
+  try {
+    const savedInk = localStorage.getItem("ziran.ink");
+    if (savedInk === "day" || savedInk === "night") setInkTheme(savedInk);
+  } catch {}
+
+  const canopyButtons = Array.from(document.querySelectorAll("[data-pick-canopy]"));
+  const canopyImages = Array.from(document.querySelectorAll("[data-canopy]"));
+  for (const btn of canopyButtons) {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.pickCanopy;
+      for (const b of canopyButtons) b.setAttribute("aria-pressed", String(b.dataset.pickCanopy === target));
+      for (const img of canopyImages) img.classList.toggle("is-active", img.dataset.canopy === target);
+    });
+  }
+
   /* Fonts and first paint */
 
   function firstPaint() {
@@ -713,8 +750,8 @@
   const fontReady = document.fonts
     ? Promise.all([
       document.fonts.ready,
-      document.fonts.load('400 12px "IBM Plex Mono"').catch(() => []),
-      document.fonts.load('600 16px "Bricolage Grotesque"').catch(() => [])
+      document.fonts.load('400 12px "JetBrains Mono"').catch(() => []),
+      document.fonts.load('500 18px "EB Garamond"').catch(() => [])
     ])
     : Promise.resolve();
 

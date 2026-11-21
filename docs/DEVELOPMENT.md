@@ -1,11 +1,12 @@
 # Development
 
-JCode Mobile 0.3.1 is a Rust adapter plus a Tauri 2 client. The phone is a
-client. The daemon owns execution.
+Ziran 0.7.1 ("Wu wei") is a native Kotlin and Jetpack Compose Android client
+(`apps/android/`) paired with the Rust Adapter v4 (`crates/adapter-*`). The
+phone is a client; the daemon owns execution.
 
 Read [`GETTING_STARTED.md`](GETTING_STARTED.md) to run it. Read
-[`API.md`](API.md) for the wire reference. This guide is for changing the
-repository.
+[`ADAPTER_V4.md`](ADAPTER_V4.md) and [`API.md`](API.md) for the wire reference.
+This guide is for changing the repository.
 
 ## Identify the host
 
@@ -18,46 +19,40 @@ bash scripts/check-platform.sh
 It prints the kernel, distro, Bun and JCode versions, and the commands the host
 supports.
 
-| Host | Native Linux | Native Android | Web and Playwright |
+| Host | Ziran Android (`apps/android/`) | Adapter v4 (Rust) | Website (`website/`) |
 | --- | --- | --- | --- |
-| Debian/Ubuntu VPS | With GTK/WebKit or a user-space sysroot | With Android SDK and JDK 21 | Yes, primary CI target |
-| macOS | Yes | With SDK and JDK | Yes |
-| Other Linux | With distro GTK/WebKit packages | With SDK and JDK | Yes |
-| Windows | No | No | WSL2 only |
+| macOS (arm64) | JDK 17+/21+, Android SDK 37, Gradle 9.6.1 | Rust stable | Bun 1.4.4 + Playwright |
+| Debian/Ubuntu VPS | With Android SDK 37 and JDK 21 | Rust stable | Bun 1.4.4 + Playwright |
+| Other Linux | With Android SDK 37 and JDK 21 | Rust stable | Bun 1.4.4 + Playwright |
+| Windows | WSL2 or native Android Studio | WSL2 / native Rust | WSL2 |
 
-The current release was built on Debian 13 with OpenJDK 21, Android SDK 37, NDK
-27.1, and Rust stable.
+The 0.7.1 release was built and verified on macOS arm64 with JDK 24, Android
+SDK 37, Build-Tools 37.0.0, Gradle 9.6.1, Bun 1.4.4, and Rust stable.
 
 ## Stack
 
 | Layer | Choice |
 | --- | --- |
-| Server adapter | Rust 2024, Tokio, Axum, rusqlite WAL |
+| Server adapter | Rust 2024, Tokio, Axum, rusqlite WAL (`crates/adapter-*`) |
 | JCode link | `jcode-sdk` pinned to `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |
-| Client | Stillness 12, React 19, TypeScript 6, Vite 7 |
-| Native shell | Tauri 2 |
-| Android | Tauri Android, minSdk 24, package `dev.jcode.stillness` |
-| Credentials | Android Keystore, Linux Secret Service, browser `localStorage` for preview only |
-| Tooling | Bun 1.4.4, Cargo, Playwright, Jest/RNTL for the legacy app |
-
-The root Expo/React Native app under `src/` is the 0.2.x client. It remains for
-history and legacy tests. The 0.3.1 product is `crates/adapter-*` plus
-`apps/stillness`.
+| Flagship Android client | Ziran (`apps/android/`), Kotlin + Jetpack Compose, OkHttp, DataStore, Keystore, minSdk 26, targetSdk 37, package `dev.ziran.android` |
+| Website | Static HTML/CSS/JS + local GSAP & Framer Motion bundle (`website/`, zero CDN) |
+| Legacy clients | `apps/stillness/` (0.3–0.6 Tauri 2) and `src/` (0.2.x Expo) retained for history |
 
 ## Repository layout
 
 ```text
-crates/adapter-protocol/  versioned v2 envelopes, payloads, events, errors
+apps/android/             Ziran 0.7.1 native Kotlin + Jetpack Compose Android app
+crates/adapter-protocol/  versioned v4 envelopes, payloads, events, errors
 crates/adapter-core/      config, SQLite, auth, paths, JCode SDK link
 crates/adapter-server/    Axum routes, WebSocket, dispatch, event pump
-apps/stillness/           Stillness 12 web UI and Tauri shell
-apps/stillness/e2e/       real-stack Playwright specs
-apps/stillness/src-tauri/ desktop and Android shell, Keystore bridge
+website/                  Ziran marketing site (Wu wei tokens, EB Garamond, JetBrains Mono)
+design/wu-wei/            Wu wei design handoff boards (Flow, Live, Motion, screens)
+apps/stillness/           legacy 0.3–0.6 Stillness 12 Tauri shell
 integration/jcode-adapter/ legacy 0.2.x TypeScript adapter
 src/                      legacy Expo/React Native client
-scripts/                  staging, e2e, Android/Linux builds, marketing media
-docs/                     setup, API, contract, verification, evidence
-design/references/        unchanged Stillness 12 reference
+scripts/                  Ziran & adapter builds, staging, e2e, marketing build/tests
+docs/                     setup, Adapter v4, contract, release notes, side-by-side evidence
 ```
 
 ## Invariants
@@ -84,8 +79,8 @@ design/references/        unchanged Stillness 12 reference
 
 ```mermaid
 flowchart LR
-  P["Stillness 12<br/>Tauri 2 / web"] -->|"HTTPS / WSS<br/>device token"| A["jcode-adapter-v2"]
-  A -->|"jcode-sdk + harness API"| H["JCode harness bridge"]
+  P["Ziran Android<br/>Kotlin + Compose"] -->|"HTTPS / WSS<br/>Keystore token"| A["jcode-adapter-v4"]
+  A -->|"jcode-sdk + native socket"| H["JCode harness bridge"]
   H --> D["JCode daemon"]
   D --> M["Providers and tools"]
   A --> J["SQLite WAL<br/>operations, devices, projects"]

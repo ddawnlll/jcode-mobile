@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jcode · thread · day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+</style>
+</helmet>
+<div class="s" style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#E5EBE0;--paper2:#D6E0D3;--ink:#16231D;--ink2:#2D3C34;--ink3:#56685D;--line:#BCCBBE;--seal:#A8322B;--onseal:#F1F4EC;--blue:#3F7484;--green:#3B7A5C;--mist:#E5EBE0;--imgf:saturate(1)">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<div style="position:absolute;left:0;top:0;width:390px;height:340px;overflow:hidden"><img class="kb" src="../assets/painting-peaks.jpg" alt="Detail of an old blue-and-green landscape painting: mountain peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div><div role="img" aria-label="Steps on the way" style="position:absolute;left:22px;right:120px;bottom:10px;display:flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:50%;background:var(--seal);box-shadow:0 0 0 3px var(--paper)"></span><span style="flex:1;height:1px;background:var(--ink2);opacity:.35"></span><span style="width:9px;height:9px;border-radius:50%;background:var(--seal);box-shadow:0 0 0 3px var(--paper)"></span><span style="flex:1;height:1px;background:var(--ink2);opacity:.35"></span><span style="width:9px;height:9px;border-radius:50%;background:var(--seal);box-shadow:0 0 0 3px var(--paper)"></span><span style="flex:1;height:1px;background:var(--ink2);opacity:.35"></span><span style="width:9px;height:9px;border-radius:50%;border:1.4px solid var(--ink2);box-sizing:border-box;background:var(--paper)"></span></div></div><a href="Sessions.dc.html" class="" aria-label="Threads" style="position:absolute;left:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.7" stroke-linecap="round"><path d="M4 7.5h15M4 12h10M4 16.5h13"></path></svg></a><div style="position:absolute;left:22px;right:22px;top:292px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Adapter v4 timeline</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">fox · working · step 4 of 4</div></div><span aria-hidden="true" class="seal stamp" style="width:28px;height:28px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span></div>
+  <main style="position:absolute;left:22px;right:22px;top:356px;display:flex;flex-direction:column;gap:12px">
+    <p class="rise" style="margin:0;display:flex;gap:8px;font-size:16px;line-height:24px;color:var(--ink)">
+      <span class="mono" style="font-size:12px;color:var(--seal);flex:none;padding-top:1px">1›</span>
+      <span>Make reconnect survive Android doze. Keep the wire protocol as it is.</span>
+    </p>
+    <ol aria-label="Steps" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+      <li class="step rise " style="animation-delay:0.15s"><span class="mono" style="font-size:11px;color:var(--ink3)">01</span><span class="clip"><span class="t">grep</span>find where the socket dies</span><span class="ring" role="img" aria-label="done"></span></li>
+      <li class="step rise " style="animation-delay:0.3s"><span class="mono" style="font-size:11px;color:var(--ink3)">02</span><span class="clip"><span class="t">edit</span>lengthen the pong wait</span><span class="mono" style="font-size:11px;color:var(--ink3)">+12 −3</span></li>
+      <li class="step rise " style="animation-delay:0.45s"><span class="mono" style="font-size:11px;color:var(--ink3)">03</span><span class="clip"><span class="t">edit</span>replay from the journal</span><span class="mono" style="font-size:11px;color:var(--ink3)">+30 −5</span></li>
+      <li class="step rise " style="animation-delay:0.6s"><span class="mono" style="font-size:11px;color:var(--ink3)">04</span><span class="clip"><span class="t">bash</span><span class="wet" style="font-style:italic">running reconnect tests</span></span><span class="mono" style="font-size:11px;color:var(--ink3)"><span class="spin" aria-hidden="true"></span> 1:12</span></li>
+    </ol>
+    <p class="rise" style="margin:2px 0 0;font-size:16.5px;line-height:24px;color:var(--ink2);font-style:italic;animation-delay:.8s">The backoff holds. Checking that missed frames come back in order before I call it done.</p>
+    
+  </main>
+  <div style="position:absolute;left:20px;right:16px;bottom:22px;display:flex;flex-direction:column;gap:2px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <label style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:50px">
+        <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Message</span>
+        <input placeholder="write to fox…" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17px;color:var(--ink);padding:0">
+        <svg aria-hidden="true" viewBox="0 0 200 8" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:7px;width:100%;height:6px"><path class="inkdraw" d="M2 5 C 40 2, 90 6, 140 3 S 190 4, 198 3" style="stroke:var(--ink)" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".55" filter="url(#bleed)"></path></svg>
+      </label>
+      <button type="button" class="mono" style="height:38px;padding:0 4px;font-size:11.5px;color:var(--ink3);text-decoration:underline;text-underline-offset:4px;text-decoration-color:var(--line);flex:none">stop</button>
+      <button type="button" aria-label="Send" class="seal stamp" style="width:48px;height:48px"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+    </div>
+    <div class="mono" style="display:flex;gap:2px;font-size:11px;color:var(--ink3)"><a href="Scenes.dc.html" class="" style="padding:6px 4px;font-size:11px;color:var(--ink3)">studio-vps</a><span aria-hidden="true" style="padding:6px 0">·</span><a href="Model.dc.html" class="" style="padding:6px 4px;font-size:11px;color:var(--ink3);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line)">gpt-5.6-luna · high</a></div>
+  </div>
+<div aria-hidden="true" class="grain grain-day"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

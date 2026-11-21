@@ -8,13 +8,22 @@ This repository contains an independent application. It does not relicense JCode
 
 ## Fonts
 
-Bundled under `assets/fonts/`, all SIL Open Font License 1.1:
+Bundled under `apps/android/app/src/main/res/font/` and `website/assets/fonts/` for Ziran 0.7.0, SIL Open Font License 1.1:
+
+- EB Garamond (prose and headings)
+- JetBrains Mono (machine labels, paths, diffs, and metadata)
+
+Earlier fonts bundled under `assets/fonts/` for the legacy Stillness/Expo clients, all SIL Open Font License 1.1:
 
 - Bricolage Grotesque (display) — `BricolageGrotesque-OFL.txt`
 - Hanken Grotesk (interface/prose) — `HankenGrotesk-OFL.txt`
 - IBM Plex Mono (code/paths) — `IBMPlexMono-OFL.txt`
 
 Static instances were generated locally from the supplied variable fonts with `fonttools varLib.instancer` (weights 400/500/600; Bricolage at optical size 36, width 100). Latin Extended coverage was verified for Turkish and German glyphs.
+
+## Painting details (Ziran Wu wei scenes)
+
+Twelve cropped landscape painting details bundled in `apps/android/app/src/main/res/drawable/` and `design/wu-wei/assets/` (and pavilion/misty peaks details on the website) come from open-access public-domain works in the Metropolitan Museum of Art collection (Creative Commons Zero / CC0 1.0).
 
 ## Icons
 

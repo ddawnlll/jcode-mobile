@@ -52,6 +52,26 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+  ziran-android:
+    # Builds and tests the flagship Ziran 0.7.1 native Kotlin + Jetpack Compose Android client.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-37
+            build-tools;37.0.0
+      - name: Build, unit test, and lint Ziran Android
+        run: |
+          cd apps/android
+          ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug --no-daemon
+
   stillness-android:
     # Builds the real 0.4.0 Tauri Stillness APK. This is the release gate; the
     # legacy Expo jobs below are retained for the 0.2.x client only.
