@@ -1158,7 +1158,7 @@ class AppController(
 
     suspend fun refreshModels() {
         val adapter = client ?: return
-        val sessionId = _state.value.activeSessionId ?: return
+        val sessionId = _state.value.activeSessionId ?: _state.value.sessions.firstOrNull()?.sessionId ?: return
         if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
         try {
             val payload = adapter.request("models.list", JsonObject(mapOf("session_id" to JsonPrimitive(sessionId))), sessionId = sessionId, timeoutMs = 25000)
@@ -1166,11 +1166,13 @@ class AppController(
             val models = payload["models"]?.let {
                 (it as? kotlinx.serialization.json.JsonArray)?.mapNotNull { item -> (item as? JsonObject)?.let { m -> dev.ziran.android.protocol.parseRoute(m) } }
             } ?: emptyList()
-            if (_state.value.activeSessionId == sessionId) {
+            if (_state.value.activeSessionId == null || _state.value.activeSessionId == sessionId) {
                 setState { it.copy(models = models, runtime = latestRuntime(it.runtime, runtime), modelsError = null) }
             }
         } catch (_: Exception) {
-            if (_state.value.activeSessionId == sessionId) setState { it.copy(models = emptyList()) }
+            if (_state.value.activeSessionId == null || _state.value.activeSessionId == sessionId) {
+                setState { it.copy(models = emptyList()) }
+            }
         }
     }
 

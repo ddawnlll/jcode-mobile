@@ -322,10 +322,18 @@ internal fun WuSortRow(
             Box(
                 Modifier
                     .height(28.dp)
-                    .background(if (on) palette.paper2 else palette.paper, RoundedCornerShape(14.dp))
-                    .border(1.dp, if (on) palette.ink3 else palette.line, RoundedCornerShape(14.dp))
                     .wuClickable(reducedMotion = reducedMotion, onClick = { onSelect(key) })
-                    .padding(horizontal = 10.dp)
+                    .drawBehind {
+                        if (on) {
+                            drawLine(
+                                color = palette.seal,
+                                start = Offset(0f, size.height - 2.dp.toPx()),
+                                end = Offset(size.width, size.height - 2.dp.toPx()),
+                                strokeWidth = 1.5.dp.toPx(),
+                            )
+                        }
+                    }
+                    .padding(horizontal = 4.dp)
                     .semantics { role = Role.Tab; contentDescription = "Sort by $label" },
                 contentAlignment = Alignment.Center,
             ) {
@@ -333,7 +341,7 @@ internal fun WuSortRow(
                     label,
                     style = TextStyle(
                         fontFamily = WuFonts.Mono,
-                        fontSize = 10.5.sp,
+                        fontSize = 11.sp,
                         color = if (on) palette.ink else palette.ink3,
                     ),
                 )
