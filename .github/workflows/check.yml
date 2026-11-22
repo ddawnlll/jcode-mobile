@@ -53,7 +53,7 @@ jobs:
         run: cargo test --workspace
 
   ziran-android:
-    # Builds and tests the flagship Ziran 0.7.1 native Kotlin + Jetpack Compose Android client.
+    # Builds and tests the Ziran native Kotlin + Jetpack Compose Android client.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,12 +61,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/platforms/android-37.0
+            /usr/local/lib/android/sdk/build-tools/37.0.0
+          key: ${{ runner.os }}-android-sdk-37.0-37.0.0
       - uses: android-actions/setup-android@v3
         with:
           packages: >-
             platform-tools
-            platforms;android-37
+            platforms;android-37.0
             build-tools;37.0.0
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+      - uses: gradle/actions/setup-gradle@v4
       - name: Build, unit test, and lint Ziran Android
         run: |
           cd apps/android
