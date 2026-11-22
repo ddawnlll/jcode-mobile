@@ -182,14 +182,16 @@ fun StartScreen(
                 .padding(start = 24.dp, end = 24.dp, bottom = 58.dp),
         )
 
+        val safeTop = rememberSafeTopInsetDp()
         Column(
             Modifier
                 .fillMaxSize()
+                .safeTopAndHorizontalPadding()
                 .padding(horizontal = 24.dp)
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                Spacer(Modifier.height(290.dp))
+                Spacer(Modifier.height(contentTopSpacerDp(290, safeTop, minClearanceDp = 24).dp))
                 Text(
                     "jcode",
                     style = TextStyle(

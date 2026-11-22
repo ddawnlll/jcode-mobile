@@ -224,7 +224,13 @@ class LiveReducer {
     }
 
     private fun finishTurn(state: AppState, turnId: String?, status: String): AppState {
+        val clearedPending = if (state.pending?.state in setOf("accepted", "observed_in_history")) {
+            null
+        } else {
+            state.pending
+        }
         return state.copy(
+            pending = clearedPending,
             live = state.live.copy(
                 turnId = null,
                 finishedTurnId = turnId ?: state.live.turnId ?: state.live.finishedTurnId,
@@ -351,9 +357,17 @@ fun applySnapshotToState(state: AppState, snapshot: SessionSnapshot): AppState {
         )
     }
     val sessions = state.sessions.map { if (it.sessionId == snapshot.session.sessionId) snapshot.session else it }
+    val clearedPending = if (!snapshot.stale && snapshot.activeTurn == null &&
+        state.pending?.state in setOf("accepted", "observed_in_history")
+    ) {
+        null
+    } else {
+        state.pending
+    }
     return state.copy(
         snapshot = snapshot,
         sessions = sessions,
+        pending = clearedPending,
         lastSeq = snapshot.lastSeq,
         epoch = snapshot.epoch,
         runtime = latestRuntime(state.runtime, snapshot.runtime),

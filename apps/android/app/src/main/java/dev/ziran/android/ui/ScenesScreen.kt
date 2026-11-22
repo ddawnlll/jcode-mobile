@@ -76,10 +76,12 @@ fun ScenesScreen(
     Box(Modifier.fillMaxSize().background(palette.paper)) {
         ScreenChrome(sceneKey = selectedScene, palette = palette, headerHeightDp = 230, reducedMotion = reducedMotion)
 
+        val safeTop = rememberSafeTopInsetDp()
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(top = 180.dp)
+                .safeTopAndHorizontalPadding()
+                .padding(top = contentTopSpacerDp(180, safeTop, minClearanceDp = 56).dp)
                 .navigationBarsPadding(),
         ) {
             Text(

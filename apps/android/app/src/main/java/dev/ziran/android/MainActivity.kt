@@ -74,13 +74,18 @@ class MainActivity : ComponentActivity() {
                 controller = controller,
                 deepLink = deepLink.value,
                 deepLinkNonce = deepLinkSeq.value,
-                onThemeNightChanged = { isNight ->
-                    val style = if (isNight) {
-                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
-                    } else {
+                onSystemBarsChanged = { statusBarDarkIcons, navBarDarkIcons ->
+                    val statusStyle = if (statusBarDarkIcons) {
                         SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
                     }
-                    enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                    val navStyle = if (navBarDarkIcons) {
+                        SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+                    } else {
+                        SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+                    }
+                    enableEdgeToEdge(statusBarStyle = statusStyle, navigationBarStyle = navStyle)
                 },
                 onRequestNotifications = {
                     if (LocalNotifications.hasPermission(this)) {

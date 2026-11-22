@@ -214,13 +214,15 @@ fun ThreadScreen(
             }
         }
 
+        val safeTop = rememberSafeTopInsetDp()
         // Foreground layout rides the IME cleanly via WindowInsetsAnimationCompat.
         Column(
             Modifier
                 .fillMaxSize()
+                .safeTopAndHorizontalPadding()
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
-            Spacer(Modifier.height(170.dp))
+            Spacer(Modifier.height(contentTopSpacerDp(170, safeTop, minClearanceDp = 56).dp))
 
             // Title + subtitle + stamped agent seal (top: 170 dp).
             Row(

@@ -655,7 +655,7 @@ class AppController(
         }
         if (text.isEmpty()) return
         val pending = if (isActive) _state.value.pending else null
-        if (pending != null && pending.state in listOf("staged", "reserved", "dispatching", "accepted", "unknown")) {
+        if (OperationReconciler.isBlockingNewSend(pending)) {
             setState { it.copy(sessionsError = "This message is still being resolved. Do not resend it.") }
             return
         }

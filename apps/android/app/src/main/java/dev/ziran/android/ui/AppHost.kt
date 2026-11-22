@@ -81,7 +81,7 @@ fun ZiranApp(
     controller: AppController,
     deepLink: String? = null,
     deepLinkNonce: Int = 0,
-    onThemeNightChanged: (Boolean) -> Unit = {},
+    onSystemBarsChanged: (statusBarDarkIcons: Boolean, navBarDarkIcons: Boolean) -> Unit = { _, _ -> },
     onRequestNotifications: () -> Unit = {},
 ) {
     val state by controller.state.collectAsState()
@@ -91,7 +91,6 @@ fun ZiranApp(
         "night" -> true
         else -> dark
     }
-    LaunchedEffect(isNight) { onThemeNightChanged(isNight) }
 
     val durationScale = rememberAnimatorScale()
     val reduced = durationScale <= 0.01f
@@ -301,6 +300,24 @@ fun ZiranApp(
     }
 
     val screen = stack.last()
+    LaunchedEffect(isNight, screen, state.scene) {
+        val navDark = !isNight
+        val paintingRes = when (screen) {
+            Screen.Start -> dev.ziran.android.design.sceneByKey("butterfly").drawableRes
+            Screen.Threads -> dev.ziran.android.design.sceneByKey("quiet_river").drawableRes
+            is Screen.Thread -> dev.ziran.android.design.sceneByKey(state.scene).drawableRes
+            Screen.Plan -> dev.ziran.android.design.FlockScene.drawableRes
+            Screen.Scenes -> dev.ziran.android.design.sceneByKey(state.scene).drawableRes
+            Screen.Model -> null
+        }
+        val statusDark = if (paintingRes != null) {
+            val lum = dev.ziran.android.design.BitmapCache.topBandLuminance(context.resources, paintingRes, isNight)
+            dev.ziran.android.design.statusBarUsesDarkIcons(lum)
+        } else {
+            !isNight
+        }
+        onSystemBarsChanged(statusDark, navDark)
+    }
     LaunchedEffect(screen) {
         focusManager.clearFocus()
         keyboard?.hide()

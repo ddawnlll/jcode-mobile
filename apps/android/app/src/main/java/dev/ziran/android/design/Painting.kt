@@ -76,6 +76,9 @@ val FlockScene = Scene("flock", "flock", dev.ziran.android.R.drawable.painting_f
 
 fun sceneByKey(key: String): Scene = Scenes.firstOrNull { it.key == key } ?: Scenes.first()
 
+/** True when status bar icons should be dark over a painting's top band. */
+fun statusBarUsesDarkIcons(topBandLuminance: Float): Boolean = topBandLuminance >= 0.45f
+
 /**
  * Decodes each painting ONCE at display size and pre-scales the 256 dp grain
  * tile ONCE so BitmapShader runs with an identity matrix (zero per-frame resampling).
@@ -83,6 +86,36 @@ fun sceneByKey(key: String): Scene = Scenes.firstOrNull { it.key == key } ?: Sce
 object BitmapCache {
     private val paintings = ConcurrentHashMap<Long, ImageBitmap>()
     private val grainShaders = ConcurrentHashMap<Long, ShaderBrush>()
+    private val topLuminance = ConcurrentHashMap<Long, Float>()
+
+    fun topBandLuminance(resources: Resources, @DrawableRes resId: Int, isNight: Boolean): Float {
+        val key = (resId.toLong() shl 1) or (if (isNight) 1L else 0L)
+        return topLuminance.getOrPut(key) {
+            val bmp = decodeSampled(resources, resId, 128)
+            val rows = (bmp.height * 0.16f).roundToInt().coerceAtLeast(1)
+            var sum = 0.0
+            var count = 0
+            val stepX = (bmp.width / 16).coerceAtLeast(1)
+            val stepY = (rows / 6).coerceAtLeast(1)
+            var y = 0
+            while (y < rows) {
+                var x = 0
+                while (x < bmp.width) {
+                    val c = bmp.getPixel(x, y)
+                    val r = ((c shr 16) and 0xFF) / 255.0
+                    val g = ((c shr 8) and 0xFF) / 255.0
+                    val b = (c and 0xFF) / 255.0
+                    sum += 0.2126 * r + 0.7152 * g + 0.0722 * b
+                    count += 1
+                    x += stepX
+                }
+                y += stepY
+            }
+            bmp.recycle()
+            val raw = if (count > 0) (sum / count).toFloat() else 0.5f
+            if (isNight) raw * Tokens.NightBrightness else raw
+        }
+    }
 
     fun painting(resources: Resources, @DrawableRes resId: Int, targetWidthPx: Int): ImageBitmap {
         val bucket = ((targetWidthPx.coerceAtLeast(128) + 127) / 128) * 128
