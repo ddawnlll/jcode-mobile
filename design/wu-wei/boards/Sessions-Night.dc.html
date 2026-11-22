@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>jcode · threads · night</title>
+<title>Ziran · threads · night</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -103,33 +103,120 @@ a{color:inherit;text-decoration:none}
 .s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
 .s button:active,.s a:active{transform:scale(.97);opacity:.85}
 .s .seal:active{transform:scale(.9) rotate(-3deg)}
+
+@keyframes l-word{from{opacity:0;transform:translate3d(0,3px,0)}to{opacity:1;transform:none}}
+@keyframes l-in{from{opacity:0;transform:translate3d(-6px,0,0)}to{opacity:1;transform:none}}
+@keyframes l-drop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes l-flow{from{transform:translate3d(-60%,0,0)}to{transform:translate3d(160%,0,0)}}
+@keyframes l-grind{to{transform:rotate(360deg)}}
+@keyframes l-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.s .w{display:inline-block;white-space:pre;animation:l-word .5s var(--ease) both}
+.s .slidein{animation:l-in .6s var(--ease) both}
+.s .inkdot{width:8px;height:8px;border-radius:50%;background:var(--ink);animation:l-drop .55s var(--ease) both}
+.s .flow{position:relative;height:1.5px;margin:0 0 2px 26px;overflow:hidden}
+.s .flow::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .grind{animation:l-grind 2.4s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .stack{display:grid}.s .stack>*{grid-area:1/1}
+.s .trow .done-only,.s .think .done-only{opacity:0;transition:opacity .5s var(--ease)}
+.s .trow .run-only,.s .think .run-only{opacity:1;transition:opacity .4s var(--ease)}
+.s .trow.done .done-only,.s .think.done .done-only{opacity:1}
+.s .trow.done .run-only,.s .think.done .run-only{opacity:0}
+.s .ring2 circle{stroke-dasharray:37;stroke-dashoffset:37;transition:stroke-dashoffset .9s var(--ease) .1s}
+.s .trow.done .ring2 circle{stroke-dashoffset:0}
+.s .fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .75s var(--ease),opacity .5s var(--ease)}
+.s .open>.fold,.s .open .fold{grid-template-rows:1fr;opacity:1}
+.s .fold>div{overflow:hidden;min-height:0}
+.s .think .bar{position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--ink3);opacity:.5;transform-origin:top;animation:l-grow 3.4s var(--ease) both}
+.s .live-main{transition:opacity .8s var(--ease)}
+.s .live-main.fadeall{opacity:0}
+
+.s .nav{position:absolute;left:0;right:0;bottom:0;height:70px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line);background:var(--paper);z-index:6}
+.s .nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:16px;font-style:italic;color:var(--ink3)}
+.s .nav a.on{color:var(--ink)}
+.s .nav a .nd{width:6px;height:6px;border-radius:50%;background:transparent;transition:background .4s var(--ease)}
+.s .nav a.on .nd{background:var(--seal)}
+.s .lbl{font-size:13.5px;font-style:italic;color:var(--ink3);margin:0;padding:14px 0 4px}
+.s .search{display:flex;align-items:center;gap:10px;height:44px;position:relative}
+.s .search input{flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17px;color:var(--ink);padding:0}
+.s .search::after{content:'';position:absolute;left:0;right:0;bottom:4px;height:1.5px;background:var(--ink);opacity:.3;transform-origin:left;transition:opacity .3s var(--ease)}
+.s .search:focus-within::after{opacity:.7}
+.s .sorts{display:flex;gap:4px;align-items:center}
+.s .sorts button{height:34px;padding:0 9px;font-size:15px;color:var(--ink3);border-radius:6px;position:relative;transition:color .3s var(--ease)}
+.s .sorts button.on{color:var(--ink)}
+.s .sorts button::after{content:'';position:absolute;left:9px;right:9px;bottom:5px;height:1.5px;background:var(--seal);transform:scaleX(0);transform-origin:left;transition:transform .45s var(--ease)}
+.s .sorts button.on::after{transform:scaleX(1)}
+.s .trow2{display:grid;grid-template-columns:28px minmax(0,1fr) 22px;align-items:center;column-gap:12px;min-height:58px;width:100%;text-align:left;animation:m-in .45s var(--ease) both}
+.s .sub{grid-template-columns:20px minmax(0,1fr) 22px;min-height:44px;padding-left:38px;position:relative;box-sizing:border-box}
+.s .sub::before{content:'';position:absolute;left:13.5px;top:-8px;height:30px;width:16px;border-left:1px solid var(--ink3);border-bottom:1px solid var(--ink3);border-bottom-left-radius:8px;opacity:.4}
+.s .tt{display:block;font-size:17px;line-height:22px;color:var(--ink)}
+.s .tn{display:block;font-size:13.5px;line-height:18px;color:var(--ink3);font-style:italic}
+.s .sub .tt{font-size:15.5px}
+.s .tag{font-family:'JetBrains Mono',monospace;font-style:normal;font-size:10px;color:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:5px}
+.s .seg2{display:flex;padding:2px;border-radius:9px;background:var(--paper2);gap:2px}
+.s .seg2 button{flex:1;height:34px;padding:0 10px;border-radius:7px;font-size:15px;color:var(--ink2);transition:background .3s var(--ease),color .3s var(--ease),box-shadow .3s var(--ease)}
+.s .seg2 button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.s .srow2{display:flex;align-items:center;gap:12px;min-height:52px;border-bottom:1px solid var(--line);width:100%;text-align:left;font-size:17px;color:var(--ink)}
+.s .srow2 .v{margin-left:auto;font-size:15px;font-style:italic;color:var(--ink3);display:flex;align-items:center;gap:6px}
+.s .tog{width:44px;height:26px;border-radius:13px;border:1.5px solid var(--ink3);position:relative;box-sizing:border-box;flex:none;margin-left:auto;transition:border-color .35s var(--ease),background .35s var(--ease)}
+.s .tog::after{content:'';position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:var(--ink3);transition:transform .45s var(--ease),background .35s var(--ease)}
+.s .tog.on{border-color:var(--seal);background:var(--seal)}
+.s .tog.on::after{transform:translateX(18px);background:var(--onseal)}
+.s .mrow{display:grid;grid-template-columns:minmax(0,1fr) 22px;align-items:center;column-gap:10px;min-height:54px;width:100%;text-align:left;border-bottom:1px solid var(--line);animation:m-in .4s var(--ease) both}
+.s .mrow[disabled]{opacity:.45}
+.s .ph{display:flex;justify-content:space-between;align-items:baseline;padding:16px 0 2px}
+@keyframes m-in{from{opacity:0;transform:translate3d(0,4px,0)}to{opacity:1;transform:none}}
+@keyframes m-sheet{from{transform:translate3d(0,100%,0)}to{transform:none}}
+@keyframes m-fade{from{opacity:0}to{opacity:1}}
+.s .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-top-left-radius:18px;border-top-right-radius:18px;box-shadow:0 -10px 40px rgba(0,0,0,.18);z-index:9;padding:10px 22px 30px;animation:m-sheet .42s var(--ease) both}
+.s .scrim2{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:8;animation:m-fade .3s var(--ease) both}
+.s .opt{display:grid;grid-template-columns:minmax(0,1fr) 22px;align-items:center;gap:10px;min-height:64px;width:100%;text-align:left;border-bottom:1px solid var(--line)}
+.s .scroll{overflow:auto;scrollbar-width:none}
+.s .scroll::-webkit-scrollbar{display:none}
 </style>
 </helmet>
 <div class="s" style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#0E1613;--paper2:#17221D;--ink:#DCE8DE;--ink2:#BCCFC1;--ink3:#86998C;--line:#24342C;--seal:#93A6D9;--onseal:#10140F;--blue:#7FAFBD;--green:#6FA88A;--mist:#0E1613;--imgf:brightness(.58) saturate(.85)">
 <svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
-<div style="position:absolute;left:0;top:0;width:390px;height:280px;overflow:hidden"><img class="kb" src="../assets/painting-pavilion.jpg" alt="Detail of an old blue-and-green landscape painting: a pavilion under pines" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div><a href="Scenes-Night.dc.html" class="" aria-label="Server studio-vps · scenes and theme" style="position:absolute;right:16px;top:54px;height:40px;display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink2);font-family:'JetBrains Mono',monospace;z-index:2"><span aria-hidden="true" style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>studio-vps</a><div style="position:absolute;left:22px;right:22px;top:226px;display:flex;align-items:flex-end;gap:12px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">Threads</h1><div class="mono clip rise" style="font-size:11px;color:var(--ink3);margin-top:2px">~/src · 5 sessions</div></div></div>
-  <nav aria-label="Threads" style="position:absolute;left:22px;right:22px;top:282px;display:flex;flex-direction:column">
-    <a href="#" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.1s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Clean the build cache</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">crane asks to run <span class="mono" style="font-style:normal;font-size:11px">rm -rf target/…</span></span></span><span style="width:24px;display:flex;justify-content:center"><span role="img" aria-label="Waiting for you" style="width:10px;height:10px;border-radius:50%;background:var(--seal)"></span></span></a><a href="Main-Night.dc.html" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.2s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Adapter v4 timeline</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">fox · running the tests</span></span><span style="width:24px;display:flex;justify-content:center"><span class="mono spin" role="img" aria-label="Working" style="font-size:15px;color:var(--blue)"></span></span></a><a href="#" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.3s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Pinned todo card</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">heron, with owl, wren and lynx · 3 of 7</span></span><span style="width:24px;display:flex;justify-content:center"><span class="mono spin" role="img" aria-label="Working" style="font-size:15px;color:var(--blue)"></span></span></a><a href="#" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.4s;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Socket timeout</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">owl · done, fourteen minutes ago</span></span><span style="width:24px;display:flex;justify-content:center"><span class="ring" role="img" aria-label="Finished" style="width:15px;height:15px"></span></span></a><a href="#" class="rise" style="width:100%;display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);animation-delay:0.5s;opacity:.6;"><span aria-hidden="true" class="seal " style="width:30px;height:30px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;text-align:left"><span class="clip" style="font-size:19px;line-height:25px;color:var(--ink)">Android back stack</span><span class="clip" style="font-size:14.5px;line-height:20px;color:var(--ink3);font-style:italic">moth · resting since Saturday</span></span><span style="width:24px;display:flex;justify-content:center"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></span></a>
-  </nav>
-  <div style="position:absolute;left:20px;right:16px;bottom:22px;display:flex;flex-direction:column;gap:2px">
-    <div style="display:flex;align-items:center;gap:10px">
-      <label style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:50px">
-        <span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Message</span>
-        <input placeholder="begin a new thread…" style="flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17px;color:var(--ink);padding:0">
-        <svg aria-hidden="true" viewBox="0 0 200 8" preserveAspectRatio="none" style="position:absolute;left:0;right:0;bottom:7px;width:100%;height:6px"><path class="inkdraw" d="M2 5 C 40 2, 90 6, 140 3 S 190 4, 198 3" style="stroke:var(--ink)" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".55" filter="url(#bleed)"></path></svg>
-      </label>
-      
-      <button type="button" aria-label="Send" class="seal stamp" style="width:48px;height:48px"><svg viewBox="0 0 24 24" width="62%" height="62%" aria-hidden="true"><path d="M12 19.5 C 11.6 15, 12.2 10, 12 5.2 M 6.6 10.4 C 8.6 8.6, 10.4 6.8, 12 5 C 13.6 6.8, 15.4 8.6, 17.4 10.4" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
-    </div>
-    
-  </div>
+<div style="position:absolute;left:0;top:0;width:390px;height:170px;overflow:hidden"><img class="kb" src="../assets/painting-quiet-river.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: a quiet river" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div><div style="position:absolute;left:22px;right:22px;top:112px;z-index:2;display:flex;align-items:flex-end;justify-content:space-between"><h1 class="bleedin" style="margin:0;font-size:30px;line-height:36px;font-weight:500">Threads</h1><span class="mono" style="font-size:11px;color:var(--ink3);padding-bottom:6px">{{count}}</span></div><div style="position:absolute;left:22px;right:22px;top:158px;z-index:2"><label class="search"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink3)" stroke-width="1.7" stroke-linecap="round"><path d="M10.5 16 A5.5 5.5 0 1 1 10.5 5 A5.5 5.5 0 1 1 10.5 16 M14.6 14.6 L19 19"></path></svg><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Search threads</span><input placeholder="search threads and sub-agents" value="{{q}}" onChange="{{onQ}}"></label><div class="sorts" role="group" aria-label="Sort by" style="margin-top:2px"><span class="mono" style="font-size:10.5px;color:var(--ink3);margin-right:4px">sort</span><sc-for list="{{sorts}}" as="o" hint-placeholder-count="3"><button type="button" class="{{o.cls}}" aria-pressed="{{o.pressed}}" onClick="{{o.pick}}">{{o.label}}</button></sc-for></div></div><div class="scroll" style="position:absolute;left:22px;right:22px;top:252px;bottom:70px;padding-bottom:80px"><sc-for list="{{rows}}" as="r" hint-placeholder-count="6"><div style="opacity:{{r.op}}"><a href="Main-Night.dc.html" class="trow2" style="animation-delay:{{r.delay}}s"><span class="seal" aria-hidden="true" style="width:28px;height:28px;flex:none"><svg viewBox="0 0 24 24" width="70%" height="70%"><path d="{{r.d}}" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"></path></svg></span><span style="min-width:0"><span class="tt clip">{{r.title}}</span><span class="tn clip">{{r.note}}</span></span><sc-if value="{{r.live}}" hint-placeholder-val="{{false}}"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></sc-if><sc-if value="{{r.done}}" hint-placeholder-val="{{false}}"><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></sc-if><sc-if value="{{r.ask}}" hint-placeholder-val="{{false}}"><span role="img" aria-label="Waiting for you" style="width:10px;height:10px;border-radius:50%;background:var(--seal)"></span></sc-if><sc-if value="{{r.rest}}" hint-placeholder-val="{{false}}"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></sc-if></a><sc-if value="{{r.has}}" hint-placeholder-val="{{false}}"><button type="button" aria-expanded="{{r.ex}}" onClick="{{r.fold}}" class="mono" style="height:30px;padding-left:40px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px"><span style="display:inline-block;transition:transform .4s var(--ease);transform:rotate({{r.rot}}deg)">›</span>{{r.subN}}</button><sc-if value="{{r.open}}" hint-placeholder-val="{{false}}"><div><sc-for list="{{r.subs}}" as="s" hint-placeholder-count="3"><a href="Main-Night.dc.html" class="trow2 sub"><span class="seal" aria-hidden="true" style="width:20px;height:20px;flex:none"><svg viewBox="0 0 24 24" width="70%" height="70%"><path d="{{s.d}}" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"></path></svg></span><span style="min-width:0"><span class="tt clip">{{s.title}}</span><span class="tn clip"><span class="tag">sub-agent</span>{{s.note}}</span></span><sc-if value="{{s.live}}" hint-placeholder-val="{{false}}"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></sc-if><sc-if value="{{s.done}}" hint-placeholder-val="{{false}}"><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></sc-if><sc-if value="{{s.ask}}" hint-placeholder-val="{{false}}"><span role="img" aria-label="Waiting for you" style="width:10px;height:10px;border-radius:50%;background:var(--seal)"></span></sc-if><sc-if value="{{s.rest}}" hint-placeholder-val="{{false}}"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></sc-if></a></sc-for></div></sc-if></sc-if></div></sc-for><sc-if value="{{empty}}" hint-placeholder-val="{{false}}"><p style="margin:24px 0;font-size:16px;font-style:italic;color:var(--ink3)">Nothing by that name.</p></sc-if></div><a href="Main-Night.dc.html" class="seal" aria-label="New thread" style="position:absolute;right:20px;bottom:88px;width:52px;height:52px;z-index:7"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" style="stroke:var(--onseal)" stroke-width="2.4" stroke-linecap="round"><path d="M12 5.5 V18.5 M5.5 12 H18.5"></path></svg></a><nav class="nav" aria-label="Sections"><a href="Home-Night.dc.html" class=""><span>home</span><span class="nd" aria-hidden="true"></span></a><a href="Sessions-Night.dc.html" class="on" aria-current="page"><span>threads</span><span class="nd" aria-hidden="true"></span></a><a href="Settings-Night.dc.html" class=""><span>settings</span><span class="nd" aria-hidden="true"></span></a></nav>
 <div aria-hidden="true" class="grain grain-night"></div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+
 class Component extends DCLogic {
-  renderVals() { return {}; }
+  constructor(p) { super(p); this.state = { q: '', sort: 'recent', open: { heron: true } }; }
+  renderVals() {
+    const S = this.state;
+    const triD = (b) => b.split('').map((x, i) => { const y = 7 + i * 5; return x === '1' ? 'M5 ' + y + ' H19' : 'M5 ' + y + ' H10.4 M13.6 ' + y + ' H19'; }).join(' ');
+    const T = [
+      { id: 'fox', title: 'Adapter v4 timeline', note: 'working · step 4 of 4', st: 'live', rank: 1, age: 1, subs: [] },
+      { id: 'crane', title: 'Clean the build cache', note: 'waiting for you', st: 'ask', rank: 0, age: 2, subs: [] },
+      { id: 'heron', title: 'Pinned todo card', note: 'coordinating · plan 4 of 7', st: 'live', rank: 1, age: 3, subs: [
+        { id: 'owl', title: 'Unpin when archived', note: 'finished its part', st: 'done' },
+        { id: 'wren', title: 'Migrate old pins', note: 'working', st: 'live' },
+        { id: 'lynx', title: 'Drag to reorder', note: 'working', st: 'live' } ] },
+      { id: 'owl', title: 'Socket timeout', note: 'finished fourteen minutes ago', st: 'done', rank: 2, age: 4, subs: [] },
+      { id: 'moth', title: 'Android back stack', note: 'resting since Saturday', st: 'rest', rank: 3, age: 9, subs: [] },
+      { id: 'crane', title: 'Release notes for 0.6', note: 'finished last week', st: 'done', rank: 2, age: 12, subs: [], key: 'crane2' },
+    ];
+    const tri = { crane: '111', fox: '101', heron: '010', owl: '100', moth: '011', wren: '110', lynx: '001' };
+    const q = S.q.trim().toLowerCase();
+    const hit = (x) => !q || (x.title + ' ' + x.note + ' ' + x.id).toLowerCase().indexOf(q) >= 0;
+    let list = T.filter(x => hit(x) || x.subs.some(hit));
+    const by = { recent: (a, b) => a.age - b.age, name: (a, b) => a.title.localeCompare(b.title), status: (a, b) => a.rank - b.rank || a.age - b.age };
+    list = list.slice().sort(by[S.sort]);
+    const mk = (st) => ({ live: st === 'live', done: st === 'done', ask: st === 'ask', rest: st === 'rest' });
+    const rows = list.map((x, i) => {
+      const k = x.key || x.id, open = !!S.open[k] || (q && x.subs.some(hit));
+      return Object.assign({}, mk(x.st), { d: triD(tri[x.id]), title: x.title, note: x.note, has: x.subs.length > 0, subN: x.subs.length + ' sub-agents',
+        open, ex: open ? 'true' : 'false', rot: open ? 90 : 0, op: x.st === 'rest' ? 0.62 : 1, delay: (i * 0.04).toFixed(2),
+        fold: () => { const o = Object.assign({}, this.state.open); o[k] = !open; this.setState({ open: o }); },
+        subs: x.subs.map(s => Object.assign({}, mk(s.st), { d: triD(tri[s.id]), title: s.title, note: s.id + ' · ' + s.note })) });
+    });
+    const sorts = ['recent', 'name', 'status'].map(k => ({ label: k, cls: S.sort === k ? 'on' : '', pressed: S.sort === k ? 'true' : 'false', pick: () => this.setState({ sort: k }) }));
+    return { rows, sorts, q: S.q, onQ: (e) => this.setState({ q: e.target.value }), empty: rows.length === 0, count: rows.length + (rows.length === 1 ? ' thread' : ' threads') };
+  }
 }
+
 </script>
 </body>
 </html>

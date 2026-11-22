@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ziran · home · night</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+
+@keyframes l-word{from{opacity:0;transform:translate3d(0,3px,0)}to{opacity:1;transform:none}}
+@keyframes l-in{from{opacity:0;transform:translate3d(-6px,0,0)}to{opacity:1;transform:none}}
+@keyframes l-drop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes l-flow{from{transform:translate3d(-60%,0,0)}to{transform:translate3d(160%,0,0)}}
+@keyframes l-grind{to{transform:rotate(360deg)}}
+@keyframes l-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.s .w{display:inline-block;white-space:pre;animation:l-word .5s var(--ease) both}
+.s .slidein{animation:l-in .6s var(--ease) both}
+.s .inkdot{width:8px;height:8px;border-radius:50%;background:var(--ink);animation:l-drop .55s var(--ease) both}
+.s .flow{position:relative;height:1.5px;margin:0 0 2px 26px;overflow:hidden}
+.s .flow::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .grind{animation:l-grind 2.4s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .stack{display:grid}.s .stack>*{grid-area:1/1}
+.s .trow .done-only,.s .think .done-only{opacity:0;transition:opacity .5s var(--ease)}
+.s .trow .run-only,.s .think .run-only{opacity:1;transition:opacity .4s var(--ease)}
+.s .trow.done .done-only,.s .think.done .done-only{opacity:1}
+.s .trow.done .run-only,.s .think.done .run-only{opacity:0}
+.s .ring2 circle{stroke-dasharray:37;stroke-dashoffset:37;transition:stroke-dashoffset .9s var(--ease) .1s}
+.s .trow.done .ring2 circle{stroke-dashoffset:0}
+.s .fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .75s var(--ease),opacity .5s var(--ease)}
+.s .open>.fold,.s .open .fold{grid-template-rows:1fr;opacity:1}
+.s .fold>div{overflow:hidden;min-height:0}
+.s .think .bar{position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--ink3);opacity:.5;transform-origin:top;animation:l-grow 3.4s var(--ease) both}
+.s .live-main{transition:opacity .8s var(--ease)}
+.s .live-main.fadeall{opacity:0}
+
+.s .nav{position:absolute;left:0;right:0;bottom:0;height:70px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line);background:var(--paper);z-index:6}
+.s .nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:16px;font-style:italic;color:var(--ink3)}
+.s .nav a.on{color:var(--ink)}
+.s .nav a .nd{width:6px;height:6px;border-radius:50%;background:transparent;transition:background .4s var(--ease)}
+.s .nav a.on .nd{background:var(--seal)}
+.s .lbl{font-size:13.5px;font-style:italic;color:var(--ink3);margin:0;padding:14px 0 4px}
+.s .search{display:flex;align-items:center;gap:10px;height:44px;position:relative}
+.s .search input{flex:1;min-width:0;background:none;border:0;outline:none;font-family:'EB Garamond',Georgia,serif;font-size:17px;color:var(--ink);padding:0}
+.s .search::after{content:'';position:absolute;left:0;right:0;bottom:4px;height:1.5px;background:var(--ink);opacity:.3;transform-origin:left;transition:opacity .3s var(--ease)}
+.s .search:focus-within::after{opacity:.7}
+.s .sorts{display:flex;gap:4px;align-items:center}
+.s .sorts button{height:34px;padding:0 9px;font-size:15px;color:var(--ink3);border-radius:6px;position:relative;transition:color .3s var(--ease)}
+.s .sorts button.on{color:var(--ink)}
+.s .sorts button::after{content:'';position:absolute;left:9px;right:9px;bottom:5px;height:1.5px;background:var(--seal);transform:scaleX(0);transform-origin:left;transition:transform .45s var(--ease)}
+.s .sorts button.on::after{transform:scaleX(1)}
+.s .trow2{display:grid;grid-template-columns:28px minmax(0,1fr) 22px;align-items:center;column-gap:12px;min-height:58px;width:100%;text-align:left;animation:m-in .45s var(--ease) both}
+.s .sub{grid-template-columns:20px minmax(0,1fr) 22px;min-height:44px;padding-left:38px;position:relative;box-sizing:border-box}
+.s .sub::before{content:'';position:absolute;left:13.5px;top:-8px;height:30px;width:16px;border-left:1px solid var(--ink3);border-bottom:1px solid var(--ink3);border-bottom-left-radius:8px;opacity:.4}
+.s .tt{display:block;font-size:17px;line-height:22px;color:var(--ink)}
+.s .tn{display:block;font-size:13.5px;line-height:18px;color:var(--ink3);font-style:italic}
+.s .sub .tt{font-size:15.5px}
+.s .tag{font-family:'JetBrains Mono',monospace;font-style:normal;font-size:10px;color:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-right:5px}
+.s .seg2{display:flex;padding:2px;border-radius:9px;background:var(--paper2);gap:2px}
+.s .seg2 button{flex:1;height:34px;padding:0 10px;border-radius:7px;font-size:15px;color:var(--ink2);transition:background .3s var(--ease),color .3s var(--ease),box-shadow .3s var(--ease)}
+.s .seg2 button.on{background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.s .srow2{display:flex;align-items:center;gap:12px;min-height:52px;border-bottom:1px solid var(--line);width:100%;text-align:left;font-size:17px;color:var(--ink)}
+.s .srow2 .v{margin-left:auto;font-size:15px;font-style:italic;color:var(--ink3);display:flex;align-items:center;gap:6px}
+.s .tog{width:44px;height:26px;border-radius:13px;border:1.5px solid var(--ink3);position:relative;box-sizing:border-box;flex:none;margin-left:auto;transition:border-color .35s var(--ease),background .35s var(--ease)}
+.s .tog::after{content:'';position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:var(--ink3);transition:transform .45s var(--ease),background .35s var(--ease)}
+.s .tog.on{border-color:var(--seal);background:var(--seal)}
+.s .tog.on::after{transform:translateX(18px);background:var(--onseal)}
+.s .mrow{display:grid;grid-template-columns:minmax(0,1fr) 22px;align-items:center;column-gap:10px;min-height:54px;width:100%;text-align:left;border-bottom:1px solid var(--line);animation:m-in .4s var(--ease) both}
+.s .mrow[disabled]{opacity:.45}
+.s .ph{display:flex;justify-content:space-between;align-items:baseline;padding:16px 0 2px}
+@keyframes m-in{from{opacity:0;transform:translate3d(0,4px,0)}to{opacity:1;transform:none}}
+@keyframes m-sheet{from{transform:translate3d(0,100%,0)}to{transform:none}}
+@keyframes m-fade{from{opacity:0}to{opacity:1}}
+.s .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-top-left-radius:18px;border-top-right-radius:18px;box-shadow:0 -10px 40px rgba(0,0,0,.18);z-index:9;padding:10px 22px 30px;animation:m-sheet .42s var(--ease) both}
+.s .scrim2{position:absolute;inset:0;background:rgba(0,0,0,.28);z-index:8;animation:m-fade .3s var(--ease) both}
+.s .opt{display:grid;grid-template-columns:minmax(0,1fr) 22px;align-items:center;gap:10px;min-height:64px;width:100%;text-align:left;border-bottom:1px solid var(--line)}
+.s .scroll{overflow:auto;scrollbar-width:none}
+.s .scroll::-webkit-scrollbar{display:none}
+</style>
+</helmet>
+<div class="s" style="width:390px;height:844px;position:relative;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#0E1613;--paper2:#17221D;--ink:#DCE8DE;--ink2:#BCCFC1;--ink3:#86998C;--line:#24342C;--seal:#93A6D9;--onseal:#10140F;--blue:#7FAFBD;--green:#6FA88A;--mist:#0E1613;--imgf:brightness(.58) saturate(.85)">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<div style="position:absolute;left:0;top:0;width:390px;height:232px;overflow:hidden"><img class="kb" src="../assets/painting-misty-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: peaks in mist" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div></div><div style="position:absolute;left:22px;right:22px;top:168px;z-index:2"><h1 class="bleedin" style="margin:0;font-size:30px;line-height:36px;font-weight:500">studio-vps</h1><div class="mono rise" style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink3);margin-top:2px"><span aria-hidden="true" style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>jcode connected · 2 at work · {{waitLabel}}</div></div><div class="scroll" style="position:absolute;left:22px;right:22px;top:240px;bottom:70px;padding-bottom:70px"><h2 class="lbl">waiting for you</h2><sc-if value="{{ask}}" hint-placeholder-val="{{true}}"><div class="rise" style="border:1px solid var(--line);border-radius:12px;background:var(--paper2);padding:12px 14px;display:flex;flex-direction:column;gap:9px"><div style="display:flex;align-items:center;gap:10px"><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0"><span class="tt clip">Clean the build cache</span><span class="tn">crane wants to run</span></span><span role="img" aria-label="Waiting for you" style="width:10px;height:10px;border-radius:50%;background:var(--seal)"></span></div><code class="mono" style="font-size:11.5px;line-height:17px;color:var(--ink)">rm -rf target/debug/incremental …</code><div style="display:flex;gap:8px"><button type="button" onClick="{{allow}}" style="flex:1;height:44px;border-radius:9px;background:var(--seal);color:var(--onseal);font-size:16px">Allow once</button><button type="button" onClick="{{deny}}" style="flex:1;height:44px;border-radius:9px;border:1px solid var(--line);color:var(--ink2);font-size:16px">Deny</button></div></div></sc-if><sc-if value="{{yes}}" hint-placeholder-val="{{false}}"><p class="rise mono" style="margin:4px 0;font-size:11.5px;color:var(--ink3);display:flex;gap:8px;align-items:center"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span> crane · allowed · running</p></sc-if><sc-if value="{{no}}" hint-placeholder-val="{{false}}"><p class="rise mono" style="margin:4px 0;font-size:11.5px;color:var(--ink3)">crane · denied · it will ask another way</p></sc-if><h2 class="lbl">at work</h2><a href="Main-Night.dc.html" class="trow2" style="animation-delay:.1s"><span aria-hidden="true" class="seal " style="width:28px;height:28px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Adapter v4 timeline</span><span class="tn clip">running the tests · step 4 of 4 · <span class="mono" style="font-style:normal;font-size:11px;color:var(--blue)">{{el}}</span></span></span><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></a><div class="flow" aria-hidden="true" style="margin:-6px 0 4px 40px"></div><div style="position:relative"><a href="Plan-Night.dc.html" class="trow2" style="animation-delay:.18s"><span aria-hidden="true" class="seal " style="width:28px;height:28px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Pinned todo card</span><span class="tn clip">coordinating · plan 4 of 7</span></span><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></a><button type="button" aria-expanded="{{subsOpen}}" onClick="{{toggleSubs}}" class="mono" style="height:32px;padding-left:40px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px"><span style="display:inline-block;transition:transform .4s var(--ease);transform:rotate({{subRot}}deg)">›</span>3 sub-agents</button><sc-if value="{{subs}}" hint-placeholder-val="{{true}}"><div><a href="Main-Night.dc.html" class="trow2 sub" style="animation-delay:0.05s"><span aria-hidden="true" class="seal " style="width:20px;height:20px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Unpin when archived</span><span class="tn clip"><span class="tag">sub-agent</span>finished its part</span></span><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></a><a href="Main-Night.dc.html" class="trow2 sub" style="animation-delay:0.1s"><span aria-hidden="true" class="seal " style="width:20px;height:20px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Migrate old pins</span><span class="tn clip"><span class="tag">sub-agent</span>working · 0:44</span></span><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></a><a href="Main-Night.dc.html" class="trow2 sub" style="animation-delay:0.15s"><span aria-hidden="true" class="seal " style="width:20px;height:20px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Drag to reorder</span><span class="tn clip"><span class="tag">sub-agent</span>working · 0:53</span></span><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></a></div></sc-if></div><h2 class="lbl">recent</h2><a href="Main-Night.dc.html" class="trow2" style="animation-delay:.25s"><span aria-hidden="true" class="seal " style="width:28px;height:28px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Socket timeout</span><span class="tn clip">finished fourteen minutes ago</span></span><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></a><a href="Main-Night.dc.html" class="trow2" style="animation-delay:.3s;opacity:.62"><span aria-hidden="true" class="seal " style="width:28px;height:28px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="min-width:0"><span class="tt clip">Android back stack</span><span class="tn clip">resting since Saturday</span></span><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></a></div><a href="Main-Night.dc.html" class="seal" aria-label="New thread" style="position:absolute;right:20px;bottom:88px;width:52px;height:52px;z-index:7"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" style="stroke:var(--onseal)" stroke-width="2.4" stroke-linecap="round"><path d="M12 5.5 V18.5 M5.5 12 H18.5"></path></svg></a><nav class="nav" aria-label="Sections"><a href="Home-Night.dc.html" class="on" aria-current="page"><span>home</span><span class="nd" aria-hidden="true"></span></a><a href="Sessions-Night.dc.html" class=""><span>threads</span><span class="nd" aria-hidden="true"></span></a><a href="Settings-Night.dc.html" class=""><span>settings</span><span class="nd" aria-hidden="true"></span></a></nav>
+<div aria-hidden="true" class="grain grain-night"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { ask: 'ask', now: 72, subs: true }; }
+  componentDidMount() { this.iv = setInterval(() => this.setState({ now: this.state.now + 1 }), 1000); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  renderVals() {
+    const S = this.state, m = Math.floor(S.now / 60), s = S.now % 60;
+    return { ask: S.ask === 'ask', yes: S.ask === 'yes', no: S.ask === 'no',
+      allow: () => this.setState({ ask: 'yes' }), deny: () => this.setState({ ask: 'no' }),
+      el: m + ':' + (s < 10 ? '0' : '') + s, subs: S.subs, subsOpen: S.subs ? 'true' : 'false', subRot: S.subs ? 90 : 0,
+      toggleSubs: () => this.setState({ subs: !S.subs }), waitN: S.ask === 'ask' ? 1 : 0, waitLabel: S.ask === 'ask' ? '1 waiting' : 'none waiting' };
+  }
+}
+
+</script>
+</body>
+</html>
