@@ -84,10 +84,12 @@ class AppController(
             val first = serverIds.firstOrNull()
             if (first == null) {
                 setState { it.copy(phase = "unpaired") }
+                probeServer(_state.value.pairServer, immediate = true)
                 return@launch
             }
             val credential = loadCredential(first) ?: run {
                 setState { it.copy(phase = "unpaired") }
+                probeServer(_state.value.pairServer, immediate = true)
                 return@launch
             }
             setState { it.copy(phase = "ready", serverName = credential.serverId) }
@@ -120,12 +122,17 @@ class AppController(
             setState { it.copy(phase = "ready", pairingStage = "verified", pairingError = null) }
             maybeAskForNotifications()
         } catch (error: Exception) {
+            val msg = error.message ?: (error.javaClass.simpleName + " during pairing.")
+            val expiredOrUsed = msg.contains("expired", ignoreCase = true) ||
+                msg.contains("used", ignoreCase = true) ||
+                msg.contains("already", ignoreCase = true)
             setState {
                 it.copy(
                     phase = "unpaired",
                     pairingStage = "error",
-                    pairingError = error.message ?: (error.javaClass.simpleName + " during pairing."),
-                    pairingMessage = error.message ?: "Pairing failed.",
+                    pairingError = msg,
+                    pairingMessage = msg,
+                    pairCode = if (expiredOrUsed) "" else it.pairCode,
                 )
             }
         }
@@ -194,19 +201,54 @@ class AppController(
         refreshSessions()
     }
 
+    private var probeJob: Job? = null
+
+    fun probeServer(serverUrl: String = _state.value.pairServer, immediate: Boolean = false) {
+        probeJob?.cancel()
+        val trimmed = serverUrl.trim()
+        if (trimmed.isEmpty()) {
+            setState { it.copy(healthProbe = dev.ziran.android.protocol.HealthProbeResult.Idle) }
+            return
+        }
+        probeJob = scope.launch {
+            if (!immediate) kotlinx.coroutines.delay(500L)
+            setState { it.copy(healthProbe = dev.ziran.android.protocol.HealthProbeResult.Probing) }
+            val result = PairingHttp.probeHealth(trimmed, http)
+            if (_state.value.pairServer.trim() == trimmed) {
+                setState { it.copy(healthProbe = result) }
+            }
+        }
+    }
+
     fun setPairServer(value: String) {
         setState { it.copy(pairServer = value, pairingError = null) }
+        probeServer(value, immediate = false)
     }
 
     fun setPairCode(value: String) {
-        setState { it.copy(pairCode = value, pairingError = null) }
+        setState {
+            it.copy(
+                pairCode = value,
+                pairingError = null,
+                pairingStage = if (it.pairingStage == "error") "idle" else it.pairingStage,
+            )
+        }
     }
 
     /** Parse a pasted pairing link exactly as pairingPayload.ts; fill the fields. */
     fun applyPairingLink(raw: String): Boolean {
         return try {
             val payload = dev.ziran.android.protocol.PairingPayload.parse(raw)
-            setState { it.copy(pairServer = payload.server, pairCode = payload.code, pairingError = null) }
+            setState {
+                it.copy(
+                    pairServer = payload.server,
+                    pairCode = payload.code,
+                    pairPasteNonce = it.pairPasteNonce + 1,
+                    pairingError = null,
+                    pairingStage = "idle",
+                )
+            }
+            probeServer(payload.server, immediate = true)
             true
         } catch (error: Exception) {
             setState { it.copy(pairingError = error.message ?: "This is not a supported pairing link.") }

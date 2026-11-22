@@ -20,6 +20,7 @@ fun ScreenChrome(
     palette: Palette,
     headerHeightDp: Int,
     reducedMotion: Boolean = false,
+    slowDrift: Boolean = false,
 ) {
     val scene = sceneByKey(sceneKey)
     Box(Modifier.fillMaxSize()) {
@@ -29,6 +30,7 @@ fun ScreenChrome(
             modifier = Modifier.align(Alignment.TopCenter),
             heightDp = headerHeightDp,
             reducedMotion = reducedMotion,
+            slowDrift = slowDrift,
         )
     }
 }

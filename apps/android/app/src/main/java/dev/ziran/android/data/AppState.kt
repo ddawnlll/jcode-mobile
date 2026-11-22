@@ -89,6 +89,8 @@ data class AppState(
     val scene: String = "peaks",
     val pairServer: String = "http://10.0.2.2:7644",
     val pairCode: String = "",
+    val pairPasteNonce: Int = 0,
+    val healthProbe: dev.ziran.android.protocol.HealthProbeResult = dev.ziran.android.protocol.HealthProbeResult.Idle,
     val queuedMessages: List<String> = emptyList(),
     val queuedNotice: String? = null,
     val serverName: String? = null,

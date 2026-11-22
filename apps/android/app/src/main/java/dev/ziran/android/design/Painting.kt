@@ -20,7 +20,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
@@ -162,6 +167,7 @@ fun Painting(
     modifier: Modifier = Modifier,
     heightDp: Int = 280,
     reducedMotion: Boolean = false,
+    slowDrift: Boolean = false,
 ) {
     val density = LocalDensity.current
     val widthPx = max(LocalWindowInfo.current.containerSize.width, 780)
@@ -169,16 +175,27 @@ fun Painting(
     val tyTargetPx = with(density) { (-6).dp.toPx() }
     val mistShiftPx = with(density) { 26.dp.toPx() }
 
+    var kbPhase by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(reducedMotion) {
+        if (reducedMotion) return@LaunchedEffect
+        var lastNs = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { nowNs ->
+                val dtSec = ((nowNs - lastNs).coerceIn(0L, 100_000_000L)) / 1_000_000_000f
+                lastNs = nowNs
+                val speed = if (slowDrift) 0.25f else 1f
+                // Full cycle = 2 * KenBurns (34s forward + 34s reverse)
+                val periodSec = (WuDurations.KenBurns * 2f) / 1000f
+                kbPhase = (kbPhase + (dtSec * speed) / periodSec) % 1f
+            }
+        }
+    }
+    val kbValue = if (reducedMotion) 0f else {
+        // Smooth cosine ease 0 -> 1 -> 0 over kbPhase in 0..1
+        ((1f - kotlin.math.cos(kbPhase * 2f * kotlin.math.PI.toFloat())) * 0.5f)
+    }
+
     val transition = if (reducedMotion) null else rememberInfiniteTransition(label = "painting-motion")
-    val kbProgress = transition?.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(WuDurations.KenBurns, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "kenburns",
-    )
     val mistProgress = transition?.animateFloat(
         initialValue = -1f,
         targetValue = 1f,
@@ -214,7 +231,7 @@ fun Painting(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        val p = kbProgress?.value ?: 0f
+                        val p = kbValue
                         val scale = if (reducedMotion) 1.03f else 1.03f + 0.07f * p
                         scaleX = scale
                         scaleY = scale

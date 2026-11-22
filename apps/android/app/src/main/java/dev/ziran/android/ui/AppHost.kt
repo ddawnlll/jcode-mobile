@@ -267,6 +267,8 @@ fun ZiranApp(
         }
         if (state.phase == "ready" && stack.lastOrNull() == Screen.Start) {
             if (sawStart) {
+                // Let the 3rd pairing dot stamp (550 ms) settle for 350 ms before the ink drop.
+                if (!reduced) kotlinx.coroutines.delay(350L)
                 val origin = lastTap.takeIf { it != Offset.Unspecified }
                     ?: Offset(widthPx * 0.86f, heightPx * 0.90f)
                 navJob?.cancel()
@@ -328,6 +330,9 @@ fun ZiranApp(
                         serverValue = state.pairServer,
                         codeValue = state.pairCode,
                         error = state.pairingError,
+                        pairingStage = state.pairingStage,
+                        healthProbe = state.healthProbe,
+                        pasteNonce = state.pairPasteNonce,
                         onServerChange = controller::setPairServer,
                         onCodeChange = controller::setPairCode,
                         onPair = { scope.launch { controller.pairFromFields() } },
