@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="docs/evidence/v0.7.1/ziran-live-day.png" alt="Ziran 0.7.1 live thread on Android API 36 showing folded thinking, tool rings, and unfolding diff" width="280" />
+  <img src="website/assets/media/ziran-live-day.png" alt="Ziran 0.7.2 thread on Android API 35 with header plan dots, Plan entry, and indigo agent seal" width="280" />
   &nbsp;&nbsp;
-  <img src="docs/evidence/v0.7.1/ziran-sessions-day.png" alt="Ziran 0.7.1 Threads list on Android API 36 with pavilion painting and vermilion agent seals" width="280" />
+  <img src="website/assets/media/ziran-plan-day.png" alt="Ziran 0.7.2 Plan screen on Android API 35 with flock painting and indigo agent seals" width="280" />
 </p>
 
 <p align="center"><sub><code>ZIRAN / WU WEI / 0.7.2</code></sub></p>
@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/ddawnlll/jcode-mobile/check.yml?style=flat-square&label=CI" alt="CI status" /></a>
-  <a href="docs/ADAPTER_V4.md"><img src="https://img.shields.io/badge/API-Adapter_v4-A8322B?style=flat-square" alt="Adapter v4 API" /></a>
+  <a href="docs/ADAPTER_V4.md"><img src="https://img.shields.io/badge/API-Adapter_v4-2E4374?style=flat-square" alt="Adapter v4 API" /></a>
   <br />
   <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the site</strong></a>
 </p>
@@ -48,7 +48,7 @@
 > to `GET /health` probes and `pairingStage` progress. The APK is debug-signed
 > for sideloading; there is no Play Store listing or iOS client.
 
-## What Ziran 0.7.1 is
+## What Ziran 0.7.2 is
 
 Ziran is two processes:
 
@@ -67,12 +67,12 @@ The phone never runs the agent. Prompts, tools, files, and long turns stay on
 the server. Navigation, backgrounding, socket close, and app kill never send
 Cancel. Only the explicit **Stop** control targets the current turn.
 
-## What changed in 0.7.1
+## What changed in 0.7.2
 
 - **Native Kotlin + Jetpack Compose (`apps/android/`)**: Standalone Gradle
   project with zero WebView, zero animation library dependencies, and strict
   `lint { abortOnError = true }`.
-- **Wu wei visual system (`design/wu-wei/`)**: Xuan paper and vermilion seal
+- **Wu wei visual system (`design/wu-wei/`)**: Xuan paper and indigo seal
   tokens in Day and Night (`ColorMatrix` `brightness(0.58) saturate(0.85)`),
   pre-scaled 256 dp tiled paper grain, twelve Met Museum open-access painting
   crops with 1.2 s cross-fades and 34 s Ken Burns drift, and bundled EB Garamond
@@ -86,7 +86,7 @@ Cancel. Only the explicit **Stop** control targets the current turn.
     (1:1 edge shrink to 90%, 30 dp rounded corners, 320 ms cancel settle, 300 ms
     commit).
   - Live turn timeline: growing/folding thinking bar, tool rows with ink dot →
-    flowing blue hairline → self-drawing vermilion ring, unfolding diff and test
+    flowing blue hairline → self-drawing indigo ring, unfolding diff and test
     panels, and zero-recomposition `withFrameNanos` word streaming.
   - Composer rides the Android IME frame by frame; swipe-to-archive with undo,
     long-press lift + action sheet, pull-to-refresh ink ring, and 120 ms reduced
@@ -104,33 +104,33 @@ Cancel. Only the explicit **Stop** control targets the current turn.
 | Linux desktop (`apps/stillness/`) | Legacy 0.6.0 Tauri 2 shell, builds from source, compatible with Adapter v4 |
 | iOS | Not built; no Swift client or IPA |
 
-## Verified for 0.7.1
+## Verified for 0.7.2
 
 | Check | Result |
 | --- | --- |
 | Ziran Android build, unit tests, lint | PASS, `./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug :app:assembleRelease` (90 JVM unit tests, 0 lint errors) |
-| Ziran release APK signing & badging | PASS, `dev.ziran.android`, versionCode 71, versionName 0.7.1, v2 + v3 signatures, zipaligned |
-| Side-by-side Wu wei visual & motion audit | PASS, all 9 flows recorded and verified side-by-side against `design/wu-wei/` at 1x and 0.25x, plus 10 Day/Night screen comparisons ([evidence](docs/evidence/v0.7.1/README.md)) |
+| Ziran release APK signing & badging | PASS, `dev.ziran.android`, versionCode 72, versionName 0.7.2, v2 + v3 signatures, zipaligned |
+| Side-by-side Wu wei visual & motion audit | PASS, pairing flows & 21 s Plan loop recorded at 1x and 0.25x, plus 12 Day/Night screen comparisons ([evidence](docs/evidence/v0.7.2/README.md)) |
 | Android emulator frame timing (`gfxinfo`) | PASS on Metal GPU emulator (`emulator-5554`, API 36): UI p50 `0.5–2.0 ms` (p90 `0.9–4.4 ms`), RenderThread `IssueDraw` p50 `0.4–1.8 ms`, jank `0.17–2.36%` across Flows 1–8 |
 | 120 Hz mode selection | PASS (unit-tested in `RefreshRateAndMotionTest`; emulator virtual display exposes 60 Hz only, physical 120 Hz presentation requires hardware) |
 | Adapter v4 Rust tests & checks | PASS, 96 tests (`cargo test --workspace`), `cargo fmt --check`, `cargo clippy -D warnings` |
 | Rebranded Ziran website (`website/`) | PASS, `bun run marketing:test` (static build, unit tests, full Playwright matrix) |
-| Physical Android device & TalkBack | NOT_RUN for 0.7.1 |
+| Physical Android device & TalkBack | NOT_RUN for 0.7.2 |
 
 ## Install the Android APK
 
 ```text
-ziran-0.7.1-android-release.apk
-11,624,585 bytes (11.09 MiB)
-SHA-256 e1612a7071399c3f116b2718ec18aadd22c68f726d3653b2d9d4b188f4f62f6b
+ziran-0.7.2-android-debug.apk
+15,589,017 bytes (14.87 MiB)
+SHA-256 a5ee4791a75c954d6b64024a3dd22d50b013b5ebcb4822c98f6fe7cf78449c1c
 package dev.ziran.android
-versionCode 71, versionName 0.7.1
+versionCode 72, versionName 0.7.2
 minSdk 26, targetSdk 37, compileSdk 37
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r ziran-0.7.1-android-release.apk
+adb install -r ziran-0.7.2-android-debug.apk
 ```
 
 Because Ziran uses its own package identifier (`dev.ziran.android`), it installs
@@ -170,7 +170,7 @@ Full setup, `JCODE_SOCKET`, environment variables, and troubleshooting:
 cd apps/android
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 cd ../..
-bash scripts/build-android-release.sh   # writes artifacts/ziran-0.7.1-android-release.apk + .sha256
+bash scripts/build-android-release.sh   # writes artifacts/ziran-0.7.2-android-debug.apk + .sha256
 
 # Adapter v4 (Rust)
 cargo fmt --all -- --check
