@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Launcher icon seal red, from design/wu-wei tokens. -->
-    <color name="ziran_seal">#A33B2A</color>
+    <!-- Launcher icon seal indigo, from design/wu-wei tokens. -->
+    <color name="ziran_seal">#2E4374</color>
 </resources>

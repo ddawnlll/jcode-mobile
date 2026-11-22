@@ -70,6 +70,8 @@ enum class AgentKind(val displayName: String) {
     Heron("heron"),
     Owl("owl"),
     Moth("moth"),
+    Wren("wren"),
+    Lynx("lynx"),
     Unknown("agent");
 
     companion object {
@@ -79,6 +81,8 @@ enum class AgentKind(val displayName: String) {
             "heron" -> Heron
             "owl" -> Owl
             "moth" -> Moth
+            "wren" -> Wren
+            "lynx" -> Lynx
             else -> Unknown
         }
     }

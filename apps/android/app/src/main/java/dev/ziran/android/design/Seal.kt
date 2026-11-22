@@ -34,6 +34,8 @@ object Trigrams {
     val Heron = listOf(0, 1, 0)
     val Owl = listOf(1, 0, 0)
     val Moth = listOf(0, 1, 1)
+    val Wren = listOf(1, 1, 0)
+    val Lynx = listOf(0, 0, 1)
 
     fun forKind(kind: AgentKind): List<Int> = when (kind) {
         AgentKind.Crane -> Crane
@@ -41,6 +43,8 @@ object Trigrams {
         AgentKind.Heron -> Heron
         AgentKind.Owl -> Owl
         AgentKind.Moth -> Moth
+        AgentKind.Wren -> Wren
+        AgentKind.Lynx -> Lynx
         AgentKind.Unknown -> Crane
     }
 }
@@ -170,7 +174,7 @@ fun Seal(
 
 /**
  * Send seal as a button: Wu wei press sink (90% + -3° tilt + CONTEXT_CLICK haptic),
- * rough vermilion square, 62% rising brush stroke, optional stamp animation.
+ * rough indigo square, 62% rising brush stroke, optional stamp animation.
  */
 @Composable
 fun SealButton(
@@ -227,7 +231,7 @@ fun SendSeal(
     }
 }
 
-/** Slightly rough-edged red seal square, as in the boards (filter "rough"). */
+/** Slightly rough-edged indigo seal square, as in the boards (filter "rough"). */
 @Composable
 fun SealSquare(
     modifier: Modifier = Modifier,

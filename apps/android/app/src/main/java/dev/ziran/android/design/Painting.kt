@@ -66,6 +66,9 @@ val Scenes = listOf(
     Scene("butterfly", "butterfly dream", dev.ziran.android.R.drawable.painting_butterfly),
 )
 
+/** Flock painting used exclusively by the Plan screen. */
+val FlockScene = Scene("flock", "flock", dev.ziran.android.R.drawable.painting_flock)
+
 fun sceneByKey(key: String): Scene = Scenes.firstOrNull { it.key == key } ?: Scenes.first()
 
 /**
