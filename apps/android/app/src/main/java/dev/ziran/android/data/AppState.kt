@@ -34,6 +34,8 @@ data class PendingMessage(
     val createdAt: Long,
 )
 
+data class SentTurnNote(val text: String, val tag: String)
+
 data class LiveState(
     val turnId: String? = null,
     val operationId: String? = null,
@@ -45,6 +47,8 @@ data class LiveState(
     val startedAtMs: Long? = null,
     val reasoningStartedAtMs: Long? = null,
     val reasoningDurationSecs: Long? = null,
+    val pendingSoftInterrupts: Long = 0L,
+    val sentDuringTurn: List<SentTurnNote> = emptyList(),
     val assistants: List<LiveBlock> = emptyList(),
     val reasoning: List<LiveBlock> = emptyList(),
     val tools: List<LiveTool> = emptyList(),
@@ -94,7 +98,24 @@ data class AppState(
     val queuedMessages: List<String> = emptyList(),
     val queuedNotice: String? = null,
     val serverName: String? = null,
+    val adapterVersion: String? = null,
     val protocolVersion: Int? = null,
+    val pairedServers: List<String> = emptyList(),
+    /** Settings: steer | wait | ask */
+    val steerDefault: String = "steer",
+    /** Active composer mode while working: steer | stop | after */
+    val activeSteerMode: String = "steer",
+    /** Threads sort: recent | name | status */
+    val threadsSort: String = "recent",
+    /** Stored default model & effort for new threads. */
+    val defaultModel: String? = null,
+    val defaultProvider: String? = null,
+    val defaultApiMethod: String? = null,
+    val defaultEffort: String? = null,
+    /** Notification toggles persisted in DataStore. */
+    val notifyWaiting: Boolean = true,
+    val notifyDone: Boolean = true,
+    val notifyOnlyClosed: Boolean = true,
     /** True when the POST_NOTIFICATIONS reason should be on screen. */
     val notificationsPrompt: Boolean = false,
 )

@@ -122,10 +122,20 @@ class LiveReducer {
                         daemonRunning = true,
                         daemonStatus = "running",
                         status = if (next.live.turnId != null) next.live.status else "running",
+                        pendingSoftInterrupts = event.pendingSoftInterrupts ?: next.live.pendingSoftInterrupts,
                     ),
                 )
-                "attached" -> next
-                else -> next.copy(live = next.live.copy(daemonStatus = "unknown"))
+                "attached" -> next.copy(
+                    live = next.live.copy(
+                        pendingSoftInterrupts = event.pendingSoftInterrupts ?: next.live.pendingSoftInterrupts,
+                    ),
+                )
+                else -> next.copy(
+                    live = next.live.copy(
+                        daemonStatus = "unknown",
+                        pendingSoftInterrupts = event.pendingSoftInterrupts ?: next.live.pendingSoftInterrupts,
+                    ),
+                )
             }
             is SessionEvent.ConnectionPhase -> next.copy(live = next.live.copy(phase = event.phase))
             is SessionEvent.SessionRecovery -> next.copy(
@@ -240,6 +250,8 @@ class LiveReducer {
                 startedAtMs = null,
                 daemonRunning = false,
                 daemonStatus = "idle",
+                pendingSoftInterrupts = 0L,
+                sentDuringTurn = emptyList(),
                 assistants = state.live.assistants.map { if (it.done) it else it.copy(done = true) },
                 reasoning = state.live.reasoning.map { if (it.done) it else it.copy(done = true) },
                 tools = state.live.tools.map {
@@ -262,6 +274,8 @@ class LiveReducer {
                 needsReconcile = false,
                 daemonRunning = false,
                 daemonStatus = "idle",
+                pendingSoftInterrupts = 0L,
+                sentDuringTurn = emptyList(),
                 tools = state.live.tools.map {
                     if (it.status == "started" || it.status == "running") it.copy(status = "unknown") else it
                 },

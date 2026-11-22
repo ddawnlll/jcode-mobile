@@ -127,6 +127,8 @@ fun ThreadScreen(
     onScenes: () -> Unit = {},
     onTextChange: (String) -> Unit = {},
     onSend: (String) -> Unit = {},
+    onSendWithMode: (String, String) -> Unit = { text, _ -> onSend(text) },
+    onSteerModeChange: (String) -> Unit = {},
     onStop: () -> Unit = {},
     onPermission: (String) -> Unit = {},
     reducedMotion: Boolean = false,
@@ -160,6 +162,8 @@ fun ThreadScreen(
     }
 
     var sendStamp by remember { mutableIntStateOf(0) }
+    var steerSheetOpen by remember { mutableStateOf(false) }
+    var pendingAskText by remember { mutableStateOf<String?>(null) }
     val userPromptCount = (snapshot?.messages?.count { it.role == "user" } ?: 0) +
         (if (state.pending != null) 1 else 0)
 
@@ -316,34 +320,105 @@ fun ThreadScreen(
                         PermissionCard(perm.toolName, perm.description, palette, reducedMotion, onPermission)
                     }
                 }
-                itemsIndexed(state.queuedMessages, key = { index, q -> "queued-$index-${q.hashCode()}" }) { index, queued ->
+                itemsIndexed(state.live.sentDuringTurn, key = { index, s -> "steer-$index-${s.text.hashCode()}" }) { index, note ->
                     QueuedRow(
                         ordinal = (userPromptCount + index + 1).coerceAtLeast(2),
-                        text = queued,
-                        tag = if (isWorking) "queued" else "sent",
+                        text = note.text,
+                        tag = note.tag,
                         palette = palette,
                         reducedMotion = reducedMotion,
                     )
                 }
+                itemsIndexed(state.queuedMessages, key = { index, q -> "queued-$index-${q.hashCode()}" }) { index, queued ->
+                    if (state.live.sentDuringTurn.none { it.text == queued }) {
+                        QueuedRow(
+                            ordinal = (userPromptCount + state.live.sentDuringTurn.size + index + 1).coerceAtLeast(2),
+                            text = queued,
+                            tag = if (isWorking) "waits for the turn" else "sent",
+                            palette = palette,
+                            reducedMotion = reducedMotion,
+                        )
+                    }
+                }
             }
 
-            // Composer + footer (rides the IME frame by frame).
+            // Composer + steer chip + footer (rides the IME frame by frame).
             Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(start = 20.dp, end = 16.dp, top = 4.dp, bottom = 14.dp),
             ) {
+                if (isWorking) {
+                    val modeLabel = when (state.activeSteerMode) {
+                        "stop" -> "stop, then send"
+                        "after" -> "after this turn"
+                        else -> "steer now"
+                    }
+                    val softCount = state.live.pendingSoftInterrupts
+                    val chipText = if (softCount > 0 && state.activeSteerMode == "steer") {
+                        "$modeLabel ($softCount) ▾"
+                    } else {
+                        "$modeLabel ▾"
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            Modifier
+                                .height(30.dp)
+                                .border(1.dp, palette.line, RoundedCornerShape(15.dp))
+                                .wuClickable(reducedMotion = reducedMotion, onClick = {
+                                    pendingAskText = null
+                                    steerSheetOpen = true
+                                })
+                                .padding(horizontal = 10.dp)
+                                .semantics { role = Role.Button; contentDescription = "Send mode: $modeLabel" },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(Modifier.size(6.dp).background(palette.blue, CircleShape))
+                            Text(
+                                chipText,
+                                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink2),
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(
+                            Modifier
+                                .height(30.dp)
+                                .border(1.dp, palette.line, RoundedCornerShape(15.dp))
+                                .wuClickable(reducedMotion = reducedMotion, onClick = onStop)
+                                .padding(horizontal = 12.dp)
+                                .semantics { role = Role.Button; contentDescription = "Stop" },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(Modifier.size(8.dp).background(palette.ink2, RoundedCornerShape(1.5.dp)))
+                            Text(
+                                "stop",
+                                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink2),
+                            )
+                        }
+                    }
+                }
                 ComposerWithStop(
                     palette = palette,
                     value = state.composerText,
                     placeholder = "write to $agent…",
-                    isWorking = isWorking,
+                    isWorking = false,
                     stampTrigger = sendStamp,
                     reducedMotion = reducedMotion,
                     onValueChange = onTextChange,
                     onSend = { text ->
-                        sendStamp += 1
-                        onSend(text)
+                        if (isWorking && state.steerDefault == "ask") {
+                            pendingAskText = text
+                            steerSheetOpen = true
+                        } else {
+                            sendStamp += 1
+                            onSend(text)
+                        }
                     },
                     onStop = onStop,
                     sessionKey = state.activeSessionId ?: "thread",
@@ -397,6 +472,113 @@ fun ThreadScreen(
             onClick = onPlan,
             modifier = Modifier.align(Alignment.TopEnd),
             reducedMotion = reducedMotion,
+        )
+
+        // Steer mode bottom sheet (`Steer.dc.html`).
+        SheetHost(
+            visible = steerSheetOpen,
+            palette = palette,
+            reducedMotion = reducedMotion,
+            onDismiss = {
+                steerSheetOpen = false
+                pendingAskText = null
+            },
+        ) {
+            SteerSheetContent(
+                agent = agent,
+                selectedMode = state.activeSteerMode,
+                palette = palette,
+                reducedMotion = reducedMotion,
+                onPick = { mode ->
+                    onSteerModeChange(mode)
+                    steerSheetOpen = false
+                    val askText = pendingAskText
+                    pendingAskText = null
+                    if (askText != null) {
+                        sendStamp += 1
+                        onSendWithMode(askText, mode)
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SteerSheetContent(
+    agent: String,
+    selectedMode: String,
+    palette: Palette,
+    reducedMotion: Boolean,
+    onPick: (String) -> Unit,
+) {
+    val options = listOf(
+        Triple("steer", "Steer now", "$agent reads it at its next step. Its work goes on."),
+        Triple("stop", "Stop, then send", "$agent stops the current work first, then reads it."),
+        Triple("after", "After this turn", "Waits until $agent is done, then goes."),
+    )
+    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp)) {
+        Text(
+            "$agent is working. Your message should…",
+            style = TextStyle(
+                fontFamily = WuFonts.Garamond,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = palette.ink,
+            ),
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        options.forEach { (key, title, note) ->
+            val on = key == selectedMode
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .wuClickable(reducedMotion = reducedMotion, onClick = { onPick(key) })
+                    .drawBehind {
+                        drawLine(
+                            color = palette.line,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
+                    .semantics { role = Role.RadioButton; contentDescription = "$title: $note" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 17.sp, color = palette.ink),
+                    )
+                    Text(
+                        note,
+                        style = TextStyle(
+                            fontFamily = WuFonts.Garamond,
+                            fontSize = 14.5.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = palette.ink3,
+                        ),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                    if (on) {
+                        Canvas(Modifier.size(18.dp)) {
+                            drawCircle(
+                                color = palette.seal,
+                                radius = size.minDimension * 0.41f,
+                                style = Stroke(width = 1.6.dp.toPx()),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            "the default is set in settings · while an agent works",
+            style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 10.5.sp, color = palette.ink3),
+            modifier = Modifier.padding(top = 10.dp, bottom = 12.dp),
         )
     }
 }

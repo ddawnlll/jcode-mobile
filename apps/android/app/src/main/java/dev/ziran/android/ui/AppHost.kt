@@ -389,6 +389,8 @@ fun ZiranApp(
                         onScenes = { go(Screen.Scenes, NavKind.Unroll, Offset.Unspecified) },
                         onTextChange = controller::setComposerText,
                         onSend = { text -> scope.launch { controller.sendText(text) } },
+                        onSendWithMode = { text, mode -> scope.launch { controller.sendText(text, steerModeOverride = mode) } },
+                        onSteerModeChange = controller::setActiveSteerMode,
                         onStop = { scope.launch { controller.stop() } },
                         onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
                         reducedMotion = reduced,

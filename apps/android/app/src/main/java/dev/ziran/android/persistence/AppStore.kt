@@ -196,6 +196,65 @@ class AppStore(private val context: Context) {
         context.prefs.edit { it[stringKey("ui:theme")] = mode }
     }
     suspend fun getThemeMode(): String = context.prefs.data.first()[stringKey("ui:theme")] ?: "system"
+
+    suspend fun removeServer(serverId: String) {
+        context.prefs.edit { prefs ->
+            val prefix = "server:$serverId:"
+            val sessPrefix = "session:$serverId:"
+            prefs.asMap().keys.toList().forEach { key ->
+                if (key.name.startsWith(prefix) || key.name.startsWith(sessPrefix)) {
+                    prefs.remove(key)
+                }
+            }
+        }
+        SecretVault.delete(context, serverKey(serverId, "token"))
+    }
+
+    suspend fun setSteerDefault(mode: String) {
+        context.prefs.edit { it[stringKey("ui:steerDefault")] = mode }
+    }
+    suspend fun getSteerDefault(): String = context.prefs.data.first()[stringKey("ui:steerDefault")] ?: "steer"
+
+    suspend fun setThreadsSort(sort: String) {
+        context.prefs.edit { it[stringKey("ui:threadsSort")] = sort }
+    }
+    suspend fun getThreadsSort(): String = context.prefs.data.first()[stringKey("ui:threadsSort")] ?: "recent"
+
+    suspend fun setDefaultModel(model: String, provider: String, apiMethod: String) {
+        context.prefs.edit {
+            it[stringKey("ui:defaultModel")] = model
+            it[stringKey("ui:defaultProvider")] = provider
+            it[stringKey("ui:defaultApiMethod")] = apiMethod
+        }
+    }
+    suspend fun getDefaultModel(): Triple<String?, String?, String?> {
+        val prefs = context.prefs.data.first()
+        return Triple(
+            prefs[stringKey("ui:defaultModel")],
+            prefs[stringKey("ui:defaultProvider")],
+            prefs[stringKey("ui:defaultApiMethod")],
+        )
+    }
+
+    suspend fun setDefaultEffort(effort: String) {
+        context.prefs.edit { it[stringKey("ui:defaultEffort")] = effort }
+    }
+    suspend fun getDefaultEffort(): String? = context.prefs.data.first()[stringKey("ui:defaultEffort")]
+
+    suspend fun setNotifyWaiting(enabled: Boolean) {
+        context.prefs.edit { it[boolKey("ui:notifyWaiting")] = enabled }
+    }
+    suspend fun getNotifyWaiting(): Boolean = context.prefs.data.first()[boolKey("ui:notifyWaiting")] ?: true
+
+    suspend fun setNotifyDone(enabled: Boolean) {
+        context.prefs.edit { it[boolKey("ui:notifyDone")] = enabled }
+    }
+    suspend fun getNotifyDone(): Boolean = context.prefs.data.first()[boolKey("ui:notifyDone")] ?: true
+
+    suspend fun setNotifyOnlyClosed(enabled: Boolean) {
+        context.prefs.edit { it[boolKey("ui:notifyOnlyClosed")] = enabled }
+    }
+    suspend fun getNotifyOnlyClosed(): Boolean = context.prefs.data.first()[boolKey("ui:notifyOnlyClosed")] ?: true
 }
 
 data class PendingRecord(val operationId: String, val text: String, val state: String, val createdAtMs: Long)
