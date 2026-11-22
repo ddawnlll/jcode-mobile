@@ -470,8 +470,13 @@ private fun ServerHealthStatusLine(
             }
             is HealthProbeResult.Reachable -> {
                 if (!probe.compatible) {
+                    val verText = if (probe.protocolVersion == 0) {
+                        "adapter is too old (v1; needs protocol $MIN_PROTOCOL_VERSION..$PROTOCOL_VERSION)"
+                    } else {
+                        "adapter supports protocol ${probe.minProtocolVersion}..${probe.protocolVersion} (needs $MIN_PROTOCOL_VERSION..$PROTOCOL_VERSION)"
+                    }
                     Text(
-                        "adapter supports protocol ${probe.minProtocolVersion}..${probe.protocolVersion} (needs $MIN_PROTOCOL_VERSION..$PROTOCOL_VERSION)",
+                        verText,
                         style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, lineHeight = 16.sp, color = palette.ink3),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

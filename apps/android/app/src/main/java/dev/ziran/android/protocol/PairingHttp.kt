@@ -45,7 +45,7 @@ object PairingHttp {
         http.newCall(request).execute().use { response ->
             val text = response.body.string()
             val obj = json.parseToJsonElement(text).jsonObject
-            if (!response.isSuccessful) throw AdapterRequestError(parseError(obj))
+            if (!response.isSuccessful) throw AdapterRequestError(parseError(obj.objOr("error") ?: obj))
             buildPayload(obj)
         }
     }
