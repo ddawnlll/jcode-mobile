@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>jcode for Mac · the plan · day</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:var(--paper,#EEE4CC)}
+a{color:inherit;text-decoration:none}
+.s button{font-family:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.s input{font-family:inherit}
+.s input::placeholder{color:var(--ink3);font-style:italic}
+.s .zh{font-family:'Ma Shan Zheng','STKaiti','KaiTi',serif;font-weight:400}
+.s .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace}
+.s .clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s .seal{background:var(--seal);color:var(--onseal);display:flex;align-items:center;justify-content:center;border-radius:2px;filter:url(#rough);flex:none}
+.s .ring{width:13px;height:13px;border:1.6px solid var(--seal);border-radius:50%;display:inline-block;box-sizing:border-box;flex:none}
+.s .step{display:grid;grid-template-columns:24px 1fr auto;align-items:baseline;column-gap:6px;font-size:16px;line-height:25px;color:var(--ink2)}
+.s .step .no{font-family:'Ma Shan Zheng','KaiTi',serif;font-size:17px;color:var(--ink)}
+.s .step .t{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--ink3);margin-right:4px}
+.s .spin::after{content:'⠋';font-family:'JetBrains Mono',ui-monospace,monospace;animation:s-braille .9s steps(1) infinite}
+@keyframes s-braille{0%{content:'⠋'}10%{content:'⠙'}20%{content:'⠹'}30%{content:'⠸'}40%{content:'⠼'}50%{content:'⠴'}60%{content:'⠦'}70%{content:'⠧'}80%{content:'⠇'}90%{content:'⠏'}}
+@keyframes s-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.6px)}}
+@keyframes s-wet{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes s-wake{0%{transform:scaleX(.6);opacity:.5}100%{transform:scaleX(1.5);opacity:0}}
+@keyframes s-drift{0%{transform:translateX(-26px)}100%{transform:translateX(26px)}}
+@keyframes s-sway{0%,100%{transform:rotate(-1.2deg)}50%{transform:rotate(1.4deg)}}
+@keyframes s-turn{to{transform:rotate(360deg)}}
+@keyframes s-shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+@keyframes s-fly{0%{transform:translate(0,0)}25%{transform:translate(14px,-10px)}50%{transform:translate(30px,2px)}75%{transform:translate(12px,10px)}100%{transform:translate(0,0)}}
+@keyframes s-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.35)}}
+@keyframes s-stamp{0%{transform:scale(1.7) rotate(-14deg);opacity:0}60%{transform:scale(.94) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+@keyframes s-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes s-ink{from{stroke-dashoffset:700}to{stroke-dashoffset:0}}
+@keyframes s-bleed{from{opacity:0;filter:blur(6px)}to{opacity:1;filter:blur(0)}}
+.s .bob{animation:s-bob 4.5s ease-in-out infinite}
+.s .wet{animation:s-wet 2.6s ease-in-out infinite}
+.s .wake{animation:s-wake 3.2s ease-out infinite;transform-origin:center;transform-box:fill-box}
+.s .drift{animation:s-drift 16s ease-in-out infinite alternate}
+.s .sway{animation:s-sway 6s ease-in-out infinite;transform-origin:top center;transform-box:fill-box}
+.s .sway2{animation:s-sway 7.5s ease-in-out -2s infinite;transform-origin:bottom center;transform-box:fill-box}
+.s .turn{animation:s-turn 60s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .shimmer{animation:s-shimmer 3.4s ease-in-out infinite}
+.s .fly{animation:s-fly 9s ease-in-out infinite}
+.s .flap{animation:s-flap .5s ease-in-out infinite;transform-origin:center;transform-box:fill-box}
+.s .stamp{animation:s-stamp .7s cubic-bezier(.2,.8,.2,1) .5s both}
+.s .rise{animation:s-rise .7s ease-out both}
+.s .inkdraw{stroke-dasharray:700;animation:s-ink 2.4s ease-out both}
+.s .bleedin{animation:s-bleed 1.4s ease-out both}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important}}
+
+@keyframes kb{from{transform:scale(1.03) translate(0,0)}to{transform:scale(1.1) translate(-12px,-6px)}}
+.s .kb{animation:kb 34s ease-in-out infinite alternate;transform-origin:60% 40%}
+.s .screen{position:absolute;inset:0;background:var(--paper);overflow:hidden}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%));filter:blur(2px)}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%));filter:blur(0)}}
+@keyframes t-dim{from{opacity:1;transform:scale(1)}to{opacity:.35;transform:scale(.985)}}
+@keyframes t-mist-out{from{opacity:1;filter:blur(0);transform:translateY(0)}to{opacity:0;filter:blur(10px);transform:translateY(-14px)}}
+@keyframes t-mist-in{from{opacity:.3;transform:scale(.985)}to{opacity:1;transform:none}}
+@keyframes t-unroll{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes t-roll{from{clip-path:inset(0 0 0 0)}to{clip-path:inset(0 0 100% 0)}}
+@keyframes t-fade{from{opacity:1}to{opacity:.5}}
+@keyframes t-edge{from{top:0}to{top:100%}}
+@keyframes t-ring{from{stroke-dashoffset:44}to{stroke-dashoffset:0}}
+.s .enter-drop{z-index:2;animation:t-drop .85s cubic-bezier(.4,0,.2,1) both}
+.s .leave-drop{z-index:1;animation:t-dim .85s ease both}
+.s .enter-mist{z-index:1;animation:t-mist-in .8s ease both}
+.s .leave-mist{z-index:2;animation:t-mist-out .8s ease both;pointer-events:none}
+.s .enter-unroll{z-index:2;animation:t-unroll .75s cubic-bezier(.3,0,.2,1) both}
+.s .leave-unroll{z-index:1;animation:t-fade .75s ease both}
+.s .leave-roll{z-index:2;animation:t-roll .7s cubic-bezier(.5,0,.6,1) both;pointer-events:none}
+.s .enter-roll{z-index:1;animation:t-mist-in .7s ease both}
+.s .rod{position:absolute;left:-6px;right:-6px;height:6px;border-radius:3px;background:var(--ink);opacity:.75;animation:t-edge .75s cubic-bezier(.3,0,.2,1) both;z-index:3}
+.s .ringdraw circle{stroke-dasharray:44;animation:t-ring .9s ease-out both}
+.s .press:active{transform:scale(.92) rotate(-3deg)}
+@media (prefers-reduced-motion:reduce){.s .screen{animation-duration:.01ms!important}}
+
+/* ---- smoothness pass: only opacity and transform animate; one easing ---- */
+.s{--ease:cubic-bezier(.22,1,.36,1)}
+.s .grain{position:absolute;inset:0;pointer-events:none;background-size:256px 256px;z-index:5}
+.s .grain-day{background-image:url(../assets/grain-day.png)}
+.s .grain-night{background-image:url(../assets/grain-night.png)}
+@keyframes s-rise{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+@keyframes s-bleed{from{opacity:0}to{opacity:1}}
+@keyframes t-drop{from{clip-path:circle(0px at var(--ox,50%) var(--oy,50%))}to{clip-path:circle(160% at var(--ox,50%) var(--oy,50%))}}
+@keyframes t-mist-out{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-10px,0) scale(1.01)}}
+.s .rise{animation:s-rise .9s var(--ease) both}
+.s .bleedin{animation:s-bleed 1.2s var(--ease) both}
+.s .kb{will-change:transform;animation-timing-function:ease-in-out}
+.s .drift{will-change:transform}
+.s .screen{will-change:transform,opacity,clip-path;backface-visibility:hidden}
+.s .enter-drop{animation:t-drop .9s var(--ease) both}
+.s .leave-drop{animation:t-dim .9s var(--ease) both}
+.s .enter-mist{animation:t-mist-in .9s var(--ease) both}
+.s .leave-mist{animation:t-mist-out .7s var(--ease) both}
+.s .enter-unroll{animation:t-unroll .8s var(--ease) both}
+.s .rod{animation:t-edge .8s var(--ease) both}
+.s button,.s a{transition:transform .18s var(--ease),opacity .18s var(--ease);-webkit-tap-highlight-color:transparent}
+.s button:active,.s a:active{transform:scale(.97);opacity:.85}
+.s .seal:active{transform:scale(.9) rotate(-3deg)}
+
+@keyframes l-word{from{opacity:0;transform:translate3d(0,3px,0)}to{opacity:1;transform:none}}
+@keyframes l-in{from{opacity:0;transform:translate3d(-6px,0,0)}to{opacity:1;transform:none}}
+@keyframes l-drop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.35);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes l-flow{from{transform:translate3d(-60%,0,0)}to{transform:translate3d(160%,0,0)}}
+@keyframes l-grind{to{transform:rotate(360deg)}}
+@keyframes l-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+.s .w{display:inline-block;white-space:pre;animation:l-word .5s var(--ease) both}
+.s .slidein{animation:l-in .6s var(--ease) both}
+.s .inkdot{width:8px;height:8px;border-radius:50%;background:var(--ink);animation:l-drop .55s var(--ease) both}
+.s .flow{position:relative;height:1.5px;margin:0 0 2px 26px;overflow:hidden}
+.s .flow::after{content:'';position:absolute;top:0;bottom:0;left:0;width:45%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .grind{animation:l-grind 2.4s linear infinite;transform-origin:center;transform-box:fill-box}
+.s .stack{display:grid}.s .stack>*{grid-area:1/1}
+.s .trow .done-only,.s .think .done-only{opacity:0;transition:opacity .5s var(--ease)}
+.s .trow .run-only,.s .think .run-only{opacity:1;transition:opacity .4s var(--ease)}
+.s .trow.done .done-only,.s .think.done .done-only{opacity:1}
+.s .trow.done .run-only,.s .think.done .run-only{opacity:0}
+.s .ring2 circle{stroke-dasharray:37;stroke-dashoffset:37;transition:stroke-dashoffset .9s var(--ease) .1s}
+.s .trow.done .ring2 circle{stroke-dashoffset:0}
+.s .fold{display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows .75s var(--ease),opacity .5s var(--ease)}
+.s .open>.fold,.s .open .fold{grid-template-rows:1fr;opacity:1}
+.s .fold>div{overflow:hidden;min-height:0}
+.s .think .bar{position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--ink3);opacity:.5;transform-origin:top;animation:l-grow 3.4s var(--ease) both}
+.s .live-main{transition:opacity .8s var(--ease)}
+.s .live-main.fadeall{opacity:0}
+
+.s kbd{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;line-height:15px;color:var(--ink3);border:1px solid var(--line);border-radius:4px;padding:0 5px;background:transparent}
+.s .tl{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2)}
+.s .tl:active{transform:none;opacity:.7}
+.s .tb{height:32px;min-width:32px;padding:0 8px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:7px;color:var(--ink2);transition:background .18s var(--ease),transform .18s var(--ease)}
+.s .tb:hover{background:var(--hov)}
+.s .tb.on{background:var(--sel)}
+.s .srow{width:100%;display:flex;align-items:center;gap:10px;min-height:48px;padding:5px 10px;box-sizing:border-box;border-radius:8px;text-align:left;transition:background .25s var(--ease)}
+.s .srow:hover{background:var(--hov)}
+.s .srow.on{background:var(--sel)}
+.s .grp{font-size:13px;font-style:italic;color:var(--ink3);padding:14px 10px 3px}
+.s .drow{display:grid;grid-template-columns:18px 52px minmax(0,1fr) auto;align-items:center;column-gap:10px;min-height:31px;font-size:16px;color:var(--ink2)}
+.s .drow .tool{font-size:11.5px;color:var(--ink)}
+.s .drow .meta{font-size:11px;color:var(--ink3)}
+.s .diff{margin:4px 0 8px 28px;border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:11.5px;line-height:20px;background:var(--paper2)}
+.s .diff .dh{display:flex;justify-content:space-between;padding:5px 12px;color:var(--ink3);border-bottom:1px solid var(--line)}
+.s .diff .dl{display:grid;grid-template-columns:34px 1fr;white-space:pre;color:var(--ink2);padding-right:12px}
+.s .diff .ln{color:var(--ink3);text-align:right;padding-right:12px;opacity:.8}
+.s .diff .del{color:var(--seal);text-decoration:line-through;text-decoration-thickness:1px}
+.s .diff .add{color:var(--green)}
+.s .side-col,.s .insp-col{overflow:hidden;min-width:0}
+.s .scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;overscroll-behavior:contain}
+@keyframes m-pop{from{opacity:0;transform:translate3d(0,-6px,0) scale(.98)}to{opacity:1;transform:none}}
+@keyframes m-fade{from{opacity:0}to{opacity:1}}
+@keyframes m-in{from{opacity:0;transform:translate3d(0,4px,0)}to{opacity:1;transform:none}}
+.s .panel{background:var(--panel);border:1px solid var(--line);border-radius:11px;box-shadow:0 18px 48px var(--shadow),0 2px 6px var(--shadow)}
+.s .pop{animation:m-pop .2s var(--ease) both;transform-origin:top right}
+.s .pal{animation:m-pop .22s var(--ease) both;transform-origin:top center}
+.s .scrim{animation:m-fade .22s var(--ease) both}
+.s .min{animation:m-in .45s var(--ease) both}
+.s .pitem{width:100%;display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;box-sizing:border-box;border-radius:7px;text-align:left;transition:background .12s}
+.s .pitem.act{background:var(--sel)}
+.s .ist{display:grid;grid-template-columns:14px 44px 1fr;align-items:center;column-gap:8px;font-size:14.5px;line-height:26px;color:var(--ink2);position:relative}
+.s .ist .dot{width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:1.4px solid var(--ink3);justify-self:center;background:var(--side);position:relative;z-index:1}
+.s .ist.done .dot{background:var(--seal);border-color:var(--seal)}
+.s .ist.now .dot{border-color:var(--blue);animation:s-wet 2.2s ease-in-out infinite}
+.s .ist.ask .dot{background:var(--seal);border-color:var(--seal);animation:s-wet 1.6s ease-in-out infinite}
+.s .ist.todo{color:var(--ink3)}
+.s .ilist{position:relative;list-style:none;margin:0;padding:0}
+.s .ilist::before{content:'';position:absolute;left:6.5px;top:13px;bottom:13px;width:1px;background:var(--ink3);opacity:.35}
+.s .lbl{font-size:13px;font-style:italic;color:var(--ink3);margin:0 0 6px}
+.s .seg{display:flex;padding:2px;border-radius:8px;background:var(--paper2);gap:2px}
+.s .seg button{height:28px;padding:0 14px;border-radius:6px;font-size:13.5px;color:var(--ink2);transition:background .2s var(--ease),color .2s var(--ease)}
+.s .seg button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px var(--shadow)}
+.s .tab{width:76px;height:52px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13px;color:var(--ink2);transition:background .2s var(--ease),color .2s var(--ease)}
+.s .tab.on{background:var(--sel);color:var(--ink)}
+.s .press:active{transform:scale(.9) rotate(-3deg)}
+@keyframes m-stampin{0%{transform:scale(1.5) rotate(-12deg);opacity:0}60%{transform:scale(.95) rotate(-2deg);opacity:1}100%{transform:scale(1) rotate(-3deg);opacity:1}}
+.s .stampin{animation:m-stampin .6s cubic-bezier(.2,.8,.2,1) both}
+.s .hl{position:absolute;inset:0;pointer-events:none}
+@media (max-width:1040px){.s.mac-main{grid-template-columns:260px minmax(0,1fr) 0px!important}}
+@media (max-width:720px){.s.mac-main,.s.mac-live{grid-template-columns:0px minmax(0,1fr) 0px!important}}
+@media (prefers-reduced-motion:reduce){.s *{animation:none!important;transition:none!important}}
+
+.s .plist{list-style:none;margin:0;padding:0;position:relative}
+.s .plist::before{content:'';position:absolute;left:8.5px;top:20px;bottom:20px;width:1px;background:var(--ink3);opacity:.32}
+.s .pl{position:relative}
+.s .plrow{width:100%;display:grid;grid-template-columns:18px minmax(0,1fr) auto;align-items:center;column-gap:12px;min-height:48px;padding:4px 0;text-align:left}
+.s .pdot{width:11px;height:11px;border-radius:50%;box-sizing:border-box;border:1.4px solid var(--ink3);background:var(--paper);justify-self:center;position:relative;z-index:1;
+  transition:background .7s var(--ease),border-color .7s var(--ease),transform .7s var(--ease)}
+.s .pl.done .pdot{background:var(--seal);border-color:var(--seal)}
+.s .pl.now .pdot{border-color:var(--blue);animation:s-wet 2.2s ease-in-out infinite}
+.s .pt{display:block;font-size:16.5px;line-height:21px;color:var(--ink);transition:color .7s var(--ease)}
+.s .pl.todo .pt{color:var(--ink3)}
+.s .pl.now .pt{font-style:italic}
+.s .pm{display:block;font-size:11px;line-height:16px;color:var(--ink3)}
+.s .pl.now .pm{color:var(--blue)}
+.s .pd{margin:0 0 10px 30px;font-size:14.5px;line-height:21px;color:var(--ink3);font-style:italic}
+.s .pchev{display:inline-block;transition:transform .45s var(--ease);color:var(--ink3);font-size:14px}
+.s .pl.open .pchev{transform:rotate(90deg)}
+.s .pseg{flex:1;height:5px;border-radius:3px;background:var(--line);position:relative;overflow:hidden;transition:background .7s var(--ease)}
+.s .pseg.done{background:var(--seal)}
+.s .pseg.now::after{content:'';position:absolute;top:0;bottom:0;left:0;width:60%;background:linear-gradient(90deg,transparent,var(--blue),transparent);animation:l-flow 1.6s ease-in-out infinite;will-change:transform}
+.s .plan-main{transition:opacity .6s var(--ease)}
+.s .plan-main.fadeall{opacity:.0}
+.s .who{display:grid;grid-template-columns:24px minmax(0,1fr) 18px;align-items:center;column-gap:10px;min-height:50px}
+</style>
+</helmet>
+<div class="s mac mac-main" style="width:100%;height:800px;position:relative;overflow:hidden;display:grid;grid-template-columns:260px minmax(0,1fr) 300px;transition:grid-template-columns .45s var(--ease);background:var(--paper);color:var(--ink);font-family:'EB Garamond',Georgia,serif;--paper:#E5EBE0;--paper2:#D6E0D3;--ink:#16231D;--ink2:#2D3C34;--ink3:#56685D;--line:#BCCBBE;--seal:#2E4374;--onseal:#F1F4EC;--blue:#34677A;--green:#2F6B4E;--mist:#E5EBE0;--imgf:saturate(1);--side:#E0E7DC;--panel:#EEF2EA;--sel:rgba(22,35,29,.075);--hov:rgba(22,35,29,.045);--shadow:rgba(22,35,29,.16);--scrim:rgba(229,235,224,.55);">
+<svg aria-hidden="true" width="0" height="0" style="position:absolute"><defs><filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="5" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"></feDisplacementMap></filter><filter id="bleed"><feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="2" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6"></feDisplacementMap></filter><filter id="brush" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.03 0.14" numOctaves="3" seed="13" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="14"></feDisplacementMap><feGaussianBlur stdDeviation="0.6"></feGaussianBlur></filter><filter id="wash" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="2" seed="21" result="n"></feTurbulence><feDisplacementMap in="SourceGraphic" in2="n" scale="20"></feDisplacementMap><feGaussianBlur stdDeviation="4"></feGaussianBlur></filter><linearGradient id="peak" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--ink);stop-opacity:.78"></stop><stop offset=".55" style="stop-color:var(--ink3);stop-opacity:.32"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:0"></stop></linearGradient><linearGradient id="green" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--green);stop-opacity:.55"></stop><stop offset="1" style="stop-color:var(--green);stop-opacity:0"></stop></linearGradient><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset=".6" style="stop-color:var(--paper);stop-opacity:0"></stop><stop offset="1" style="stop-color:var(--paper);stop-opacity:1"></stop></linearGradient></defs></svg>
+<aside class="side-col" aria-label="Threads" style="position:relative;background:var(--side);border-right:1px solid var(--line)"><div style="width:260px;height:800px;display:flex;flex-direction:column"><div style="position:relative;height:178px;overflow:hidden;flex:none"><div class="kb" style="position:absolute;inset:0"><img src="../assets/painting-jade-peaks.jpg" alt="Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: jade peaks" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"></div><div aria-hidden="true" class="drift" style="position:absolute;left:-40px;right:-40px;top:50%;height:40px;background:var(--side);opacity:.3;filter:blur(14px)"></div><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 45%,var(--side) 97%)"></div></div><div class="mono" style="display:flex;align-items:center;gap:8px;padding:0 20px;margin-top:-14px;position:relative;font-size:11.5px;color:var(--ink2)"><span aria-hidden="true" style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>studio-vps<span style="margin-left:auto;color:var(--ink3)">~/src</span></div><nav class="scroll" aria-label="Threads" style="flex:1;min-height:0;padding:2px 10px 10px;display:flex;flex-direction:column;gap:1px"><div class="grp">waiting for you</div><button type="button" class="srow " aria-pressed="false" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Clean the build cache</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">asks to run <span class="mono" style="font-style:normal;font-size:10.5px">rm -rf target/…</span></span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span role="img" aria-label="Waiting for you" style="width:9px;height:9px;border-radius:50%;background:var(--seal)"></span></span></button><div class="grp">working</div><button type="button" class="srow " aria-pressed="false" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Adapter v4 timeline</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">running the tests</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></span></button><button type="button" class="srow on" aria-pressed="true" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Pinned todo card</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">with owl, wren and lynx · 3 of 7</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></span></button><div class="grp">finished</div><button type="button" class="srow " aria-pressed="false" style=""><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H10.4 M13.6 12 H19"></path><path d="M5 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Socket timeout</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">fourteen minutes ago</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></span></button><div class="grp">resting</div><button type="button" class="srow " aria-pressed="false" style="opacity:.62;"><span aria-hidden="true" class="seal " style="width:22px;height:22px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span><span style="flex:1;min-width:0;display:flex;flex-direction:column"><span class="clip" style="font-size:15.5px;line-height:20px;color:var(--ink)">Android back stack</span><span class="clip" style="font-size:13px;line-height:17px;color:var(--ink3);font-style:italic">resting since Saturday</span></span><span style="width:18px;display:flex;justify-content:center;flex:none"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></span></button></nav><div style="display:flex;gap:4px;padding:8px 10px 12px;border-top:1px solid var(--line)"><button type="button" class="tb" title="New thread ⌘N" style="justify-content:flex-start;padding:0 10px;flex:1;font-size:15px;color:var(--ink2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5.5 H6 V18 H18.5 V10.5 M10.5 13.5 L19 5"></path></svg><span style="flex:1;text-align:left">new thread</span><kbd>⌘N</kbd></button><a href="Mac-Settings.dc.html" class="tb" aria-label="Settings" title="Settings ⌘," style="width:32px"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 18 L9.5 9 L12.5 13 L14.8 10.5 L20.5 18 Z"></path></svg></a></div></div></aside><section aria-label="Plan" style="position:relative;min-width:0;height:800px;overflow:hidden"><div aria-hidden="true" style="position:absolute;left:0;right:0;top:0;height:240px;overflow:hidden;pointer-events:none"><img src="../assets/wash-flock.jpg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.6"><div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 20%,var(--paper) 96%)"></div></div><div style="position:absolute;left:0;right:0;top:0;height:52px;display:flex;align-items:center;gap:4px;padding:0 12px 0 14px;z-index:4"><button type="button" class="tb on" aria-label="Show or hide the sidebar"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5 H20 V17.5 H4 Z M9.5 6.5 V17.5"></path></svg></button><div class="seg" role="tablist" aria-label="View" style="margin-left:8px"><a href="Mac-Main.dc.html" role="tab" aria-selected="false" style="height:28px;padding:0 14px;border-radius:6px;font-size:13.5px;color:var(--ink2);display:flex;align-items:center">Thread</a><button type="button" role="tab" aria-selected="true" class="on">Plan</button></div><span style="flex:1"></span><button type="button" class="tb mono" style="font-size:11.5px;padding:0 10px"><span aria-hidden="true" style="width:9px;height:9px;border-radius:50%;background:var(--ink);opacity:.63"></span>gpt-5.6-luna · high</button><button type="button" class="tb" aria-label="Go to a thread or command"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 16 A5.5 5.5 0 1 1 10.5 5 A5.5 5.5 0 1 1 10.5 16 M14.6 14.6 L19 19"></path></svg></button></div><header style="position:absolute;left:0;right:0;top:72px;z-index:2"><div style="max-width:760px;margin:0 auto;padding:0 48px;box-sizing:border-box;max-width:860px"><div style="display:flex;align-items:flex-end;gap:14px"><div style="flex:1;min-width:0"><h1 class="bleedin clip" style="margin:0;font-size:28px;line-height:34px;font-weight:500;color:var(--ink)">The plan</h1><div class="mono clip rise" style="font-size:11.5px;color:var(--ink3);margin-top:3px">Pinned todo card · heron with owl, wren and lynx</div></div><span aria-hidden="true" class="seal stampin" style="width:26px;height:26px"><svg viewBox="0 0 24 24" width="70%" height="70%" aria-hidden="true"><g fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"><path d="M5 17 H10.4 M13.6 17 H19"></path><path d="M5 12 H19"></path><path d="M5 7 H10.4 M13.6 7 H19"></path></g></svg></span></div></div></header><div class="plan-main {{fadeCls}}" style="position:absolute;left:0;right:0;top:150px;bottom:0;z-index:2"><div style="max-width:760px;margin:0 auto;padding:0 48px;box-sizing:border-box;max-width:860px;height:100%;display:flex;flex-direction:column;gap:14px"><div class="mono" style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink3);margin-top:8px"><span>{{sum}}</span><span>{{sum2}}</span></div><div role="img" aria-label="{{sumLabel}}" style="display:flex;gap:4px"><sc-for list="{{segs}}" as="g" hint-placeholder-count="7"><span class="pseg {{g.cls}}"></span></sc-for></div><div class="scroll" style="flex:1;min-height:0;padding-bottom:24px"><div style="display:grid;grid-template-columns:18px minmax(0,1fr) 120px 170px 64px;column-gap:14px;padding:0 0 6px;border-bottom:1px solid var(--line)" class="mono"><span></span><span style="font-size:10.5px;color:var(--ink3)">step</span><span style="font-size:10.5px;color:var(--ink3)">who</span><span style="font-size:10.5px;color:var(--ink3)">touched</span><span style="font-size:10.5px;color:var(--ink3);text-align:right">status</span></div><ol class="plist" aria-label="The plan"><sc-for list="{{steps}}" as="st" hint-placeholder-count="7"><li class="pl {{st.cls}}"><button type="button" class="plrow" aria-expanded="{{st.ex}}" onClick="{{st.toggle}}" style="grid-template-columns:18px minmax(0,1fr) 120px 170px 64px;column-gap:14px;min-height:46px"><span class="pdot"></span><span class="pt clip" style="display:flex;align-items:center;gap:8px"><span class="pchev" aria-hidden="true">›</span><span class="clip">{{st.title}}</span></span><span style="display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink2)"><span class="seal" aria-hidden="true" style="width:18px;height:18px;flex:none"><svg viewBox="0 0 24 24" width="70%" height="70%"><path d="{{st.d}}" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"></path></svg></span>{{st.who}}</span><span class="mono clip" style="font-size:11.5px;color:var(--ink3)">{{st.touched}}</span><span class="mono pm" style="text-align:right">{{st.status}}</span></button><sc-if value="{{st.now}}" hint-placeholder-val="{{false}}"><div class="flow" aria-hidden="true" style="margin:-4px 0 4px 32px"></div></sc-if><div class="fold"><div><p class="pd" style="margin-left:56px;max-width:560px">{{st.detail}}</p></div></div></li></sc-for></ol></div></div></div></section><aside aria-label="Who is working" style="position:relative;background:var(--side);border-left:1px solid var(--line);overflow:hidden"><div style="position:relative;height:196px;overflow:hidden"><img class="kb" src="../assets/painting-flock.jpg" alt="Detail of an old ink painting: a flock of birds crossing the sky above a tree" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)"><div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 45%,var(--side) 97%)"></div></div><div style="padding:0 20px 20px;margin-top:-10px;position:relative"><h2 class="lbl">who is working</h2><sc-for list="{{agents}}" as="a" hint-placeholder-count="4"><div class="who"><span class="seal" aria-hidden="true" style="width:24px;height:24px"><svg viewBox="0 0 24 24" width="70%" height="70%"><path d="{{a.d}}" fill="none" style="stroke:var(--onseal)" stroke-width="2.6" stroke-linecap="round"></path></svg></span><span style="min-width:0;display:flex;flex-direction:column"><span style="font-size:15.5px;color:var(--ink)">{{a.name}}</span><span class="clip" style="font-size:13px;font-style:italic;color:var(--ink3)">{{a.line}}</span></span><span style="display:flex;justify-content:center"><sc-if value="{{a.now}}" hint-placeholder-val="{{false}}"><span class="mono spin" role="img" aria-label="Working" style="font-size:14px;color:var(--blue)"></span></sc-if><sc-if value="{{a.done}}" hint-placeholder-val="{{false}}"><span class="ring" role="img" aria-label="Finished" style="width:13px;height:13px"></span></sc-if><sc-if value="{{a.todo}}" hint-placeholder-val="{{true}}"><span role="img" aria-label="Resting" style="width:6px;height:6px;border-radius:50%;background:var(--ink3);opacity:.6"></span></sc-if></span></div></sc-for><p style="margin:18px 0 0;font-size:14px;line-height:20px;font-style:italic;color:var(--ink3)">heron holds the plan. Ask it to change the order and the others follow.</p></div></aside><div style="position:absolute;left:20px;top:19px;display:flex;gap:8px;z-index:6"><button type="button" class="tl" aria-label="Close window" style="background:#FF5F57"></button><button type="button" class="tl" aria-label="Minimise window" style="background:#FEBC2E"></button><button type="button" class="tl" aria-label="Zoom window" style="background:#28C840"></button></div>
+<div aria-hidden="true" class="grain grain-day"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { t: 0, open: { 4: true }, fade: false }; }
+  componentDidMount() { this.iv = setInterval(() => this.tick(), 250); }
+  componentWillUnmount() { clearInterval(this.iv); }
+  tick() {
+    const t = this.state.t + 0.25;
+    if (t >= 21) { this.setState({ t: 0, fade: false, open: { 4: true } }); return; }
+    this.setState({ t, fade: t >= 20.4 });
+  }
+  renderVals() {
+    const S = this.state, t = S.t;
+    const tri = { heron: '010', owl: '100', wren: '110', lynx: '001' };
+    const triD = (b) => b.split('').map((x, i) => { const y = 7 + i * 5; return x === '1' ? 'M5 ' + y + ' H19' : 'M5 ' + y + ' H10.4 M13.6 ' + y + ' H19'; }).join(' ');
+    const clock = (s) => { s = Math.floor(s); return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); };
+    // [who, title, touched, detail, start, end]  times in seconds of this loop; start < 0 means already running
+    const P = [
+      ['owl', 'Card follows its thread id', 'TodoCard.tsx +48 −12', 'The card reads the thread id from the route, so it no longer shows the last thread you opened.', -99, -60],
+      ['owl', 'Unpin when the thread is archived', 'pins.ts +9', 'Archiving a thread clears its pin; restoring it brings the pin back.', -60, -30],
+      ['wren', 'Store pins per server', 'pins.ts +21 −6', 'Pins are keyed by server and thread, so two servers never share a card.', -30, -8],
+      ['wren', 'Migrate old pins', 'migrate.ts +34', 'Moves pins saved by 0.6 into the new keys, once, then forgets the old ones.', -42, 6],
+      ['lynx', 'Drag to reorder', 'TodoCard.tsx +27 −4', 'Long-press a todo, then drag. The order is saved with the pin.', -51, 12.5],
+      ['heron', 'Card in the thread header', 'ThreadHeader.tsx', 'Waits for the migration, then places the card under the title.', 6.6, 15],
+      ['heron', 'Tests', 'pins.test.ts', 'Runs last, after every other step has landed.', 15.6, 99],
+    ];
+    const toggle = (i) => () => { const o = Object.assign({}, this.state.open); o[i] = !o[i]; this.setState({ open: o }); };
+    let doneN = 0, nowN = 0;
+    const steps = P.map(([who, title, touched, detail, a, b], i) => {
+      const st = t >= b ? 'done' : (t >= a ? 'now' : 'todo');
+      if (st === 'done') doneN++; if (st === 'now') nowN++;
+      const meta = st === 'done' ? who + ' · ' + touched : (st === 'now' ? who + ' · working · ' + clock(t - a) : who + ' · waits for ' + (i === 5 ? 'the migration' : 'the rest'));
+      const open = !!S.open[i + 1];
+      return { n: i + 1, who, title, touched, detail, meta, now: st === 'now', d: triD(tri[who]),
+        cls: st + (open ? ' open' : ''), ex: open ? 'true' : 'false', toggle: toggle(i + 1),
+        status: st === 'done' ? 'done' : (st === 'now' ? clock(t - a) : 'waiting') };
+    });
+    const segs = steps.map(s => ({ cls: s.cls.split(' ')[0] }));
+    const waitN = P.length - doneN - nowN;
+    const agents = ['heron', 'owl', 'wren', 'lynx'].map(w => {
+      const mine = steps.filter(s => s.who === w);
+      const cur = mine.find(s => s.now);
+      const next = mine.find(s => s.cls.indexOf('todo') === 0);
+      const state = cur ? 'now' : (next ? 'todo' : 'done');
+      return { name: w, d: triD(tri[w]), now: state === 'now', done: state === 'done', todo: state === 'todo',
+        line: cur ? cur.title : (next ? 'next: ' + next.title.toLowerCase() : 'finished its part') };
+    });
+    return { steps, segs, agents, fadeCls: S.fade ? 'fadeall' : '',
+      sum: doneN + ' of ' + P.length + ' done', sum2: nowN + ' at work · ' + waitN + ' waiting',
+      sumLabel: doneN + ' of ' + P.length + ' steps done, ' + nowN + ' at work, ' + waitN + ' waiting' };
+  }
+}
+
+</script>
+</body>
+</html>

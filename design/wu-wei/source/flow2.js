@@ -131,8 +131,8 @@ class Component extends DCLogic {
 
   renderVals() {
     const S = this.state;
-    const day = { paper:'#E5EBE0', paper2:'#D6E0D3', ink:'#16231D', ink2:'#2D3C34', ink3:'#56685D', line:'#BCCBBE', seal:'#A8322B', onseal:'#F1F4EC', blue:'#3F7484', green:'#3B7A5C', mist:'#E5EBE0', imgf:'saturate(1)' };
-    const night = { paper:'#0E1613', paper2:'#17221D', ink:'#DCE8DE', ink2:'#BCCFC1', ink3:'#86998C', line:'#24342C', seal:'#C5483C', onseal:'#10140F', blue:'#7FAFBD', green:'#6FA88A', mist:'#0E1613', imgf:'brightness(.58) saturate(.85)' };
+    const day = { paper:'#E5EBE0', paper2:'#D6E0D3', ink:'#16231D', ink2:'#2D3C34', ink3:'#56685D', line:'#BCCBBE', seal:'#2E4374', onseal:'#F1F4EC', blue:'#3F7484', green:'#3B7A5C', mist:'#E5EBE0', imgf:'saturate(1)' };
+    const night = { paper:'#0E1613', paper2:'#17221D', ink:'#DCE8DE', ink2:'#BCCFC1', ink3:'#86998C', line:'#24342C', seal:'#93A6D9', onseal:'#10140F', blue:'#7FAFBD', green:'#6FA88A', mist:'#0E1613', imgf:'brightness(.58) saturate(.85)' };
     const pal = S.theme === 'day' ? day : night;
     const vars = Object.keys(pal).map(k => '--' + k + ':' + pal[k]).join(';');
 

@@ -12,8 +12,8 @@ OUT = b3.OUT
 IMG, ALT = b3.IMG, b3.ALT
 seal_sym, defs, grain = b3.seal_sym, b3.defs, b3.grain
 
-WASH = {'riders': '/_blob/80c4831de7f565adcb105f07350e7366', 'peaks': '/_blob/540c00f793822a5e4add5f7a65866059',
-        'jade_peaks': '/_blob/6e28c7be749da586bce604737252e5d3', 'quiet_river': '/_blob/b859511742d553442c9d16330ace0572',
+WASH = {'riders': '/_blob/1becc3a519122d92da99bbd7f2ba82e6', 'peaks': '/_blob/006801b9b28e7dd60d174ef0cc98282f',
+        'jade_peaks': '/_blob/76ffb354b979f55f59e31569bba6c183', 'quiet_river': '/_blob/b859511742d553442c9d16330ace0572',
         'lone_boat': '/_blob/3b1b04aca64870f2f3b5c133f7266075'}
 TSCENES = list(WASH)
 
@@ -404,7 +404,7 @@ POPOVER = ('<sc-if value="{{pop}}" hint-placeholder-val="{{false}}">'
 
 INSPECTOR = ('<aside class="insp-col" aria-label="Inspector" style="position:relative;background:var(--side);border-left:1px solid var(--line)">'
              '<div class="scroll" style="width:272px;height:800px;box-sizing:border-box;padding:62px 20px 20px;display:flex;flex-direction:column;gap:24px">'
-             '<section><h2 class="lbl">steps</h2><ol class="ilist">'
+             '<section><div style="display:flex;justify-content:space-between;align-items:baseline"><h2 class="lbl">steps</h2><a href="Mac-Plan%%N%%.dc.html" style="font-size:13px;font-style:italic;color:var(--ink3);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line)">the whole plan</a></div><ol class="ilist">'
              '<sc-for list="{{isteps}}" as="st" hint-placeholder-count="4"><li class="ist {{st.cls}}"><span class="dot"></span>'
              '<span class="mono" style="font-size:11px;color:var(--ink3)">{{st.tool}}</span><span class="clip">{{st.label}}</span></li></sc-for></ol></section>'
              '<section><h2 class="lbl">files touched</h2>'
