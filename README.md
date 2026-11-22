@@ -4,7 +4,7 @@
   <img src="docs/evidence/v0.7.1/ziran-sessions-day.png" alt="Ziran 0.7.1 Threads list on Android API 36 with pavilion painting and vermilion agent seals" width="280" />
 </p>
 
-<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.1</code></sub></p>
+<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.2</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
@@ -24,7 +24,7 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ZIRAN ANDROID / 0.7.1 / 11.09 MiB</code></sub><br /><br />
+      <sub><code>ZIRAN ANDROID / 0.7.2 / 14.87 MiB</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><strong>Download the APK</strong></a><br />
       <sub>Native Kotlin + Compose. Debug-signed sideload.</sub>
     </td>
@@ -41,12 +41,12 @@
   </tr>
 </table>
 
-> **Ziran 0.7.1 ("Wu wei")** replaces the earlier Tauri/WebView client as the
-> flagship Android app. It is built natively in Kotlin and Jetpack Compose with
-> bundled EB Garamond and JetBrains Mono typography, twelve open-access painting
-> scenes in Day and Night ink, 120 Hz display-mode support, and full Adapter v4
-> continuity. The APK is debug-signed for sideloading; there is no Play Store
-> listing or iOS client.
+> **Ziran 0.7.2 ("Wu wei")** updates the native Kotlin and Jetpack Compose
+> Android client to the indigo Wu wei palette (`#2E4374` day / `#93A6D9` night),
+> adds the **Plan** screen (`painting-flock`, `wren` and `lynx` trigrams, live
+> `plan_updated` & `plan.snapshot`), and makes the pairing screen respond live
+> to `GET /health` probes and `pairingStage` progress. The APK is debug-signed
+> for sideloading; there is no Play Store listing or iOS client.
 
 ## What Ziran 0.7.1 is
 
@@ -199,6 +199,8 @@ bun run marketing:test
 | Read | Why |
 | --- | --- |
 | [Getting started](docs/GETTING_STARTED.md) | Adapter v4, TLS, pairing, Ziran Android install, troubleshooting |
+| [Ziran 0.7.2 release notes](docs/V0_7_2_RELEASE_NOTES.md) | 0.7.2 scope, indigo Wu wei, Plan screen, live pairing, APK checksum |
+| [Side-by-side evidence (0.7.2)](docs/evidence/v0.7.2/README.md) | Pairing flows, 21 s Plan loop, and Day/Night screen comparisons |
 | [Ziran 0.7.1 release notes](docs/V0_7_0_RELEASE_NOTES.md) | 0.7.1 scope, Wu wei fixes, APK checksum, verification, limits |
 | [Wu wei motion notes](docs/V0_7_1_RELEASE_NOTES.md) | Detailed visual, motion, and 120 Hz frame-pacing pass |
 | [Side-by-side evidence](docs/evidence/v0.7.1/README.md) | All 9 flows at 1x and 0.25x + 10 Day/Night screen comparisons |
