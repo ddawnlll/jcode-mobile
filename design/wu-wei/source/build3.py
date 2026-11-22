@@ -6,18 +6,18 @@ import sys, urllib.parse
 exec(open(__file__.replace('build3.py', 'base3.py')).read())
 
 
-IMG = {'peaks': '/_blob/dd09011b6c5ecd2a50b67e2607537eab', 'pavilion': '/_blob/6db6f60bed85361c619e918fa497942c',
-       'riders': '/_blob/4c47a154865a76a51170a7ce7398c363', 'butterfly': '/_blob/253579c9087f716f061f43b0a66e9cd6'}
+IMG = {'peaks': '/_blob/618de2d01f0e15bdf8b8c33a93f9765c', 'pavilion': '/_blob/3ac07e5d05b81dfa28feb571eb1e0dea',
+       'riders': '/_blob/5a9040033f50a7a690c92b69377e5a27', 'butterfly': '/_blob/253579c9087f716f061f43b0a66e9cd6'}
 ALT = {'peaks': 'Detail of an old blue-and-green landscape painting: mountain peaks',
        'pavilion': 'Detail of an old blue-and-green landscape painting: a pavilion under pines',
        'riders': 'Detail of an old blue-and-green landscape painting: two riders beneath the pines',
        'butterfly': 'Detail of Zhuang Zhou Dreaming of a Butterfly, attributed to Lu Zhi, Ming dynasty'}
 SCENES = ['peaks', 'pavilion', 'riders', 'butterfly']
 THEMES['paper'].update(paper='#E5EBE0', paper2='#D6E0D3', ink='#16231D', ink2='#2D3C34', ink3='#56685D', line='#BCCBBE',
-                       seal='#A8322B', onseal='#F1F4EC', blue='#3F7484', green='#3B7A5C', mist='#E5EBE0', imgf='saturate(1)',
+                       seal='#2E4374', onseal='#F1F4EC', blue='#3F7484', green='#3B7A5C', mist='#E5EBE0', imgf='saturate(1)',
                        grain_m='0 0 0 0 0.26  0 0 0 0 0.36  0 0 0 0 0.30  0 0 0 0.22 0')
 THEMES['night'].update(paper='#0E1613', paper2='#17221D', ink='#DCE8DE', ink2='#BCCFC1', ink3='#86998C', line='#24342C',
-                       seal='#C5483C', onseal='#10140F', blue='#7FAFBD', green='#6FA88A', mist='#0E1613', imgf='brightness(.58) saturate(.85)',
+                       seal='#93A6D9', onseal='#10140F', blue='#7FAFBD', green='#6FA88A', mist='#0E1613', imgf='brightness(.58) saturate(.85)',
                        grain_m='0 0 0 0 0.7  0 0 0 0 0.9  0 0 0 0 0.8  0 0 0 0.18 0')
 
 def hero(key, t, h=340, progress=None, flow=False):
@@ -35,20 +35,22 @@ def hero(key, t, h=340, progress=None, flow=False):
                 items += red if d else ring
             if not last:
                 items += '<span style="flex:1;height:1px;background:var(--ink2);opacity:.35"></span>'
-        dots = f'<div role="img" aria-label="Steps on the way" style="position:absolute;left:22px;right:120px;bottom:10px;display:flex;align-items:center;gap:6px">{items}</div>'
+        dots = f'<div role="img" aria-label="Steps on the way" style="position:absolute;left:22px;right:120px;bottom:58px;display:flex;align-items:center;gap:6px">{items}</div>'
     return (f'<div style="position:absolute;left:0;top:0;width:390px;height:{h}px;overflow:hidden">'
             f'<img class="kb" src="{IMG[key]}" alt="{ALT[key]}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:var(--imgf)">'
             '<div class="drift" aria-hidden="true" style="position:absolute;left:-40px;right:-40px;top:52%;height:46px;background:var(--paper);opacity:.32;filter:blur(16px)"></div>'
             '<div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 55%,var(--paper) 98%)"></div>'
             f'{dots}</div>')
 
-IMG.update({'jade-peaks': '/_blob/f7d685c785a5da40bc74ee97a3305fd8', 'river-valley': '/_blob/64ac54e9dda1e545e7cfadf7899d51b2',
-            'blue-hills': '/_blob/4fbc8ebdb7aa9b9edc47fda069a68b85', 'misty-peaks': '/_blob/d6b0440cdcd252c9cfd10c0889cd633b',
+IMG.update({'jade-peaks': '/_blob/3712f6e1d93b1b7f634457d5fe3b67df', 'river-valley': '/_blob/64ac54e9dda1e545e7cfadf7899d51b2',
+            'blue-hills': '/_blob/0f0c3f1849968fef38e21cc1bf31ff81', 'misty-peaks': '/_blob/d6b0440cdcd252c9cfd10c0889cd633b',
             'lone-boat': '/_blob/bbac403b3e3406785527455f814ab514', 'sage-under-pine': '/_blob/ea65970e973a805897baba095fa2ddda',
-            'green-woods': '/_blob/fee6d8b7bfe84929929e5fa0ea6101bd', 'quiet-river': '/_blob/71a94aa046ae4e1172f7124a8ce6180a'})
+            'green-woods': '/_blob/ed4551942f958007d9500bdc301e0881', 'quiet-river': '/_blob/71a94aa046ae4e1172f7124a8ce6180a'})
 for _k, _v in {'jade-peaks': 'jade peaks', 'river-valley': 'a river valley', 'blue-hills': 'blue hills', 'misty-peaks': 'peaks in mist',
                'lone-boat': 'a lone boat', 'sage-under-pine': 'a sage resting under a pine', 'green-woods': 'green woods', 'quiet-river': 'a quiet river'}.items():
     ALT[_k] = 'Detail of an old Chinese landscape painting, Metropolitan Museum of Art open access: ' + _v
+IMG['flock'] = '/_blob/93a676a2a3bc0f57ccaacb155aaa7569'
+ALT['flock'] = 'Detail of an old ink painting: a flock of birds crossing the sky above a tree'
 IMG = {k.replace('-', '_'): v for k, v in IMG.items()}
 ALT = {k.replace('-', '_'): v for k, v in ALT.items()}
 SCENES = ['peaks', 'jade-peaks', 'pavilion', 'river-valley', 'blue-hills', 'riders', 'misty-peaks', 'lone-boat', 'sage-under-pine', 'green-woods', 'quiet-river', 'butterfly']
@@ -59,7 +61,7 @@ def grain(t):
     return f'<div aria-hidden="true" class="grain {cls}"></div>'
 
 # ---- symbols instead of characters: trigram seals and a send stroke ----
-TRIGRAMS = {'fox': '101', 'crane': '111', 'heron': '010', 'owl': '100', 'moth': '011', 'send': None}
+TRIGRAMS = {'fox': '101', 'crane': '111', 'heron': '010', 'owl': '100', 'moth': '011', 'wren': '110', 'lynx': '001', 'send': None}
 def seal_sym(kind, size, extra_cls='', label=None):
     al = f'role="img" aria-label="{label}"' if label else 'aria-hidden="true"'
     if kind == 'send':
@@ -136,6 +138,8 @@ def link(mode, target, inner, style='', label=None, cls='', origin=None):
 MENU = '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.7" stroke-linecap="round"><path d="M4 7.5h15M4 12h10M4 16.5h13"></path></svg>'
 BACK = '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5c-3 2.5-5.5 4.6-7 7 1.5 2.4 4 4.5 7 7"></path></svg>'
 
+PLAN_ICON = '<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" style="stroke:var(--ink)" stroke-width="1.7" stroke-linecap="round"><circle cx="6" cy="6" r="1.6"></circle><circle cx="6" cy="12" r="1.6"></circle><circle cx="6" cy="18" r="1.6"></circle><path d="M11 6h8M11 12h6M11 18h7"></path></svg>'
+
 def corner(mode, target, icon, label):
     return link(mode, target, icon, 'position:absolute;left:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2', label)
 
@@ -208,6 +212,7 @@ def page_session(t, mode, scene_key='peaks'):
         sub = 'fox · working · step 4 of 4'
     return (heroes
             + corner(mode, 'Sessions', MENU, 'Threads')
+            + ('' if mode == 'flow' else link(mode, 'Plan', PLAN_ICON, 'position:absolute;right:8px;top:50px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;z-index:2', 'The plan'))
             + title('Adapter v4 timeline', sub, 'fox')
             + f'''
   <main style="position:absolute;left:22px;right:22px;top:356px;display:flex;flex-direction:column;gap:12px">
@@ -442,8 +447,8 @@ class Component extends DCLogic {
   }
   renderVals() {
     const S = this.state;
-    const day = { paper:'#E5EBE0', paper2:'#D6E0D3', ink:'#16231D', ink2:'#2D3C34', ink3:'#56685D', line:'#BCCBBE', seal:'#A8322B', onseal:'#F1F4EC', blue:'#3F7484', green:'#3B7A5C', mist:'#E5EBE0', imgf:'saturate(1)' };
-    const night = { paper:'#0E1613', paper2:'#17221D', ink:'#DCE8DE', ink2:'#BCCFC1', ink3:'#86998C', line:'#24342C', seal:'#C5483C', onseal:'#10140F', blue:'#7FAFBD', green:'#6FA88A', mist:'#0E1613', imgf:'brightness(.58) saturate(.85)' };
+    const day = { paper:'#E5EBE0', paper2:'#D6E0D3', ink:'#16231D', ink2:'#2D3C34', ink3:'#56685D', line:'#BCCBBE', seal:'#2E4374', onseal:'#F1F4EC', blue:'#3F7484', green:'#3B7A5C', mist:'#E5EBE0', imgf:'saturate(1)' };
+    const night = { paper:'#0E1613', paper2:'#17221D', ink:'#DCE8DE', ink2:'#BCCFC1', ink3:'#86998C', line:'#24342C', seal:'#93A6D9', onseal:'#10140F', blue:'#7FAFBD', green:'#6FA88A', mist:'#0E1613', imgf:'brightness(.58) saturate(.85)' };
     const pal = S.theme === 'day' ? day : night;
     const vars = Object.keys(pal).map(k => '--' + k + ':' + pal[k]).join(';');
     const screens = ['start','sessions','main','model','scenes'];

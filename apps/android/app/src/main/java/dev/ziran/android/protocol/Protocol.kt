@@ -1,5 +1,6 @@
 package dev.ziran.android.protocol
 
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 const val PROTOCOL_VERSION = 4
@@ -70,6 +71,8 @@ enum class AgentKind(val displayName: String) {
     Heron("heron"),
     Owl("owl"),
     Moth("moth"),
+    Wren("wren"),
+    Lynx("lynx"),
     Unknown("agent");
 
     companion object {
@@ -79,6 +82,8 @@ enum class AgentKind(val displayName: String) {
             "heron" -> Heron
             "owl" -> Owl
             "moth" -> Moth
+            "wren" -> Wren
+            "lynx" -> Lynx
             else -> Unknown
         }
     }
@@ -195,6 +200,7 @@ data class SessionSnapshot(
     val messages: List<HistoryMessageView>,
     val runtime: RuntimeView?,
     val agents: List<SwarmAgentView>? = null,
+    val plan: PlanView? = null,
     val context: ContextView? = null,
     val activeTurn: ActiveTurnView? = null,
     val daemonStatus: DaemonStatusView? = null,
@@ -234,7 +240,7 @@ sealed interface SessionEvent {
     data class ConnectionPhase(val phase: String) : SessionEvent
     data class SessionRecovery(val continuationMessage: String, val reconnectNotice: String?) : SessionEvent
     data class TitleChanged(val title: String?, val displayTitle: String) : SessionEvent
-    data class PlanUpdated(val plan: JsonObject?) : SessionEvent
+    data class PlanUpdated(val plan: JsonElement?) : SessionEvent
     data class ContextCapChanged(val maxContextTokens: Long?, val effectiveBudget: Long) : SessionEvent
     data class AdapterError(val code: String, val message: String, val retryable: Boolean) : SessionEvent
     data class TurnStopped(val turnId: String?, val reason: String, val message: String, val providerStopReason: String?) : SessionEvent

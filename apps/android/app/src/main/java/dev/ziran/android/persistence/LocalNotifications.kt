@@ -62,6 +62,7 @@ object LocalNotifications {
         val pending = PendingIntent.getActivity(context, sessionId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setColor(0xFF2E4374.toInt())
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pending)

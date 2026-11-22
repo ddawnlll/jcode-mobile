@@ -207,6 +207,40 @@
       "w": 400,
       "x": 4420,
       "y": 4220
+    },
+    "Plan.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "the plan · day",
+      "w": 390,
+      "x": 2820,
+      "y": 0
+    },
+    "Plan-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "the plan · night",
+      "w": 390,
+      "x": 2820,
+      "y": 1300
+    },
+    "Mac-Plan.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · the plan · day",
+      "w": 1280,
+      "x": 5600,
+      "y": 3000
+    },
+    "Mac-Plan-Night.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "radius": 12,
+      "title": "Mac · the plan · night",
+      "w": 1280,
+      "x": 5600,
+      "y": 4220
     }
   },
   "createdOnFiles": {
@@ -230,7 +264,7 @@
   "notes": {
     "day": {
       "kind": "title1",
-      "maxW": 2740,
+      "maxW": 3210,
       "text": "day",
       "w": 240,
       "x": 0,
@@ -260,7 +294,7 @@
     },
     "night": {
       "kind": "title1",
-      "maxW": 2740,
+      "maxW": 3210,
       "text": "night",
       "w": 240,
       "x": 0,
@@ -268,14 +302,14 @@
     },
     "macos": {
       "kind": "title1",
-      "maxW": 5820,
+      "maxW": 7880,
       "text": "macOS · day",
       "x": -1000,
       "y": 2700
     },
     "macnight": {
       "kind": "title1",
-      "maxW": 4820,
+      "maxW": 6880,
       "text": "macOS · night",
       "x": 0,
       "y": 3920
@@ -312,7 +346,11 @@
     "Mac-Live-Night.dc.html",
     "Mac-Start-Night.dc.html",
     "Mac-Settings-Night.dc.html",
-    "Mac-MenuBar-Night.dc.html"
+    "Mac-MenuBar-Night.dc.html",
+    "Plan.dc.html",
+    "Plan-Night.dc.html",
+    "Mac-Plan.dc.html",
+    "Mac-Plan-Night.dc.html"
   ],
   "pages": [],
   "title": "JCode Mobile Wu wei"

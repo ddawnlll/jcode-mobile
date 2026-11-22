@@ -141,7 +141,7 @@ class LiveReducer {
                     )
                 } else next
             }
-            is SessionEvent.PlanUpdated -> next
+            is SessionEvent.PlanUpdated -> next.copy(plan = dev.ziran.android.protocol.parsePlan(event.plan))
             is SessionEvent.ContextCapChanged -> {
                 val ctx = next.context
                 if (ctx != null) next.copy(context = ctx.copy(effectiveBudget = event.effectiveBudget)) else next
@@ -358,6 +358,7 @@ fun applySnapshotToState(state: AppState, snapshot: SessionSnapshot): AppState {
         epoch = snapshot.epoch,
         runtime = latestRuntime(state.runtime, snapshot.runtime),
         agents = snapshot.agents ?: state.agents,
+        plan = snapshot.plan ?: if (snapshot.stale) state.plan else null,
         context = snapshot.context ?: state.context,
         savedOnPhone = false,
         activeMissing = false,

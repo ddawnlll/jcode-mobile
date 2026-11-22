@@ -572,17 +572,17 @@
     send: {
       label: "01 / Live turn",
       caption: "Thinking grows and folds, tool calls draw red rings, diffs unfold, and answers stream word by word.",
-      provenance: "Real capture / Ziran 0.7.1"
+      provenance: "Real capture / Ziran 0.7.2"
     },
     away: {
       label: "02 / Step away",
       caption: "Session scope, epoch, and sequence keep a slow answer from overwriting newer work.",
-      provenance: "Real capture / Ziran 0.7.1"
+      provenance: "Real capture / Ziran 0.7.2"
     },
     return: {
       label: "03 / Return",
       caption: "Models, effort, scenes, and day/night themes stay source-backed and local after the return.",
-      provenance: "Real capture / Ziran 0.7.1"
+      provenance: "Real capture / Ziran 0.7.2"
     }
   };
 

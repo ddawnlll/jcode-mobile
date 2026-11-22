@@ -1,6 +1,6 @@
 /* Ziran ("Wu wei") — Ink, Paper & Seal
    Ground-up website redesign matching design/wu-wei/README.md and Ziran 0.7.0.
-   No drop shadows. Xuan paper grain, Song/Ming landscape wash, vermilion seals,
+   No drop shadows. Xuan paper grain, Song/Ming landscape wash, indigo seals,
    EB Garamond prose, JetBrains Mono machine text, one easing curve. */
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -12,7 +12,7 @@
   --ink2: #2D3C34;
   --ink3: #56685D;
   --line: #BCCBBE;
-  --seal: #A8322B;
+  --seal: #2E4374;
   --on-seal: #F1F4EC;
   --blue: #3F7484;
   --green: #3B7A5C;
@@ -25,7 +25,7 @@
   --night-ink2: #BCCFC1;
   --night-ink3: #86998C;
   --night-line: #24342C;
-  --night-seal: #C5483C;
+  --night-seal: #93A6D9;
   --night-on-seal: #10140F;
   --night-blue: #7FAFBD;
   --night-green: #6FA88A;

@@ -202,6 +202,7 @@ fun parseSnapshot(o: JsonObject): SessionSnapshot? {
         messages = o.objList("messages").map(::parseHistoryMessage),
         runtime = parseRuntime(o.objOr("runtime")),
         agents = o.arrOr("agents")?.mapNotNull { runCatching { it.jsonObject }.getOrNull() }?.map(::parseAgent),
+        plan = parsePlan(o["plan"]),
         context = parseContext(o.objOr("context")),
         activeTurn = active,
         daemonStatus = daemon,
@@ -254,7 +255,7 @@ fun parseSessionEvent(o: JsonObject): SessionEventPayload? {
         "connection_phase" -> SessionEvent.ConnectionPhase(event.strOr("phase", ""))
         "session_recovery" -> SessionEvent.SessionRecovery(event.strOr("continuation_message", ""), event.str("reconnect_notice"))
         "title_changed" -> SessionEvent.TitleChanged(event.str("title"), event.strOr("display_title", ""))
-        "plan_updated" -> SessionEvent.PlanUpdated(event.objOr("plan"))
+        "plan_updated" -> SessionEvent.PlanUpdated(event["plan"])
         "context_cap_changed" -> SessionEvent.ContextCapChanged(event.longOr("max_context_tokens"), event.longOr("effective_budget") ?: 0)
         "adapter_error" -> SessionEvent.AdapterError(event.strOr("code", ""), event.strOr("message", ""), event.boolOr("retryable", false))
         "turn_stopped" -> SessionEvent.TurnStopped(

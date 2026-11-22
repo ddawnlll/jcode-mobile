@@ -274,7 +274,7 @@ fun ModelScreen(
     }
 }
 
-/** 900 ms self-drawing vermilion selection ring (`ringdraw` in Model.dc.html). */
+/** 900 ms self-drawing indigo selection ring (`ringdraw` in Model.dc.html). */
 @Composable
 private fun DrawingSealRing(
     color: Color,

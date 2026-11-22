@@ -42,7 +42,7 @@ Each phone screen has a day board and a night board (`-Night`).
 | Board | Screen | What to look at |
 | --- | --- | --- |
 | `Start` | Pairing | Server field, one-time code, seal button. The painting's step dots are the progress |
-| `Sessions` | Thread list | Trigram seal per agent, state marks (red dot = waiting for you, braille spinner = working, ring = done, grey dot = resting) |
+| `Sessions` | Thread list | Trigram seal per agent, state marks (indigo dot = waiting for you, braille spinner = working, ring = done, grey dot = resting) |
 | `Main` | A thread | `1›` prompt, numbered tool steps, running step with live elapsed time, composer with the ink underline and send seal |
 | `Model` | Model and effort | Model list, six ink dots for reasoning effort ("how much ink") |
 | `Scenes` | Scene and theme | 12 paintings, day/night switch |
@@ -93,7 +93,7 @@ What to try in `Mac-Main`:
 | ink2 | `#2D3C34` | `#BCCFC1` |
 | ink3 (secondary) | `#56685D` | `#86998C` |
 | line | `#BCCBBE` | `#24342C` |
-| seal (accent, send, done) | `#A8322B` | `#C5483C` |
+| seal (accent: indigo; send, done) | `#2E4374` | `#93A6D9` |
 | on-seal | `#F1F4EC` | `#10140F` |
 | blue (working) | `#3F7484` (Mac `#34677A`) | `#7FAFBD` |
 | green (added, healthy) | `#3B7A5C` (Mac `#2F6B4E`) | `#6FA88A` |
@@ -117,7 +117,7 @@ three strokes, where solid = 1 and broken = 0, read from top to bottom.
 | owl | 100 |
 | moth | 011 |
 
-The send seal is a single rising brush stroke. Seals are red squares with a
+The send seal is a single rising brush stroke. Seals are indigo squares with a
 slight rough edge.
 
 **Paintings.** One painting crop sits at the top of each phone screen, with a
@@ -147,7 +147,7 @@ thread header.
 | Sheet | Slides up over a dimming scrim; tap the scrim or drag down to dismiss. | 420 ms | Back closes the sheet before the page. |
 | Keyboard | The composer rides the keyboard frame by frame; the newest line stays in view. | IME-driven | WindowInsetsAnimationCompat. |
 | Thinking | A thin line grows as words settle into the page; when done it folds to "thought for 4 s". | 500 ms per word, 65 ms stagger | Polite live region; collapse eases height. |
-| Tool call | Ink drop, then the intent slides in; a hairline of ink flows while it runs; the drop becomes a red ring as it finishes. | 550 ms in · 900 ms ring | Rows change state in place; nothing jumps. |
+| Tool call | Ink drop, then the intent slides in; a hairline of ink flows while it runs; the drop becomes an indigo ring as it finishes. | 550 ms in · 900 ms ring | Rows change state in place; nothing jumps. |
 | Diff and output | Panels unfold under their row and fold away when the step ends. | 750 ms height ease | Animate height smoothly. |
 | Scene and theme | Paintings cross-fade and drift slowly; day and night ease their colours. | 1.2 s fade · 34 s drift · 600 ms theme | Follows system dark mode unless chosen. |
 | Reduced motion | Everything above becomes a short fade. Gestures still follow the finger. | ≤ 150 ms | ANIMATOR_DURATION_SCALE. |

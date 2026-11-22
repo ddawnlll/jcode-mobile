@@ -114,7 +114,7 @@ MOTIONS = [
     ('Sheet', 'Slides up over a dimming scrim; tap the scrim or drag down to dismiss.', '420 ms', 'Back closes the sheet before the page.'),
     ('Keyboard', 'The composer rides the keyboard frame by frame; the newest line stays in view.', 'IME-driven', 'WindowInsetsAnimationCompat progress, no jump at the end.'),
     ('Thinking', 'A thin line grows as words settle into the page; when done it folds to “thought for 4 s”.', '500 ms per word, 65 ms stagger', 'Polite live region; collapse eases height.'),
-    ('Tool call', 'Ink drop, then the intent slides in; a hairline of ink flows while it runs; the drop becomes a red ring as it finishes.', '550 ms in · 900 ms ring', 'Rows change state in place; nothing jumps.'),
+    ('Tool call', 'Ink drop, then the intent slides in; a hairline of ink flows while it runs; the drop becomes an indigo ring as it finishes.', '550 ms in · 900 ms ring', 'Rows change state in place; nothing jumps.'),
     ('Diff and output', 'Panels unfold under their row and fold away when the step ends.', '750 ms height ease', 'grid-template-rows 0fr → 1fr.'),
     ('Scene and theme', 'Paintings cross-fade and drift slowly; day and night ease their colours.', '1.2 s fade · 34 s drift · 600 ms theme', 'Follows system dark mode unless chosen.'),
     ('Reduced motion', 'Everything above becomes a short fade. Gestures still follow the finger.', '≤ 150 ms', 'ANIMATOR_DURATION_SCALE and prefers-reduced-motion.'),
@@ -146,7 +146,7 @@ def build_motion():
     <h1 class="bleedin" style="margin:0;font-size:34px;line-height:40px;font-weight:500;color:var(--ink)">Motion</h1>
     <p style="margin:6px 0 0;font-size:17px;line-height:25px;color:var(--ink3);font-style:italic">Ink settling on paper. One soft ease-out curve, cubic-bezier(.22, 1, .36, 1). Only opacity and movement animate. Nothing bounces but the seal.</p>
     <h2 style="margin:26px 0 12px;font-size:21px;font-weight:500;color:var(--ink)">Symbols</h2>
-    <p style="margin:0 0 14px;font-size:15.5px;line-height:22px;color:var(--ink2)">Each agent wears a trigram, three lines whole or broken, in a red seal. The send seal is a single rising stroke.</p>
+    <p style="margin:0 0 14px;font-size:15.5px;line-height:22px;color:var(--ink2)">Each agent wears a trigram, three lines whole or broken, in an indigo seal. The send seal is a single rising stroke.</p>
     <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px">{syms}</div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px;margin-top:18px;color:var(--ink2)">{marks}</div>
     <h2 style="margin:28px 0 4px;font-size:21px;font-weight:500;color:var(--ink)">Movements</h2>

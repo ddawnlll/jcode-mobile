@@ -87,3 +87,39 @@ fun ThreadsMenuButton(
         }
     }
 }
+
+/**
+ * Three-dots-with-lines Plan button at right:8 top:50, 44x44 as on Main.dc.html.
+ * Exact SVG: circles at (6, 6/12/18) r=1.6, lines M11 6h8 M11 12h6 M11 18h7.
+ */
+@Composable
+fun PlanButton(
+    palette: Palette,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    reducedMotion: Boolean = false,
+) {
+    Box(
+        modifier
+            .padding(end = 8.dp, top = 50.dp)
+            .size(44.dp)
+            .wuClickable(reducedMotion = reducedMotion, onClick = onClick)
+            .semantics { role = Role.Button; contentDescription = "The plan" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(22.dp)) {
+            val u = minOf(size.width, size.height) / 24f
+            val stroke = Stroke(1.7.dp.toPx(), cap = StrokeCap.Round)
+            val r = 1.6f * u
+            drawCircle(palette.ink, radius = r, center = androidx.compose.ui.geometry.Offset(6f * u, 6f * u), style = stroke)
+            drawCircle(palette.ink, radius = r, center = androidx.compose.ui.geometry.Offset(6f * u, 12f * u), style = stroke)
+            drawCircle(palette.ink, radius = r, center = androidx.compose.ui.geometry.Offset(6f * u, 18f * u), style = stroke)
+            val p = Path().apply {
+                moveTo(11f * u, 6f * u); lineTo(19f * u, 6f * u)
+                moveTo(11f * u, 12f * u); lineTo(17f * u, 12f * u)
+                moveTo(11f * u, 18f * u); lineTo(18f * u, 18f * u)
+            }
+            drawPath(p, palette.ink, style = stroke)
+        }
+    }
+}
