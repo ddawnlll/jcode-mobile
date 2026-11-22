@@ -388,6 +388,7 @@ class AppController(
                 epoch = cached?.epoch,
                 runtime = cached?.runtime,
                 agents = cached?.agents,
+                plan = cached?.plan,
                 context = cached?.context,
                 models = emptyList(),
                 queuedMessages = credential?.let { queues.list(it.serverId, sessionId) } ?: emptyList(),
@@ -904,6 +905,35 @@ class AppController(
         } catch (error: Exception) {
             setState { it.copy(sessionsError = error.message) }
         }
+    }
+
+    // -- plan -----------------------------------------------------------------
+
+    suspend fun refreshPlan() {
+        val adapter = client ?: return
+        val sessionId = _state.value.activeSessionId ?: return
+        if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
+        try {
+            val payload = adapter.request(
+                "plan.snapshot",
+                JsonObject(mapOf("session_id" to JsonPrimitive(sessionId))),
+                sessionId = sessionId,
+                timeoutMs = 15000,
+            )
+            val parsed = dev.ziran.android.protocol.parsePlan(payload["plan"])
+            if (_state.value.activeSessionId == sessionId) {
+                setState { it.copy(plan = parsed) }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    fun coordinatorSessionId(state: AppState = _state.value): String? {
+        val active = state.activeSessionId
+        val parent = state.snapshot?.session?.parentSessionId
+        if (!parent.isNullOrBlank()) return parent
+        val coordinator = state.agents?.firstOrNull { it.parentSessionId.isNullOrBlank() }
+        return coordinator?.sessionId ?: active
     }
 
     // -- models ---------------------------------------------------------------

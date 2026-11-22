@@ -63,6 +63,7 @@ sealed interface Screen {
     object Start : Screen
     object Threads : Screen
     data class Thread(val sessionId: String) : Screen
+    object Plan : Screen
     object Model : Screen
     object Scenes : Screen
 }
@@ -355,6 +356,10 @@ fun ZiranApp(
                         state = state,
                         sceneKey = state.scene,
                         onBack = back,
+                        onPlan = {
+                            go(Screen.Plan, NavKind.InkDrop, lastTap)
+                            scope.launch { controller.refreshPlan() }
+                        },
                         onModel = {
                             go(Screen.Model, NavKind.Unroll, Offset.Unspecified)
                             scope.launch { controller.refreshModels() }
@@ -366,6 +371,22 @@ fun ZiranApp(
                         onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
                         reducedMotion = reduced,
                     )
+                    Screen.Plan -> {
+                        val coordinatorId = controller.coordinatorSessionId(state)
+                        val coordinatorName = state.agents
+                            ?.firstOrNull { it.sessionId == coordinatorId }
+                            ?.label
+                            ?: state.snapshot?.session?.agentLabel
+                            ?: "heron"
+                        PlanScreen(
+                            palette = palette,
+                            state = state,
+                            coordinatorName = coordinatorName,
+                            onBack = back,
+                            onSend = { text -> scope.launch { controller.sendText(text, targetSessionId = coordinatorId) } },
+                            reducedMotion = reduced,
+                        )
+                    }
                     Screen.Model -> ModelScreen(
                         palette = palette,
                         state = state,

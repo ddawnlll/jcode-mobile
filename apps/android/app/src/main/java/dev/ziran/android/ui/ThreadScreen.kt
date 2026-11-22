@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -121,6 +122,7 @@ fun ThreadScreen(
     sceneKey: String = "peaks",
     listState: LazyListState = rememberLazyListState(),
     onBack: () -> Unit = {},
+    onPlan: () -> Unit = {},
     onModel: () -> Unit = {},
     onScenes: () -> Unit = {},
     onTextChange: (String) -> Unit = {},
@@ -164,6 +166,53 @@ fun ThreadScreen(
     Box(modifier.fillMaxSize().background(palette.paper)) {
         // Painting header stays still at the top even while the IME rises.
         ScreenChrome(sceneKey, palette, headerHeightDp = 210, reducedMotion = reducedMotion)
+
+        // Header progress dots sit 58 dp above the bottom of the painting (so they clear the subtitle).
+        val planSteps = state.plan?.steps.orEmpty()
+        if (planSteps.isNotEmpty()) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(210.dp),
+            ) {
+                Row(
+                    Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(start = 22.dp, end = 120.dp, bottom = 58.dp)
+                        .semantics { contentDescription = "Steps on the way" },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    planSteps.forEachIndexed { idx, step ->
+                        val isDone = step.status == dev.ziran.android.protocol.PlanStepStatus.Done
+                        Box(
+                            Modifier
+                                .size(9.dp)
+                                .then(
+                                    if (isDone) {
+                                        Modifier
+                                            .background(palette.seal, CircleShape)
+                                            .border(1.5.dp, palette.paper, CircleShape)
+                                    } else {
+                                        Modifier
+                                            .background(palette.paper, CircleShape)
+                                            .border(1.4.dp, palette.ink2, CircleShape)
+                                    },
+                                ),
+                        )
+                        if (idx < planSteps.lastIndex) {
+                            Box(
+                                Modifier
+                                    .weight(1f)
+                                    .height(1.dp)
+                                    .background(palette.ink2.copy(alpha = 0.35f)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
 
         // Foreground layout rides the IME cleanly via WindowInsetsAnimationCompat.
         Column(
@@ -339,8 +388,14 @@ fun ThreadScreen(
             }
         }
 
-        // Top-left threads menu button sits above the foreground column.
+        // Top-left threads menu button and top-right plan button sit above the foreground column.
         ThreadsMenuButton(palette = palette, onClick = onBack, reducedMotion = reducedMotion)
+        PlanButton(
+            palette = palette,
+            onClick = onPlan,
+            modifier = Modifier.align(Alignment.TopEnd),
+            reducedMotion = reducedMotion,
+        )
     }
 }
 

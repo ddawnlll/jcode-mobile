@@ -79,6 +79,7 @@ data class AppState(
     val runtime: RuntimeView? = null,
     val modelsError: String? = null,
     val agents: List<SwarmAgentView>? = null,
+    val plan: dev.ziran.android.protocol.PlanView? = null,
     val context: ContextView? = null,
     val lastSeq: Long = 0,
     val epoch: String? = null,
