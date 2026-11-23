@@ -277,13 +277,21 @@ fun ThreadScreen(
                     .padding(horizontal = 22.dp),
             ) {
                 if (snapshot != null) {
-                    var promptOrdinal = 0
-                    items(
+                    val userOrdinals = buildMap {
+                        var ord = 0
+                        snapshot.messages.forEachIndexed { idx, msg ->
+                            if (msg.role == "user") {
+                                ord += 1
+                                put(idx, ord)
+                            }
+                        }
+                    }
+                    itemsIndexed(
                         snapshot.messages,
-                        key = { message -> "history-${message.index}-${message.role}" },
-                    ) { message ->
-                        if (message.role == "user") promptOrdinal += 1
-                        HistoryRow(message, promptOrdinal.coerceAtLeast(1), palette)
+                        key = { idx, message -> "history-$idx-${message.index}-${message.role}" },
+                    ) { idx, message ->
+                        val ord = userOrdinals[idx] ?: 1
+                        HistoryRow(message, ord, palette)
                     }
                 }
                 if (state.pending != null) {

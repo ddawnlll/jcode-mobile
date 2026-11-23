@@ -117,10 +117,15 @@ class SendAfterTurnDoneTest {
             )
             state = reducer.reduceEvent(state, "sess-1", "ep-1", seq++, done).state
 
-            // 5. After TurnDone: turnId is cleared, daemonRunning is false, and accepted pending is cleared.
+            // 5. After TurnDone: turnId is cleared, daemonRunning is false, accepted pending is cleared,
+            //    and the user prompt remains visible in snapshot.messages until authoritative snapshot arrives.
             assertNull("Cycle $cycle: turnId cleared after TurnDone", state.live.turnId)
             assertFalse("Cycle $cycle: daemonRunning cleared after TurnDone", state.live.daemonRunning)
             assertNull("Cycle $cycle: accepted pending cleared after TurnDone", state.pending)
+            assertTrue(
+                "Cycle $cycle: user prompt stays in snapshot.messages after TurnDone",
+                state.snapshot?.messages?.any { it.role == "user" && it.content == "message $cycle" } == true,
+            )
         }
     }
 }

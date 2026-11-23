@@ -239,7 +239,28 @@ class LiveReducer {
         } else {
             state.pending
         }
+        val updatedSnapshot = if (clearedPending == null && state.pending != null && state.snapshot != null) {
+            val msgs = state.snapshot.messages
+            val alreadyInHistory = msgs.lastOrNull { it.role == "user" }?.content?.trim() == state.pending.text.trim()
+            if (alreadyInHistory) {
+                state.snapshot
+            } else {
+                val nextIndex = (msgs.maxOfOrNull { it.index } ?: -1) + 1
+                state.snapshot.copy(
+                    messages = msgs + HistoryMessageView(
+                        index = nextIndex,
+                        role = "user",
+                        content = state.pending.text,
+                        toolCallId = null,
+                        toolName = null,
+                    ),
+                )
+            }
+        } else {
+            state.snapshot
+        }
         return state.copy(
+            snapshot = updatedSnapshot,
             pending = clearedPending,
             live = state.live.copy(
                 turnId = null,

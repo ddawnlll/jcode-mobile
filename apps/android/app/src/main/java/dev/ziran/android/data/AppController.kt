@@ -185,7 +185,10 @@ class AppController(
                         serverName = adapter.server.value?.name ?: it.serverName,
                     )
                 }
-                if (status == dev.ziran.android.connection.ConnectionStatus.Connected) maybeDrainQueue()
+                if (status == dev.ziran.android.connection.ConnectionStatus.Connected) {
+                    maybeDrainQueue()
+                    scope.launch { refreshConnectedHealth(credential.baseUrl) }
+                }
             }
         }
         scope.launch {
@@ -734,8 +737,11 @@ class AppController(
         when (val event = payload.event) {
             is dev.ziran.android.protocol.SessionEvent.PermissionRequest ->
                 notify(LocalNotifications.CHANNEL_APPROVAL, "Approval needed", "${event.toolName}: ${event.description}".take(160))
-            is dev.ziran.android.protocol.SessionEvent.TurnDone ->
+            is dev.ziran.android.protocol.SessionEvent.TurnDone -> {
                 notify(LocalNotifications.CHANNEL_TURNS, "Turn complete", "The agent finished in this thread.")
+                scheduleSnapshot(150)
+            }
+            is dev.ziran.android.protocol.SessionEvent.TurnStopped -> scheduleSnapshot(150)
             else -> Unit
         }
         maybeDrainQueue()
