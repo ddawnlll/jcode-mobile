@@ -32,16 +32,20 @@ type Client struct {
 	nextID atomic.Uint64
 }
 
-// DialQUIC opens a QUIC/UDP connection and authenticates on the control stream.
+var quicSessionCache = tls.NewLRUClientSessionCache(64)
+
+// DialQUIC opens a QUIC/UDP connection (with TLS 1.3 session resumption) and authenticates on the control stream.
 func DialQUIC(ctx context.Context, addr, token string, insecureSkipVerify bool) (*Client, error) {
 	tlsCfg := &tls.Config{
 		MinVersion:         tls.VersionTLS13,
 		NextProtos:         []string{protocol.ALPN},
 		InsecureSkipVerify: insecureSkipVerify,
+		ClientSessionCache: quicSessionCache,
 	}
 	conn, err := quic.DialAddr(ctx, addr, tlsCfg, &quic.Config{
 		MaxIdleTimeout:  60 * time.Second,
 		KeepAlivePeriod: 15 * time.Second,
+		Allow0RTT:       true,
 	})
 	if err != nil {
 		return nil, err

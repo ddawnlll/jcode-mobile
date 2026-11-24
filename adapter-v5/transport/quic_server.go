@@ -39,6 +39,7 @@ func ListenQUIC(addr string, tlsCfg *tls.Config, gw *gateway.Gateway) (*QUICServ
 		KeepAlivePeriod:       15 * time.Second,
 		MaxIncomingStreams:    64,
 		MaxIncomingUniStreams: 16,
+		Allow0RTT:             true,
 	}
 	ln, err := quic.ListenAddr(addr, tlsCfg, qcfg)
 	if err != nil {

@@ -27,11 +27,18 @@ type Config struct {
 	ModelsPath string // path to models.toml (default: ~/.pu/models.toml)
 }
 
+type cachedPuSession struct {
+	mtimeNs int64
+	size    int64
+	sess    agentsdk.Session
+}
+
 type Driver struct {
 	cfg     Config
 	mu      sync.Mutex
-	running map[string]*exec.Cmd // sessionID -> active pu process
-	models  map[string]string    // sessionID -> selected model override
+	running map[string]*exec.Cmd        // sessionID -> active pu process
+	models  map[string]string           // sessionID -> selected model override
+	cache   map[string]cachedPuSession  // sessionID -> mtime/size cached summary
 }
 
 func New(cfg Config) *Driver {
@@ -47,6 +54,7 @@ func New(cfg Config) *Driver {
 		cfg:     cfg,
 		running: make(map[string]*exec.Cmd),
 		models:  make(map[string]string),
+		cache:   make(map[string]cachedPuSession),
 	}
 }
 
@@ -127,27 +135,43 @@ func (d *Driver) ListSessions(_ context.Context) ([]agentsdk.Session, error) {
 		if err != nil {
 			continue
 		}
-		title, msgCount, lastStatus := summarizePuJournal(evPath)
-		if title == "" {
-			title = "Pu session " + sid
+		mtimeNs := fi.ModTime().UnixNano()
+		sz := fi.Size()
+
+		d.mu.Lock()
+		cached, hit := d.cache[sid]
+		d.mu.Unlock()
+
+		var sess agentsdk.Session
+		if hit && cached.mtimeNs == mtimeNs && cached.size == sz {
+			sess = cached.sess
+		} else {
+			title, msgCount, lastStatus := summarizePuJournal(evPath)
+			if title == "" {
+				title = "Pu session " + sid
+			}
+			if lastStatus == "" {
+				lastStatus = "idle"
+			}
+			sess = agentsdk.Session{
+				ID:              sid,
+				BackendID:       d.ID(),
+				Title:           title,
+				Status:          lastStatus,
+				WorkingDir:      d.cfg.RepoRoot,
+				UpdatedAtMs:     fi.ModTime().UnixMilli(),
+				MessageCount:    msgCount,
+				TranscriptBytes: sz,
+				AgentLabel:      "pu",
+			}
+			d.mu.Lock()
+			d.cache[sid] = cachedPuSession{mtimeNs: mtimeNs, size: sz, sess: sess}
+			d.mu.Unlock()
 		}
-		status := lastStatus
 		if runningSnap[sid] {
-			status = "working"
-		} else if status == "" {
-			status = "idle"
+			sess.Status = "working"
 		}
-		out = append(out, agentsdk.Session{
-			ID:              sid,
-			BackendID:       d.ID(),
-			Title:           title,
-			Status:          status,
-			WorkingDir:      d.cfg.RepoRoot,
-			UpdatedAtMs:     fi.ModTime().UnixMilli(),
-			MessageCount:    msgCount,
-			TranscriptBytes: fi.Size(),
-			AgentLabel:      "pu",
-		})
+		out = append(out, sess)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAtMs > out[j].UpdatedAtMs })
 	return out, nil

@@ -49,6 +49,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -119,6 +120,7 @@ fun ThreadScreen(
     palette: Palette,
     state: AppState,
     modifier: Modifier = Modifier,
+    composerTextFlow: kotlinx.coroutines.flow.StateFlow<String>? = null,
     sceneKey: String = "peaks",
     listState: LazyListState = rememberLazyListState(),
     onBack: () -> Unit = {},
@@ -459,7 +461,7 @@ fun ThreadScreen(
                 }
                 ComposerWithStop(
                     palette = palette,
-                    value = state.composerText,
+                    value = composerTextFlow?.collectAsState()?.value ?: state.composerText,
                     placeholder = "write to $agent…",
                     isWorking = false,
                     stampTrigger = sendStamp,

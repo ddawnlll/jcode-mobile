@@ -128,6 +128,15 @@ object MarkdownCache {
     fun clear() {
         map.clear()
     }
+
+    /** Pre-parses assistant messages off the main thread so thread open is zero-jank. */
+    fun prewarm(messages: List<dev.ziran.android.protocol.HistoryMessageView>) {
+        for (msg in messages) {
+            if (msg.role == "assistant" && msg.content.isNotBlank()) {
+                parse(msg.content)
+            }
+        }
+    }
 }
 
 private val HeadingRegex = Regex("^(#{1,6})\\s+(.*)$")

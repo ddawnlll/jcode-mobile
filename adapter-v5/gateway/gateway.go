@@ -61,9 +61,10 @@ type Gateway struct {
 	sessionSub map[string]map[*ClientSession]struct{} // globalSessionID -> clients
 	metaSub    map[*ClientSession]struct{}
 
-	// Idempotent operation tracking
-	opMu       sync.Mutex
-	operations map[string]agentsdk.TurnResult
+	// Idempotent operation tracking & history sync TTL cache
+	opMu         sync.Mutex
+	operations   map[string]agentsdk.TurnResult
+	histSyncedAt map[string]int64 // globalSessionID -> unix ms of last driver sync
 
 	// Metrics
 	handledReqs   atomic.Uint64
@@ -95,6 +96,7 @@ func New(cfg Config, reg *agentsdk.Registry, journal *storage.Journal, hist *sto
 		sessionSub:   make(map[string]map[*ClientSession]struct{}),
 		metaSub:      make(map[*ClientSession]struct{}),
 		operations:   make(map[string]agentsdk.TurnResult),
+		histSyncedAt: make(map[string]int64),
 	}
 }
 
@@ -300,6 +302,13 @@ func (g *Gateway) publishSessionEvent(globalSessionID, turnID, opID string, ev a
 		}
 	}
 	g.subMu.RUnlock()
+
+	// Invalidate cached history sync timestamp when a turn finishes so next page sees new messages.
+	if ev.Kind == "turn_done" || ev.Kind == "turn_stopped" {
+		g.opMu.Lock()
+		delete(g.histSyncedAt, globalSessionID)
+		g.opMu.Unlock()
+	}
 
 	// Privacy-safe push notification trigger for background devices.
 	switch ev.Kind {
@@ -704,11 +713,24 @@ func (g *Gateway) handleEventsReplay(v int, env protocol.Envelope) protocol.Enve
 }
 
 func (g *Gateway) ensureHistoryIndexed(ctx context.Context, drv agentsdk.Driver, nativeID, gid string) error {
+	now := time.Now().UnixMilli()
+	g.opMu.Lock()
+	last := g.histSyncedAt[gid]
+	g.opMu.Unlock()
+	if last > 0 && now-last < 2000 {
+		return nil
+	}
 	page, err := drv.GetHistory(ctx, nativeID, 0, 0)
 	if err != nil {
 		return err
 	}
-	return g.history.Sync(gid, page.Messages)
+	if err := g.history.Sync(gid, page.Messages); err != nil {
+		return err
+	}
+	g.opMu.Lock()
+	g.histSyncedAt[gid] = now
+	g.opMu.Unlock()
+	return nil
 }
 
 func (g *Gateway) handleHistoryPage(ctx context.Context, v int, env protocol.Envelope) protocol.Envelope {

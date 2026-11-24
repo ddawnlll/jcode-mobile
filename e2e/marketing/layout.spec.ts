@@ -15,7 +15,7 @@ test.describe('static marketing layout', () => {
     await expect(page.locator('h1')).toBeVisible();
   });
 
-  test('primary CTA is the exact ziran-v0.7.2 Ziran Android APK', async ({ page }) => {
+  test('primary CTA is the exact ziran-v0.7.3 Ziran Android APK', async ({ page }) => {
     await openSite(page);
     const cta = page.locator('a#download-apk[data-cta="download"]');
     await expect(cta).toBeVisible();

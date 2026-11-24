@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -11,27 +13,42 @@ import (
 const (
 	FlagJSON   byte = 0x00
 	FlagBinary byte = 0x01
+	FlagGzip   byte = 0x02
+
+	CompressThreshold = 2048
 )
 
 // WriteFrame writes a length-prefixed frame: [uint32 big-endian len][uint8 flags][payload].
+// Payloads larger than CompressThreshold are transparently gzip-compressed (stdlib) when smaller.
 func WriteFrame(w io.Writer, flags byte, payload []byte) error {
 	if len(payload) > MaxFrameBytes {
 		return fmt.Errorf("frame size %d exceeds max %d", len(payload), MaxFrameBytes)
 	}
+	out := payload
+	if len(payload) > CompressThreshold && flags&FlagGzip == 0 {
+		var buf bytes.Buffer
+		gz, err := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+		if err == nil {
+			if _, werr := gz.Write(payload); werr == nil && gz.Close() == nil && buf.Len() < len(payload) {
+				out = buf.Bytes()
+				flags |= FlagGzip
+			}
+		}
+	}
 	var hdr [5]byte
-	binary.BigEndian.PutUint32(hdr[0:4], uint32(len(payload)))
+	binary.BigEndian.PutUint32(hdr[0:4], uint32(len(out)))
 	hdr[4] = flags
 	if _, err := w.Write(hdr[:]); err != nil {
 		return err
 	}
-	if len(payload) == 0 {
+	if len(out) == 0 {
 		return nil
 	}
-	_, err := w.Write(payload)
+	_, err := w.Write(out)
 	return err
 }
 
-// ReadFrame reads a single length-prefixed frame with strict size bounds.
+// ReadFrame reads a single length-prefixed frame with strict size bounds and transparent decompression.
 func ReadFrame(r io.Reader) (byte, []byte, error) {
 	var hdr [5]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
@@ -47,7 +64,23 @@ func ReadFrame(r io.Reader) (byte, []byte, error) {
 			return 0, nil, err
 		}
 	}
-	return hdr[4], buf, nil
+	flags := hdr[4]
+	if flags&FlagGzip != 0 {
+		gz, err := gzip.NewReader(bytes.NewReader(buf))
+		if err != nil {
+			return 0, nil, fmt.Errorf("gzip open: %w", err)
+		}
+		defer gz.Close()
+		raw, err := io.ReadAll(io.LimitReader(gz, MaxFrameBytes+1))
+		if err != nil {
+			return 0, nil, fmt.Errorf("gzip decode: %w", err)
+		}
+		if len(raw) > MaxFrameBytes {
+			return 0, nil, fmt.Errorf("decompressed frame exceeds limit %d", MaxFrameBytes)
+		}
+		return flags &^ FlagGzip, raw, nil
+	}
+	return flags, buf, nil
 }
 
 // WriteEnvelope marshals and writes one Envelope frame onto a stream.

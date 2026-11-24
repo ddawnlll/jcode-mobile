@@ -22,6 +22,7 @@ type HistoryIndex struct {
 
 type indexedMeta struct {
 	Offset      int64
+	LineLen     int
 	ByteLen     int
 	Role        string
 	Preview     string
@@ -33,6 +34,7 @@ type indexedMeta struct {
 type indexedHistory struct {
 	mu      sync.RWMutex
 	logPath string
+	readF   *os.File // kept open for lock-free pread (ReadAt)
 	metas   []indexedMeta
 }
 
@@ -86,6 +88,7 @@ func (ih *indexedHistory) loadExisting() {
 			if json.Unmarshal(line, &m) == nil {
 				ih.metas = append(ih.metas, indexedMeta{
 					Offset:      pos,
+					LineLen:     len(line),
 					ByteLen:     len(m.Content),
 					Role:        m.Role,
 					Preview:     makePreview(m.Content, 96),
@@ -137,6 +140,7 @@ func (h *HistoryIndex) Sync(sessionID string, messages []agentsdk.Message) error
 			}
 			ih.metas = append(ih.metas, indexedMeta{
 				Offset:      pos,
+				LineLen:     len(line),
 				ByteLen:     len(m.Content),
 				Role:        m.Role,
 				Preview:     makePreview(m.Content, 96),
@@ -145,6 +149,9 @@ func (h *HistoryIndex) Sync(sessionID string, messages []agentsdk.Message) error
 				TimestampMs: m.TimestampMs,
 			})
 			pos += int64(len(line))
+		}
+		if ih.readF == nil {
+			ih.readF, _ = os.Open(ih.logPath)
 		}
 		return nil
 	}
@@ -171,6 +178,7 @@ func (h *HistoryIndex) Sync(sessionID string, messages []agentsdk.Message) error
 		}
 		metas = append(metas, indexedMeta{
 			Offset:      pos,
+			LineLen:     len(line),
 			ByteLen:     len(m.Content),
 			Role:        m.Role,
 			Preview:     makePreview(m.Content, 96),
@@ -182,28 +190,39 @@ func (h *HistoryIndex) Sync(sessionID string, messages []agentsdk.Message) error
 	}
 	_ = f.Sync()
 	_ = f.Close()
+	if ih.readF != nil {
+		_ = ih.readF.Close()
+		ih.readF = nil
+	}
 	if err := os.Rename(tmp, ih.logPath); err != nil {
 		return err
 	}
+	ih.readF, _ = os.Open(ih.logPath)
 	ih.metas = metas
 	return nil
 }
 
 func (ih *indexedHistory) readAt(f *os.File, idx int) (agentsdk.Message, error) {
-	if _, err := f.Seek(ih.metas[idx].Offset, io.SeekStart); err != nil {
-		return agentsdk.Message{}, err
-	}
-	rd := bufio.NewReaderSize(f, 8*1024)
-	line, err := rd.ReadBytes('\n')
+	meta := ih.metas[idx]
+	buf := make([]byte, meta.LineLen)
+	n, err := f.ReadAt(buf, meta.Offset)
 	if err != nil && err != io.EOF {
 		return agentsdk.Message{}, err
 	}
 	var m agentsdk.Message
-	if err := json.Unmarshal(line, &m); err != nil {
+	if err := json.Unmarshal(buf[:n], &m); err != nil {
 		return agentsdk.Message{}, err
 	}
 	m.Index = idx
 	return m, nil
+}
+
+func (ih *indexedHistory) readerFile() (*os.File, bool, error) {
+	if ih.readF != nil {
+		return ih.readF, false, nil
+	}
+	f, err := os.Open(ih.logPath)
+	return f, true, err
 }
 
 // Page performs O(1)-seek pagination by index range with a byte budget.
@@ -258,11 +277,13 @@ func (h *HistoryIndex) Page(sessionID string, beforeIndex, afterIndex, limit, ma
 		}
 	}
 
-	f, err := os.Open(ih.logPath)
+	f, shouldClose, err := ih.readerFile()
 	if err != nil {
 		return res, err
 	}
-	defer f.Close()
+	if shouldClose {
+		defer f.Close()
+	}
 
 	usedBytes := 0
 	for i := start; i < end; i++ {
@@ -334,11 +355,13 @@ func (h *HistoryIndex) Viewport(sessionID string, startIdx, endIdx, overscan, pr
 	res.WindowStart = winStart
 	res.WindowEnd = winEnd
 
-	f, err := os.Open(ih.logPath)
+	f, shouldClose, err := ih.readerFile()
 	if err != nil {
 		return res, err
 	}
-	defer f.Close()
+	if shouldClose {
+		defer f.Close()
+	}
 
 	for i := 0; i < total; i++ {
 		meta := ih.metas[i]

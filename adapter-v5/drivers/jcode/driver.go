@@ -27,12 +27,19 @@ type Config struct {
 	Binary      string // default: "jcode"
 }
 
+type cachedJCodeSession struct {
+	mtimeNs int64
+	size    int64
+	sess    agentsdk.Session
+}
+
 type Driver struct {
 	cfg    Config
 	nextID atomic.Uint64
 	mu     sync.Mutex
 	// Keep active socket connections per session for cancel/permission/steering.
 	conns map[string]net.Conn
+	cache map[string]cachedJCodeSession
 }
 
 func New(cfg Config) *Driver {
@@ -57,6 +64,7 @@ func New(cfg Config) *Driver {
 	return &Driver{
 		cfg:   cfg,
 		conns: make(map[string]net.Conn),
+		cache: make(map[string]cachedJCodeSession),
 	}
 }
 
@@ -141,6 +149,17 @@ func (d *Driver) ListSessions(_ context.Context) ([]agentsdk.Session, error) {
 			continue
 		}
 		sid := strings.TrimSuffix(ent.Name(), ".json")
+		mtimeNs := fi.ModTime().UnixNano()
+		sz := fi.Size()
+
+		d.mu.Lock()
+		cached, hit := d.cache[sid]
+		d.mu.Unlock()
+		if hit && cached.mtimeNs == mtimeNs && cached.size == sz {
+			out = append(out, cached.sess)
+			continue
+		}
+
 		title := sid
 		status := "idle"
 		workingDir := ""
@@ -175,7 +194,7 @@ func (d *Driver) ListSessions(_ context.Context) ([]agentsdk.Session, error) {
 				msgCount = len(doc.Messages)
 			}
 		}
-		out = append(out, agentsdk.Session{
+		sess := agentsdk.Session{
 			ID:              sid,
 			BackendID:       d.ID(),
 			Title:           title,
@@ -183,10 +202,14 @@ func (d *Driver) ListSessions(_ context.Context) ([]agentsdk.Session, error) {
 			WorkingDir:      workingDir,
 			UpdatedAtMs:     fi.ModTime().UnixMilli(),
 			MessageCount:    msgCount,
-			TranscriptBytes: fi.Size(),
+			TranscriptBytes: sz,
 			ParentSessionID: parentID,
 			AgentLabel:      agentLabel,
-		})
+		}
+		d.mu.Lock()
+		d.cache[strings.TrimSuffix(ent.Name(), ".json")] = cachedJCodeSession{mtimeNs: mtimeNs, size: sz, sess: sess}
+		d.mu.Unlock()
+		out = append(out, sess)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAtMs > out[j].UpdatedAtMs })
 	return out, nil

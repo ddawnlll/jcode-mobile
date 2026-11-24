@@ -440,6 +440,7 @@ fun ZiranApp(
                     is Screen.Thread -> ThreadScreen(
                         palette = palette,
                         state = state,
+                        composerTextFlow = controller.composerText,
                         sceneKey = state.scene,
                         onBack = back,
                         onPlan = {

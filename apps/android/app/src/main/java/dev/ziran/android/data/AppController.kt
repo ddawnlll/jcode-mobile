@@ -62,8 +62,19 @@ class AppController(
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
+    /** Scoped composer flow so typing never recomposes ZiranApp root. */
+    private val _composerText = MutableStateFlow("")
+    val composerText: StateFlow<String> = _composerText.asStateFlow()
+    private var draftSaveJob: Job? = null
+
     private fun setState(update: (AppState) -> AppState) {
-        _state.update(update)
+        _state.update { prev ->
+            val next = update(prev)
+            if (next.composerText != prev.composerText) {
+                _composerText.value = next.composerText
+            }
+            next
+        }
     }
 
     fun scope(): CoroutineScope = scope
@@ -674,7 +685,10 @@ class AppController(
 
     private fun applySnapshot(snapshot: SessionSnapshot) {
         val credential = currentCredential() ?: return
-        scope.launch { store.saveSnapshotCache(credential.serverId, snapshot.session.sessionId, snapshot.toString()) }
+        scope.launch {
+            dev.ziran.android.ui.MarkdownCache.prewarm(snapshot.messages)
+            store.saveSnapshotCache(credential.serverId, snapshot.session.sessionId, snapshot.toString())
+        }
         setState { applySnapshotToState(it, snapshot) }
         // Delivery is decided by operation state, never by matching text: an
         // older message with the same words is not proof that this send landed.
@@ -756,13 +770,42 @@ class AppController(
     // -- send / stop / permission ---------------------------------------------
 
     fun setComposerText(text: String) {
-        setState { it.copy(composerText = text) }
+        _composerText.value = text
         val credential = currentCredential() ?: return
         val sessionId = _state.value.activeSessionId ?: return
-        scope.launch { store.saveDraft(credential.serverId, sessionId, text) }
+        draftSaveJob?.cancel()
+        draftSaveJob = scope.launch {
+            kotlinx.coroutines.delay(250L)
+            store.saveDraft(credential.serverId, sessionId, text)
+        }
     }
 
-    suspend fun send() = sendText(_state.value.composerText)
+    /** Persist per-device reading position when connected to an Adapter v5 server. */
+    fun reportReadingPosition(sessionId: String, messageIndex: Int, scrollOffsetPx: Int = 0) {
+        val adapter = client ?: return
+        if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
+        val caps = adapter.server.value?.capabilities.orEmpty()
+        if ("reading.positions" !in caps) return
+        scope.launch {
+            runCatching {
+                adapter.request(
+                    "reading.set",
+                    JsonObject(
+                        mapOf(
+                            "session_id" to JsonPrimitive(sessionId),
+                            "message_index" to JsonPrimitive(messageIndex),
+                            "scroll_offset_px" to JsonPrimitive(scrollOffsetPx),
+                            "last_read_seq" to JsonPrimitive(_state.value.lastSeq),
+                        ),
+                    ),
+                    sessionId = sessionId,
+                    timeoutMs = 5000,
+                )
+            }
+        }
+    }
+
+    suspend fun send() = sendText(_composerText.value.ifEmpty { _state.value.composerText })
 
     /**
      * Send exactly the given text.
