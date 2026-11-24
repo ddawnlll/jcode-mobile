@@ -1,5 +1,6 @@
 package dev.ziran.android.data
 
+import androidx.compose.runtime.Immutable
 import dev.ziran.android.protocol.ContextView
 import dev.ziran.android.protocol.HistoryMessageView
 import dev.ziran.android.protocol.ModelRouteView
@@ -13,6 +14,7 @@ import dev.ziran.android.protocol.SwarmAgentView
 
 /** App-level state. One store survives screen unmounts. */
 
+@Immutable
 data class LiveTool(
     val seq: Long,
     val callId: String,
@@ -24,8 +26,10 @@ data class LiveTool(
     val startedAtMs: Long = System.currentTimeMillis(),
 )
 
+@Immutable
 data class LiveBlock(val seq: Long, val id: String, val text: String, val done: Boolean)
 
+@Immutable
 data class PendingMessage(
     val text: String,
     val operationId: String,
@@ -34,8 +38,10 @@ data class PendingMessage(
     val createdAt: Long,
 )
 
+@Immutable
 data class SentTurnNote(val text: String, val tag: String)
 
+@Immutable
 data class LiveState(
     val turnId: String? = null,
     val operationId: String? = null,
@@ -58,9 +64,12 @@ data class LiveState(
     val needsReconcile: Boolean = false,
 )
 
+@Immutable
 data class PermissionRequest(val requestId: String, val toolName: String, val description: String)
+@Immutable
 data class Recovery(val continuation: String, val notice: String?)
 
+@Immutable
 data class AppState(
     val phase: String = "loading", // loading | unpaired | pairing | ready
     val pairingError: String? = null,

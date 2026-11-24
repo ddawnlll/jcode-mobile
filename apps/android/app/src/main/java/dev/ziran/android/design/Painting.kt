@@ -208,7 +208,8 @@ fun Painting(
     val tyTargetPx = with(density) { (-6).dp.toPx() }
     val mistShiftPx = with(density) { 26.dp.toPx() }
 
-    var kbPhase by remember { mutableFloatStateOf(0f) }
+    val slowDriftState = androidx.compose.runtime.rememberUpdatedState(slowDrift)
+    val kbPhaseState = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(reducedMotion) {
         if (reducedMotion) return@LaunchedEffect
         var lastNs = withFrameNanos { it }
@@ -216,16 +217,12 @@ fun Painting(
             withFrameNanos { nowNs ->
                 val dtSec = ((nowNs - lastNs).coerceIn(0L, 100_000_000L)) / 1_000_000_000f
                 lastNs = nowNs
-                val speed = if (slowDrift) 0.25f else 1f
+                val speed = if (slowDriftState.value) 0.25f else 1f
                 // Full cycle = 2 * KenBurns (34s forward + 34s reverse)
                 val periodSec = (WuDurations.KenBurns * 2f) / 1000f
-                kbPhase = (kbPhase + (dtSec * speed) / periodSec) % 1f
+                kbPhaseState.floatValue = (kbPhaseState.floatValue + (dtSec * speed) / periodSec) % 1f
             }
         }
-    }
-    val kbValue = if (reducedMotion) 0f else {
-        // Smooth cosine ease 0 -> 1 -> 0 over kbPhase in 0..1
-        ((1f - kotlin.math.cos(kbPhase * 2f * kotlin.math.PI.toFloat())) * 0.5f)
     }
 
     val transition = if (reducedMotion) null else rememberInfiniteTransition(label = "painting-motion")
@@ -264,7 +261,9 @@ fun Painting(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        val p = kbValue
+                        val p = if (reducedMotion) 0f else {
+                            ((1f - kotlin.math.cos(kbPhaseState.floatValue * 2f * kotlin.math.PI.toFloat())) * 0.5f)
+                        }
                         val scale = if (reducedMotion) 1.03f else 1.03f + 0.07f * p
                         scaleX = scale
                         scaleY = scale

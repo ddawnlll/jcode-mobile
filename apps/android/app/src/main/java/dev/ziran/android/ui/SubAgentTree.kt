@@ -1,9 +1,11 @@
 package dev.ziran.android.ui
 
+import androidx.compose.runtime.Immutable
 import dev.ziran.android.protocol.SessionSummary
 import dev.ziran.android.protocol.SwarmAgentView
 
 /** Grouped top-level thread with its nested sub-agents. */
+@Immutable
 data class ThreadTreeItem(
     val session: SessionSummary,
     val subAgents: List<SessionSummary>,
@@ -68,16 +70,14 @@ fun buildThreadTree(
     }
 
     val topLevel = active.filter { it.parentSessionId.isNullOrBlank() }
-    val q = query.trim().lowercase()
+    val q = query.trim()
 
     fun matches(s: SessionSummary): Boolean {
         if (q.isEmpty()) return true
-        val haystack = buildString {
-            append(s.title.orEmpty()).append(' ')
-            append(s.swarmStatus ?: s.status).append(' ')
-            append(s.agentLabel.orEmpty())
-        }.lowercase()
-        return haystack.contains(q)
+        val statusText = s.swarmStatus ?: s.status
+        return (s.title != null && s.title.contains(q, ignoreCase = true)) ||
+            statusText.contains(q, ignoreCase = true) ||
+            (s.agentLabel != null && s.agentLabel.contains(q, ignoreCase = true))
     }
 
     val filtered = topLevel.mapNotNull { parent ->
@@ -98,11 +98,18 @@ fun buildThreadTree(
     }
 
     val comparator = when (sortMode) {
-        "name" -> compareBy<ThreadTreeItem> { (it.session.title ?: "").lowercase() }
-            .thenByDescending { it.session.updatedAtMs ?: 0L }
-        "status" -> compareBy<ThreadTreeItem> { sessionStatusRank(it.session.swarmStatus ?: it.session.status) }
-            .thenByDescending { it.session.updatedAtMs ?: 0L }
-        else -> compareByDescending<ThreadTreeItem> { it.session.updatedAtMs ?: 0L }
+        "name" -> Comparator<ThreadTreeItem> { a, b ->
+            val cmp = (a.session.title ?: "").compareTo(b.session.title ?: "", ignoreCase = true)
+            if (cmp != 0) cmp else (b.session.updatedAtMs ?: 0L).compareTo(a.session.updatedAtMs ?: 0L)
+        }
+        "status" -> Comparator<ThreadTreeItem> { a, b ->
+            val ra = sessionStatusRank(a.session.swarmStatus ?: a.session.status)
+            val rb = sessionStatusRank(b.session.swarmStatus ?: b.session.status)
+            if (ra != rb) ra.compareTo(rb) else (b.session.updatedAtMs ?: 0L).compareTo(a.session.updatedAtMs ?: 0L)
+        }
+        else -> Comparator<ThreadTreeItem> { a, b ->
+            (b.session.updatedAtMs ?: 0L).compareTo(a.session.updatedAtMs ?: 0L)
+        }
     }
 
     return filtered.sortedWith(comparator)

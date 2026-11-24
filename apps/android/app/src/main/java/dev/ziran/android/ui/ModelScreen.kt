@@ -291,7 +291,7 @@ fun ModelScreen(
                         val showHeader = sortMode == "provider" && route.provider != lastProvider
                         lastProvider = route.provider
                         if (showHeader) {
-                            item(key = "hdr-${route.provider}") {
+                            item(key = "hdr-${route.provider}", contentType = "provider-hdr") {
                                 Row(
                                     Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -307,7 +307,7 @@ fun ModelScreen(
                                 }
                             }
                         }
-                        item(key = "route-${route.provider}-${route.model}-${route.apiMethod}") {
+                        item(key = "route-${route.provider}-${route.model}-${route.apiMethod}", contentType = "model-row") {
                             val on = route.model == activeModelName
                             val sub = if (sortMode == "provider") {
                                 route.detail.ifBlank { if (route.available) "available" else "unavailable" }

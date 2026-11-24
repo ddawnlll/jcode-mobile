@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -76,37 +77,46 @@ private data class ScreenLayer(val screen: Screen, val modifier: Modifier)
 fun ScreenTransition(
     current: Screen,
     transition: NavTransition?,
-    progress: Float,
+    progressProvider: () -> Float,
     widthPx: Float,
     palette: Palette,
     reducedMotion: Boolean = false,
     content: @Composable (Screen) -> Unit,
 ) {
     val density = LocalDensity.current
-    val p = progress.coerceIn(0f, 1f)
-
     val layers: List<ScreenLayer>
-    var rodFraction: Float? = null
-    var rodAlpha = 0f
+    val showUnrollRod = transition != null && !reducedMotion &&
+        (transition.kind == NavKind.Unroll || transition.kind == NavKind.Roll)
 
     if (transition == null) {
         layers = listOf(ScreenLayer(current, Modifier.fillMaxSize()))
     } else if (reducedMotion && !transition.predictive) {
-        val eased = WuEasing.Default.transform(p)
         layers = listOf(
-            ScreenLayer(transition.from, Modifier.fillMaxSize().graphicsLayer { alpha = 1f - eased }),
-            ScreenLayer(transition.to, Modifier.fillMaxSize().graphicsLayer { alpha = eased }),
+            ScreenLayer(
+                transition.from,
+                Modifier.fillMaxSize().graphicsLayer {
+                    val eased = WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
+                    alpha = 1f - eased
+                },
+            ),
+            ScreenLayer(
+                transition.to,
+                Modifier.fillMaxSize().graphicsLayer {
+                    val eased = WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
+                    alpha = eased
+                },
+            ),
         )
     } else {
         when (transition.kind) {
             NavKind.InkDrop -> {
-                val e = WuEasing.Default.transform(p)
                 val origin = transition.origin.takeIf { it != Offset.Unspecified }
                     ?: Offset(widthPx * 0.5f, widthPx * 0.8f)
                 layers = listOf(
                     ScreenLayer(
                         transition.from,
                         Modifier.fillMaxSize().graphicsLayer {
+                            val e = WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
                             alpha = 1f - 0.65f * e
                             val s = 1f - 0.015f * e
                             scaleX = s
@@ -115,42 +125,49 @@ fun ScreenTransition(
                     ),
                     ScreenLayer(
                         transition.to,
-                        Modifier.fillMaxSize().inkCircleClip(origin, e),
+                        Modifier.fillMaxSize().inkCircleClip(origin) {
+                            WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
+                        },
                     ),
                 )
             }
 
             NavKind.Unroll -> {
-                val e = WuEasing.Default.transform(p)
-                if (e < 0.999f) {
-                    rodFraction = e
-                    rodAlpha = 0.75f * (1f - e * 0.25f)
-                }
                 layers = listOf(
-                    ScreenLayer(transition.from, Modifier.fillMaxSize().graphicsLayer { alpha = 1f - 0.5f * e }),
-                    ScreenLayer(transition.to, Modifier.fillMaxSize().unrollClip(e)),
+                    ScreenLayer(
+                        transition.from,
+                        Modifier.fillMaxSize().graphicsLayer {
+                            val e = WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
+                            alpha = 1f - 0.5f * e
+                        },
+                    ),
+                    ScreenLayer(
+                        transition.to,
+                        Modifier.fillMaxSize().unrollClip {
+                            WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
+                        },
+                    ),
                 )
             }
 
             NavKind.Roll -> {
-                val eRoll = WuEasing.Roll.transform(p)
-                val eBeneath = WuEasing.Default.transform(p)
-                val visibleFraction = 1f - eRoll
-                if (visibleFraction > 0.001f && visibleFraction < 0.999f) {
-                    rodFraction = visibleFraction
-                    rodAlpha = 0.75f * visibleFraction
-                }
                 layers = listOf(
                     ScreenLayer(
                         transition.to,
                         Modifier.fillMaxSize().graphicsLayer {
+                            val eBeneath = WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
                             alpha = 0.30f + 0.70f * eBeneath
                             val s = 0.985f + 0.015f * eBeneath
                             scaleX = s
                             scaleY = s
                         },
                     ),
-                    ScreenLayer(transition.from, Modifier.fillMaxSize().unrollClip(visibleFraction)),
+                    ScreenLayer(
+                        transition.from,
+                        Modifier.fillMaxSize().unrollClip {
+                            1f - WuEasing.Roll.transform(progressProvider().coerceIn(0f, 1f))
+                        },
+                    ),
                 )
             }
 
@@ -159,65 +176,57 @@ fun ScreenTransition(
                     val dragShiftPx = with(density) { 46.dp.toPx() }
                     val beneathShiftPx = with(density) { 40.dp.toPx() }
                     val maxShadowPx = with(density) { 14.dp.toPx() }
-
-                    val leaveTx: Float
-                    val leaveScale: Float
-                    val cornerDp: Float
-                    val beneathTx: Float
-                    val beneathAlpha: Float
-
-                    if (transition.predictiveCommitting) {
-                        val t = WuEasing.Default.transform(p)
-                        val sp = transition.commitStartProgress
-                        val startTx = dragShiftPx * sp
-                        val endTx = widthPx + with(density) { 30.dp.toPx() }
-                        leaveTx = startTx + (endTx - startTx) * t
-                        leaveScale = MotionMath.predictiveScale(sp) + (0.90f - MotionMath.predictiveScale(sp)) * t
-                        cornerDp = MotionMath.predictiveCornerPx(sp) + (30f - MotionMath.predictiveCornerPx(sp)) * t
-                        val bp = sp + (1f - sp) * t
-                        beneathTx = -beneathShiftPx * (1f - bp)
-                        beneathAlpha = 0.55f + 0.45f * bp
-                    } else {
-                        leaveTx = dragShiftPx * p
-                        leaveScale = MotionMath.predictiveScale(p)
-                        cornerDp = MotionMath.predictiveCornerPx(p)
-                        beneathTx = -beneathShiftPx * (1f - p)
-                        beneathAlpha = 0.55f + 0.45f * p
-                    }
+                    val extraEndPx = with(density) { 30.dp.toPx() }
+                    val committing = transition.predictiveCommitting
+                    val sp = transition.commitStartProgress
 
                     layers = listOf(
                         ScreenLayer(
                             transition.to,
                             Modifier.fillMaxSize().graphicsLayer {
-                                translationX = beneathTx
-                                alpha = beneathAlpha
+                                val p = progressProvider().coerceIn(0f, 1f)
+                                val bp = if (committing) sp + (1f - sp) * WuEasing.Default.transform(p) else p
+                                translationX = -beneathShiftPx * (1f - bp)
+                                alpha = 0.55f + 0.45f * bp
                             },
                         ),
                         ScreenLayer(
                             transition.from,
                             Modifier.fillMaxSize().graphicsLayer {
+                                val p = progressProvider().coerceIn(0f, 1f)
+                                val leaveTx: Float
+                                val leaveScale: Float
+                                val cornerDp: Float
+                                if (committing) {
+                                    val t = WuEasing.Default.transform(p)
+                                    val startTx = dragShiftPx * sp
+                                    val endTx = widthPx + extraEndPx
+                                    leaveTx = startTx + (endTx - startTx) * t
+                                    leaveScale = MotionMath.predictiveScale(sp) + (0.90f - MotionMath.predictiveScale(sp)) * t
+                                    cornerDp = MotionMath.predictiveCornerPx(sp) + (30f - MotionMath.predictiveCornerPx(sp)) * t
+                                } else {
+                                    leaveTx = dragShiftPx * p
+                                    leaveScale = MotionMath.predictiveScale(p)
+                                    cornerDp = MotionMath.predictiveCornerPx(p)
+                                }
                                 translationX = leaveTx
                                 scaleX = leaveScale
                                 scaleY = leaveScale
                                 transformOrigin = TransformOrigin.Center
                                 clip = cornerDp > 0.1f
                                 shape = RoundedCornerShape(cornerDp.dp)
-                                shadowElevation = maxShadowPx * (if (transition.predictiveCommitting) 1f else p)
+                                shadowElevation = maxShadowPx * (if (committing) 1f else p)
                             },
                         ),
                     )
                 } else {
-                    val eIn = WuEasing.Default.transform(p)
-                    val eOut = WuEasing.SlideOut.transform(p)
-                    val beneathX = MotionMath.backParallaxOffsetX(eIn, widthPx)
-                    val leavingX = MotionMath.backSlideOffsetX(eOut, widthPx)
                     val edgeShadowW = with(density) { 18.dp.toPx() }
-
                     layers = listOf(
                         ScreenLayer(
                             transition.to,
                             Modifier.fillMaxSize().graphicsLayer {
-                                translationX = beneathX
+                                val eIn = WuEasing.Default.transform(progressProvider().coerceIn(0f, 1f))
+                                translationX = MotionMath.backParallaxOffsetX(eIn, widthPx)
                                 alpha = 0.55f + 0.45f * eIn
                             },
                         ),
@@ -225,9 +234,13 @@ fun ScreenTransition(
                             transition.from,
                             Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { translationX = leavingX }
+                                .graphicsLayer {
+                                    val eOut = WuEasing.SlideOut.transform(progressProvider().coerceIn(0f, 1f))
+                                    translationX = MotionMath.backSlideOffsetX(eOut, widthPx)
+                                }
                                 .drawWithContent {
                                     drawContent()
+                                    val eOut = WuEasing.SlideOut.transform(progressProvider().coerceIn(0f, 1f))
                                     if (eOut > 0.001f && eOut < 0.999f) {
                                         drawRect(
                                             brush = Brush.horizontalGradient(
@@ -261,19 +274,31 @@ fun ScreenTransition(
             }
         }
 
-        // Ink rod overlay for Unroll / Roll transitions.
-        val rf = rodFraction
-        if (rf != null) {
+        // Ink rod overlay for Unroll / Roll transitions (reads progress in draw phase only).
+        if (showUnrollRod && transition != null) {
+            val isRoll = transition.kind == NavKind.Roll
             Canvas(Modifier.fillMaxSize()) {
-                val y = size.height * rf
-                val rodH = 6.dp.toPx()
-                val overhang = 6.dp.toPx()
-                drawRoundRect(
-                    color = palette.ink.copy(alpha = rodAlpha),
-                    topLeft = Offset(-overhang, y - rodH / 2f),
-                    size = Size(size.width + overhang * 2f, rodH),
-                    cornerRadius = CornerRadius(3.dp.toPx()),
-                )
+                val p = progressProvider().coerceIn(0f, 1f)
+                val rf: Float
+                val rodAlpha: Float
+                if (isRoll) {
+                    rf = 1f - WuEasing.Roll.transform(p)
+                    rodAlpha = 0.75f * rf
+                } else {
+                    rf = WuEasing.Default.transform(p)
+                    rodAlpha = 0.75f * (1f - rf * 0.25f)
+                }
+                if (rf > 0.001f && rf < 0.999f) {
+                    val y = size.height * rf
+                    val rodH = 6.dp.toPx()
+                    val overhang = 6.dp.toPx()
+                    drawRoundRect(
+                        color = palette.ink.copy(alpha = rodAlpha),
+                        topLeft = Offset(-overhang, y - rodH / 2f),
+                        size = Size(size.width + overhang * 2f, rodH),
+                        cornerRadius = CornerRadius(3.dp.toPx()),
+                    )
+                }
             }
         }
     }
@@ -281,35 +306,43 @@ fun ScreenTransition(
 
 /**
  * Circular ink reveal from [origin] to 160% of the farthest corner.
- * At progress ~0 (radius < 1 px), draws NOTHING so the incoming screen never
- * flashes full-frame before shrinking.
+ * Reuses a cached Path and reads progress strictly in the draw phase.
  */
-fun Modifier.inkCircleClip(origin: Offset, progress: Float): Modifier = this.then(
-    Modifier.drawWithContent {
-        val clamped = progress.coerceIn(0f, 1f)
-        if (clamped <= 0.001f) return@drawWithContent
-        if (clamped >= 0.999f) {
-            drawContent()
-            return@drawWithContent
-        }
-        val radius = 1.6f * hypot(
+fun Modifier.inkCircleClip(origin: Offset, progressProvider: () -> Float): Modifier = this.then(
+    Modifier.drawWithCache {
+        val clipPathObj = Path()
+        val maxRadius = 1.6f * hypot(
             maxOf(origin.x, size.width - origin.x).toDouble(),
             maxOf(origin.y, size.height - origin.y).toDouble(),
-        ).toFloat() * clamped
-        if (radius < 1f) return@drawWithContent
-        clipPath(Path().apply { addOval(Rect(center = origin, radius = radius)) }) {
-            this@drawWithContent.drawContent()
+        ).toFloat()
+        onDrawWithContent {
+            val clamped = progressProvider().coerceIn(0f, 1f)
+            if (clamped <= 0.001f) return@onDrawWithContent
+            if (clamped >= 0.999f) {
+                drawContent()
+                return@onDrawWithContent
+            }
+            val radius = maxRadius * clamped
+            if (radius < 1f) return@onDrawWithContent
+            clipPathObj.reset()
+            clipPathObj.addOval(Rect(center = origin, radius = radius))
+            clipPath(clipPathObj) {
+                this@onDrawWithContent.drawContent()
+            }
         }
     },
 )
+
+fun Modifier.inkCircleClip(origin: Offset, progress: Float): Modifier =
+    inkCircleClip(origin) { progress }
 
 /**
  * Vertical top-down unroll clip: `clip-path: inset(0 0 (1-p)*100% 0)`.
  * Reveals from y = 0 down to y = height * progress.
  */
-fun Modifier.unrollClip(progress: Float): Modifier = this.then(
+fun Modifier.unrollClip(progressProvider: () -> Float): Modifier = this.then(
     Modifier.drawWithContent {
-        val clamped = progress.coerceIn(0f, 1f)
+        val clamped = progressProvider().coerceIn(0f, 1f)
         if (clamped <= 0.001f) return@drawWithContent
         if (clamped >= 0.999f) {
             drawContent()
@@ -320,6 +353,8 @@ fun Modifier.unrollClip(progress: Float): Modifier = this.then(
         }
     },
 )
+
+fun Modifier.unrollClip(progress: Float): Modifier = unrollClip { progress }
 
 /** Board duration for each kind. */
 fun navDurationMs(kind: NavKind): Int = when (kind) {

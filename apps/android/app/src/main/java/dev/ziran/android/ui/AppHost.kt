@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ziran.android.data.AppController
 import dev.ziran.android.design.InkRippleHost
+import dev.ziran.android.design.LocalAnimatorScale
 import dev.ziran.android.design.MotionMath
 import dev.ziran.android.design.Palette
 import dev.ziran.android.design.ReducedFadeScale
@@ -46,7 +48,7 @@ import dev.ziran.android.design.WuDurations
 import dev.ziran.android.design.WuEasing
 import dev.ziran.android.design.WuFonts
 import dev.ziran.android.design.rememberAnimatedPalette
-import dev.ziran.android.design.rememberAnimatorScale
+import dev.ziran.android.design.rememberObservedAnimatorScale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -93,9 +95,10 @@ fun ZiranApp(
         else -> dark
     }
 
-    val durationScale = rememberAnimatorScale()
+    val durationScale = rememberObservedAnimatorScale()
     val reduced = durationScale <= 0.01f
     val palette = rememberAnimatedPalette(isNight = isNight, reducedMotion = reduced)
+    val threadsListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -334,6 +337,7 @@ fun ZiranApp(
 
     val painted = transition
 
+    CompositionLocalProvider(LocalAnimatorScale provides durationScale) {
     Box(Modifier.fillMaxSize().background(palette.paper)) {
         InkRippleHost(
             ink = palette.ink,
@@ -344,7 +348,7 @@ fun ZiranApp(
             ScreenTransition(
                 current = screen,
                 transition = painted,
-                progress = navProgress.value,
+                progressProvider = { navProgress.value },
                 widthPx = widthPx,
                 palette = palette,
                 reducedMotion = reduced,
@@ -389,6 +393,7 @@ fun ZiranApp(
                                     snapshotAgents = state.agents,
                                     activeParentId = state.activeSessionId,
                                     sortMode = state.threadsSort,
+                                    listState = threadsListState,
                                     onSortChange = { sort -> scope.launch { controller.setThreadsSort(sort) } },
                                     onOpen = { id ->
                                         go(Screen.Thread(id), NavKind.InkDrop, lastTap)
@@ -539,6 +544,7 @@ fun ZiranApp(
                 modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
             )
         }
+    }
     }
 }
 

@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -102,14 +103,6 @@ fun HomeScreen(
     val recent = remember(tree) { tree.filter { sessionStatusRank(it.session.swarmStatus ?: it.session.status) >= 2 }.take(8) }
 
     val expandedParents = remember { mutableStateMapOf<String, Boolean>() }
-
-    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(working.isNotEmpty()) {
-        while (working.isNotEmpty()) {
-            nowMs = System.currentTimeMillis()
-            delay(1000L)
-        }
-    }
 
     val waitCount = waitingThreads.size + (if (state.live.permission != null) 1 else 0)
     val serverOnline = state.connection == "connected"
@@ -191,11 +184,11 @@ fun HomeScreen(
                         )
                     }
                 }
-                items(waitingThreads, key = { "wait-${it.session.sessionId}" }) { item ->
+                items(waitingThreads, key = { "wait-${it.session.sessionId}" }, contentType = { "thread-row" }) { item ->
                     HomeThreadRow(
                         session = item.session,
                         note = "waiting for you",
-                        elapsed = null,
+                        elapsedSinceMs = null,
                         palette = palette,
                         reducedMotion = reducedMotion,
                         onClick = { onOpenThread(item.session.sessionId) },
@@ -234,15 +227,13 @@ fun HomeScreen(
                         )
                     }
                 } else {
-                    items(working, key = { "work-${it.session.sessionId}" }) { item ->
-                        val secs = item.session.updatedAtMs?.let { ((nowMs - it) / 1000L).coerceAtLeast(0L) } ?: 0L
-                        val el = "${secs / 60}:${(secs % 60).toString().padStart(2, '0')}"
+                    items(working, key = { "work-${it.session.sessionId}" }, contentType = { "working-row" }) { item ->
                         val isOpen = expandedParents[item.session.sessionId] ?: true
                         Column(Modifier.fillMaxWidth().animateItem()) {
                             HomeThreadRow(
                                 session = item.session,
                                 note = item.session.swarmStatus ?: "working",
-                                elapsed = el,
+                                elapsedSinceMs = item.session.updatedAtMs ?: 0L,
                                 palette = palette,
                                 reducedMotion = reducedMotion,
                                 onClick = { onOpenThread(item.session.sessionId) },
@@ -279,13 +270,13 @@ fun HomeScreen(
                         )
                     }
                 } else {
-                    items(recent, key = { "recent-${it.session.sessionId}" }) { item ->
+                    items(recent, key = { "recent-${it.session.sessionId}" }, contentType = { "thread-row" }) { item ->
                         val st = item.session.swarmStatus ?: item.session.status
                         val isRest = sessionStatusRank(st) == 3
                         HomeThreadRow(
                             session = item.session,
                             note = if (isRest) "resting" else "finished",
-                            elapsed = null,
+                            elapsedSinceMs = null,
                             palette = palette,
                             reducedMotion = reducedMotion,
                             dimmed = isRest,
@@ -392,60 +383,77 @@ private fun HomePermissionCard(
 internal fun HomeThreadRow(
     session: SessionSummary,
     note: String,
-    elapsed: String?,
+    elapsedSinceMs: Long? = null,
     palette: Palette,
     reducedMotion: Boolean,
     dimmed: Boolean = false,
+    statusRank: Int = sessionStatusRank(session.swarmStatus ?: session.status),
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val st = session.swarmStatus ?: session.status
-    val rank = sessionStatusRank(st)
+    val alphaFactor = if (dimmed) 0.62f else 1f
+    val titleColor = if (dimmed) palette.ink.copy(alpha = alphaFactor) else palette.ink
+    val noteColor = if (dimmed) palette.ink3.copy(alpha = alphaFactor) else palette.ink3
+    val sealBg = if (dimmed) palette.seal.copy(alpha = alphaFactor) else palette.seal
+    val sealFg = if (dimmed) palette.onSeal.copy(alpha = alphaFactor) else palette.onSeal
     Row(
         modifier
             .fillMaxWidth()
-            .graphicsLayer { alpha = if (dimmed) 0.62f else 1f }
             .wuClickable(reducedMotion = reducedMotion, onClick = onClick)
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Seal(
-            kind = AgentKind.fromLabel(session.agentLabel),
+            kind = session.agentKind,
             sizeDp = 28,
-            backgroundColor = palette.seal,
-            strokeColor = palette.onSeal,
+            backgroundColor = sealBg,
+            strokeColor = sealFg,
         )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 session.title ?: "Untitled thread",
-                style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 17.sp, lineHeight = 22.sp, color = palette.ink),
+                style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 17.sp, lineHeight = 22.sp, color = titleColor),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     note,
-                    style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 13.5.sp, lineHeight = 18.sp, fontStyle = FontStyle.Italic, color = palette.ink3),
+                    style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 13.5.sp, lineHeight = 18.sp, fontStyle = FontStyle.Italic, color = noteColor),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (elapsed != null) {
-                    Text(
-                        " · $elapsed",
-                        style = TextStyle(
-                            fontFamily = WuFonts.Mono,
-                            fontSize = 11.sp,
-                            fontFeatureSettings = "tnum",
-                            color = palette.blue,
-                        ),
-                    )
+                if (elapsedSinceMs != null) {
+                    LiveElapsedText(sinceMs = elapsedSinceMs, color = palette.blue)
                 }
             }
         }
         Spacer(Modifier.width(10.dp))
-        SessionStatusMark(rank = rank, palette = palette, reducedMotion = reducedMotion)
+        SessionStatusMark(rank = statusRank, palette = palette, reducedMotion = reducedMotion)
     }
+}
+
+/** Leaf composable so only the 4-char timer recomposes once per second, never the whole HomeScreen. */
+@Composable
+private fun LiveElapsedText(sinceMs: Long, color: Color) {
+    var nowMs by remember(sinceMs) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(sinceMs) {
+        while (true) {
+            delay(1000L)
+            nowMs = System.currentTimeMillis()
+        }
+    }
+    val secs = if (sinceMs > 0L) ((nowMs - sinceMs) / 1000L).coerceAtLeast(0L) else 0L
+    Text(
+        " · ${secs / 60}:${(secs % 60).toString().padStart(2, '0')}",
+        style = TextStyle(
+            fontFamily = WuFonts.Mono,
+            fontSize = 11.sp,
+            fontFeatureSettings = "tnum",
+            color = color,
+        ),
+    )
 }
 
 @Composable
@@ -533,7 +541,7 @@ private fun SubAgentRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .drawBehind {
+            .drawWithCache {
                 val x = 13.5.dp.toPx()
                 val midY = size.height * 0.48f
                 val endX = 29.dp.toPx()
@@ -544,7 +552,10 @@ private fun SubAgentRow(
                     quadraticTo(x, midY, x + r, midY)
                     lineTo(endX, midY)
                 }
-                drawPath(path, lineColor, style = Stroke(1.dp.toPx(), cap = StrokeCap.Round))
+                val stroke = Stroke(1.dp.toPx(), cap = StrokeCap.Round)
+                onDrawBehind {
+                    drawPath(path, lineColor, style = stroke)
+                }
             }
             .wuClickable(reducedMotion = reducedMotion, onClick = onClick)
             .padding(start = 36.dp, top = 7.dp, bottom = 7.dp),
@@ -587,17 +598,17 @@ private fun SubAgentRow(
 
 @Composable
 private fun HomeFlowHairline(palette: Palette, reducedMotion: Boolean, modifier: Modifier = Modifier) {
-    val flowX = if (!reducedMotion) {
+    val flowAnim = if (!reducedMotion) {
         rememberInfiniteTransition(label = "home-flow").animateFloat(
             initialValue = -0.6f,
             targetValue = 1.6f,
             animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
             label = "home-flow-x",
-        ).value
-    } else 0.3f
+        )
+    } else null
     val blue = palette.blue
     Canvas(modifier.fillMaxWidth().height(1.5.dp)) {
-        val x = flowX * size.width
+        val x = (flowAnim?.value ?: 0.3f) * size.width
         val w = size.width * 0.45f
         drawRect(
             brush = Brush.horizontalGradient(

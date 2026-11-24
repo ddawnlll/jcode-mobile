@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -67,6 +69,7 @@ fun ThreadsScreen(
     snapshotAgents: List<SwarmAgentView>? = null,
     activeParentId: String? = null,
     sortMode: String = "recent",
+    listState: LazyListState = rememberLazyListState(),
     onSortChange: (String) -> Unit = {},
     onOpen: (String) -> Unit = {},
     onArchive: (String) -> Unit = {},
@@ -100,7 +103,6 @@ fun ThreadsScreen(
             activeParentId = activeParentId,
         )
     }
-    val listState = rememberLazyListState()
     val countLabel = "${tree.size} ${if (tree.size == 1) "thread" else "threads"}"
 
     Box(Modifier.fillMaxSize().background(palette.paper)) {
@@ -179,34 +181,50 @@ fun ThreadsScreen(
                         )
                     }
                 } else {
-                    items(tree, key = { it.session.sessionId }) { item ->
+                    items(
+                        tree,
+                        key = { it.session.sessionId },
+                        contentType = { if (it.subAgents.isNotEmpty()) "thread-group" else "thread-row" },
+                    ) { item ->
                         val s = item.session
                         val st = s.swarmStatus ?: s.status
-                        val isRest = sessionStatusRank(st) == 3
-                        val open = item.autoExpandedBySearch || (expandedParents[s.sessionId] ?: false)
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .animateItem()
-                                .drawBehind {
-                                    drawLine(
-                                        palette.line,
-                                        Offset(0f, size.height),
-                                        Offset(size.width, size.height),
-                                        1.dp.toPx(),
-                                    )
-                                },
-                        ) {
+                        val rank = sessionStatusRank(st)
+                        val isRest = rank == 3
+                        val rowDivider = Modifier
+                            .animateItem(fadeInSpec = null, fadeOutSpec = null)
+                            .drawBehind {
+                                drawLine(
+                                    palette.line,
+                                    Offset(0f, size.height),
+                                    Offset(size.width, size.height),
+                                    1.dp.toPx(),
+                                )
+                            }
+                        if (item.subAgents.isEmpty()) {
                             HomeThreadRow(
                                 session = s,
                                 note = "${s.agentLabel ?: "agent"} · $st",
-                                elapsed = null,
+                                elapsedSinceMs = null,
                                 palette = palette,
                                 reducedMotion = reducedMotion,
                                 dimmed = isRest,
+                                statusRank = rank,
                                 onClick = { onOpen(s.sessionId) },
+                                modifier = rowDivider,
                             )
-                            if (item.subAgents.isNotEmpty()) {
+                        } else {
+                            val open = item.autoExpandedBySearch || (expandedParents[s.sessionId] ?: false)
+                            Column(Modifier.fillMaxWidth().then(rowDivider)) {
+                                HomeThreadRow(
+                                    session = s,
+                                    note = "${s.agentLabel ?: "agent"} · $st",
+                                    elapsedSinceMs = null,
+                                    palette = palette,
+                                    reducedMotion = reducedMotion,
+                                    dimmed = isRest,
+                                    statusRank = rank,
+                                    onClick = { onOpen(s.sessionId) },
+                                )
                                 SubAgentGroupBlock(
                                     subAgents = item.subAgents,
                                     expanded = open,
@@ -359,18 +377,23 @@ fun InkUnderline(
 ) {
     @Suppress("UNUSED_VARIABLE")
     val ignored = reducedMotion
-    Canvas(modifier.fillMaxWidth().height(6.dp)) {
-        val w = size.width
-        val h = size.height
-        val p = androidx.compose.ui.graphics.Path().apply {
-            moveTo(0f, h * 0.65f)
-            cubicTo(w * 0.2f, h * 0.25f, w * 0.45f, h * 0.8f, w * 0.7f, h * 0.4f)
-            cubicTo(w * 0.85f, h * 0.25f, w * 0.95f, h * 0.55f, w, h * 0.4f)
-        }
-        drawPath(
-            p,
-            color = palette.ink.copy(alpha = 0.55f),
-            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round),
-        )
-    }
+    val color = palette.ink.copy(alpha = 0.55f)
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(6.dp)
+            .drawWithCache {
+                val w = size.width
+                val h = size.height
+                val p = androidx.compose.ui.graphics.Path().apply {
+                    moveTo(0f, h * 0.65f)
+                    cubicTo(w * 0.2f, h * 0.25f, w * 0.45f, h * 0.8f, w * 0.7f, h * 0.4f)
+                    cubicTo(w * 0.85f, h * 0.25f, w * 0.95f, h * 0.55f, w, h * 0.4f)
+                }
+                val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+                onDrawBehind {
+                    drawPath(p, color = color, style = stroke)
+                }
+            },
+    )
 }

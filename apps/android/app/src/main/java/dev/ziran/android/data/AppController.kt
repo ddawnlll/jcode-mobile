@@ -515,8 +515,14 @@ class AppController(
         }
     }
 
+    private var sessionsRefreshJob: kotlinx.coroutines.Job? = null
+
     private fun scheduleSessionsRefresh() {
-        scope.launch { kotlinx.coroutines.delay(32); refreshSessions() }
+        sessionsRefreshJob?.cancel()
+        sessionsRefreshJob = scope.launch {
+            kotlinx.coroutines.delay(120)
+            refreshSessions()
+        }
     }
 
     private suspend fun loadCachedSessions(serverId: String): List<SessionSummary>? {
@@ -805,11 +811,19 @@ class AppController(
                 }
                 "stop" -> {
                     stop()
-                    // Wait for turn_stopped / idle before sending.
+                    // Wait for turn_stopped / idle before sending; never dispatch while still running.
                     var waited = 0
-                    while (waited < 5000 && (_state.value.live.turnId != null || _state.value.live.daemonRunning)) {
+                    while (waited < 20000 && (_state.value.live.turnId != null || _state.value.live.daemonRunning)) {
                         kotlinx.coroutines.delay(100L)
                         waited += 100
+                    }
+                    if (_state.value.live.turnId != null || _state.value.live.daemonRunning) {
+                        setState {
+                            it.copy(
+                                sessionsError = "The current turn is still stopping. Wait for it to settle before sending.",
+                            )
+                        }
+                        return
                     }
                     expectedTurnId = null
                     sentTag = "sent after stop"
