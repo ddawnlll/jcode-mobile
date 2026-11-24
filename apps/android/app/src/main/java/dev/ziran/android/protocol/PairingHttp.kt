@@ -30,24 +30,34 @@ object PairingHttp {
     suspend fun pair(baseUrl: String, code: String, deviceName: String, http: OkHttpClient): PairPayload =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         val normalized = dev.ziran.android.connection.ServerUrls.normalize(baseUrl)
-        val body = JsonObject(
-            mapOf(
-                "code" to JsonPrimitive(code.trim()),
-                "device_name" to JsonPrimitive(deviceName.trim()),
+        val mediaType = "application/json".toMediaType()
+        val bodyStr = json.encodeToString(
+            JsonObject.serializer(),
+            JsonObject(
+                mapOf(
+                    "code" to JsonPrimitive(code.trim()),
+                    "device_name" to JsonPrimitive(deviceName.trim()),
+                ),
             ),
-        ).let { json.encodeToString(JsonObject.serializer(), it) }
-            .toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url("$normalized/v2/pair")
-            .post(body)
-            .build()
-        // `use` closes the response body on the success path and on a throw.
-        http.newCall(request).execute().use { response ->
-            val text = response.body.string()
-            val obj = json.parseToJsonElement(text).jsonObject
-            if (!response.isSuccessful) throw AdapterRequestError(parseError(obj.objOr("error") ?: obj))
-            buildPayload(obj)
+        )
+        fun executePair(path: String): Pair<Int, String> {
+            val request = Request.Builder()
+                .url("$normalized$path")
+                .post(bodyStr.toRequestBody(mediaType))
+                .build()
+            return http.newCall(request).execute().use { response ->
+                response.code to response.body.string()
+            }
         }
+        var (statusCode, text) = executePair("/v2/pair")
+        if (statusCode == 404) {
+            val fallback = executePair("/pair")
+            statusCode = fallback.first
+            text = fallback.second
+        }
+        val obj = json.parseToJsonElement(text).jsonObject
+        if (statusCode !in 200..299) throw AdapterRequestError(parseError(obj.objOr("error") ?: obj))
+        buildPayload(obj)
     }
 
     /**
@@ -93,8 +103,10 @@ object PairingHttp {
                                 }
                                 val adapterVersion = obj["adapter_version"]?.jsonPrimitive?.contentOrNull ?: "unknown"
                                 val protocolVersion = obj["protocol_version"]?.jsonPrimitive?.intOrNull ?: 0
-                                val minProtocol = obj["min_protocol_version"]?.jsonPrimitive?.intOrNull ?: protocolVersion
-                                val jcodeConnected = obj["jcode_connected"]?.jsonPrimitive?.booleanOrNull ?: false
+                                val minProtocol = obj["min_protocol_version"]?.jsonPrimitive?.intOrNull
+                                    ?: obj["min_version"]?.jsonPrimitive?.intOrNull
+                                    ?: protocolVersion
+                                val jcodeConnected = obj["jcode_connected"]?.jsonPrimitive?.booleanOrNull ?: true
                                 val compatible = protocolVersion >= MIN_PROTOCOL_VERSION && minProtocol <= PROTOCOL_VERSION
                                 cont.resume(
                                     HealthProbeResult.Reachable(
@@ -118,11 +130,30 @@ object PairingHttp {
     private fun buildPayload(obj: JsonObject): PairPayload {
         val token = obj["token"]?.let { it.toString().trim('"') }
         val device = obj["device"]?.let { runCatching { it.jsonObject }.getOrNull() }
-        val server = obj["server"]?.let { runCatching { it.jsonObject }.getOrNull() }
-        if (token.isNullOrEmpty() || device == null || server == null) {
+        val serverObj = obj["server"]?.let { runCatching { it.jsonObject }.getOrNull() }
+        if (token.isNullOrEmpty() || device == null) {
             throw IllegalStateException("The adapter returned an incomplete pairing response.")
         }
-        return PairPayload(token, parseDeviceInfo(device), parseServerInfo(server))
+        val serverInfo = if (serverObj != null) {
+            parseServerInfo(serverObj)
+        } else {
+            val serverId = obj["server_id"]?.jsonPrimitive?.contentOrNull
+                ?: throw IllegalStateException("The adapter returned an incomplete pairing response.")
+            ServerInfo(
+                serverId = serverId,
+                name = obj["name"]?.jsonPrimitive?.contentOrNull ?: serverId,
+                adapterVersion = obj["adapter_version"]?.jsonPrimitive?.contentOrNull ?: "5.0.0",
+                protocolVersion = obj["protocol_version"]?.jsonPrimitive?.intOrNull ?: PROTOCOL_VERSION,
+                minProtocolVersion = obj["min_protocol_version"]?.jsonPrimitive?.intOrNull ?: MIN_PROTOCOL_VERSION,
+                jcodeVersion = "",
+                jcodeProtocolVersion = 0,
+                jcodeCapabilities = emptyList(),
+                healthy = true,
+                capabilities = emptyList(),
+                startedAtMs = 0L,
+            )
+        }
+        return PairPayload(token, parseDeviceInfo(device), serverInfo)
     }
 }
 

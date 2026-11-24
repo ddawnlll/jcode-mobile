@@ -9,7 +9,7 @@ import (
 const (
 	VersionV5       = 5
 	VersionV4       = 4
-	MinVersion      = 4
+	MinVersion      = 2
 	ALPN            = "ziran-v5"
 	SubprotocolV5   = "ziran.v5"
 	SubprotocolV4   = "jcode.mobile.v4"

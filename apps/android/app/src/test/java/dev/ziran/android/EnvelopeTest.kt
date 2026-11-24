@@ -49,9 +49,10 @@ class EnvelopeTest {
     }
 
     @Test fun helloOffersMinMaxAndSubprotocols() {
-        val hello = EnvelopeWriter.helloPayload("ziran-android", "0.7.0")
+        val hello = EnvelopeWriter.helloPayload("ziran-android", "0.7.3")
         assertEquals(2, hello["min_version"]?.toString()?.trim('"')?.toInt())
-        assertEquals(4, hello["max_version"]?.toString()?.trim('"')?.toInt())
+        assertEquals(5, hello["max_version"]?.toString()?.trim('"')?.toInt())
+        assertTrue(hello["supports"].toString().contains("ziran.v5"))
         assertTrue(hello["supports"].toString().contains("jcode.mobile.v4"))
     }
 }

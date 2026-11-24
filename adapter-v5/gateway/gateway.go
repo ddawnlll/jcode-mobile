@@ -333,7 +333,7 @@ func (g *Gateway) HandleEnvelope(ctx context.Context, client *ClientSession, env
 	}
 
 	switch env.Type {
-	case "hello", "server.info":
+	case "hello", "client.hello", "server.info":
 		return g.handleHello(ctx, v, env)
 	case "backends.list":
 		return g.handleBackendsList(ctx, v, env)
@@ -343,6 +343,8 @@ func (g *Gateway) HandleEnvelope(ctx context.Context, client *ClientSession, env
 		return g.handleSessionsDelta(ctx, v, env)
 	case "sessions.page":
 		return g.handleSessionsPage(ctx, v, env)
+	case "sessions.snapshot":
+		return g.handleSessionsSnapshot(ctx, v, env)
 	case "sessions.create":
 		return g.handleSessionsCreate(ctx, v, env)
 	case "sessions.rename":
@@ -408,26 +410,106 @@ func (g *Gateway) collectBackends(ctx context.Context) []agentsdk.BackendInfo {
 	return infos
 }
 
+// ServerInfoMap returns the v4/v5 compatible server metadata object.
+func (g *Gateway) ServerInfoMap() map[string]any {
+	return map[string]any{
+		"server_id":              g.state.ServerID(),
+		"name":                   g.cfg.ServerName,
+		"adapter_version":        Version,
+		"protocol_version":       protocol.VersionV5,
+		"min_protocol_version":   protocol.MinVersion,
+		"jcode_version":          "",
+		"jcode_protocol_version": 0,
+		"jcode_capabilities":     []string{},
+		"healthy":                true,
+		"capabilities":           protocol.GatewayCapabilities,
+		"started_at_ms":          g.started,
+	}
+}
+
 func (g *Gateway) handleHello(ctx context.Context, v int, env protocol.Envelope) protocol.Envelope {
 	var req struct {
-		MinVersion int `json:"min_version"`
-		MaxVersion int `json:"max_version"`
+		MinVersion         int `json:"min_version"`
+		MaxVersion         int `json:"max_version"`
+		MinProtocolVersion int `json:"min_protocol_version"`
+		MaxProtocolVersion int `json:"max_protocol_version"`
 	}
 	_ = json.Unmarshal(env.Payload, &req)
-	negotiated, ok := protocol.NegotiateVersion(req.MinVersion, req.MaxVersion)
+	minV := req.MinVersion
+	if minV == 0 {
+		minV = req.MinProtocolVersion
+	}
+	maxV := req.MaxVersion
+	if maxV == 0 {
+		maxV = req.MaxProtocolVersion
+	}
+	negotiated, ok := protocol.NegotiateVersion(minV, maxV)
 	if !ok {
 		return protocol.NewError(v, env.ID, protocol.ErrUnsupportedVersion, "no overlapping protocol version", false)
 	}
-	return protocol.NewResponse(negotiated, env.ID, "hello", map[string]any{
-		"server_id":        g.state.ServerID(),
-		"name":             g.cfg.ServerName,
-		"adapter_version":  Version,
-		"protocol_version": negotiated,
-		"min_version":      protocol.MinVersion,
-		"epoch":            g.epoch,
-		"started_at_ms":    g.started,
-		"capabilities":     protocol.GatewayCapabilities,
-		"backends":         g.collectBackends(ctx),
+	return protocol.NewResponse(negotiated, env.ID, env.Type, map[string]any{
+		"negotiated_version":   negotiated,
+		"server":               g.ServerInfoMap(),
+		"server_id":            g.state.ServerID(),
+		"name":                 g.cfg.ServerName,
+		"adapter_version":      Version,
+		"protocol_version":     negotiated,
+		"min_protocol_version": protocol.MinVersion,
+		"min_version":          protocol.MinVersion,
+		"epoch":                g.epoch,
+		"started_at_ms":        g.started,
+		"capabilities":         protocol.GatewayCapabilities,
+		"backends":             g.collectBackends(ctx),
+	})
+}
+
+func (g *Gateway) handleSessionsSnapshot(ctx context.Context, v int, env protocol.Envelope) protocol.Envelope {
+	var req struct {
+		SessionID string `json:"session_id"`
+		Tail      int    `json:"tail"`
+	}
+	_ = json.Unmarshal(env.Payload, &req)
+	sid := req.SessionID
+	if sid == "" {
+		sid = env.SessionID
+	}
+	drv, nativeID, gid, err := g.SplitSessionID(sid, env.BackendID)
+	if err != nil {
+		return protocol.NewError(v, env.ID, protocol.ErrNotFound, err.Error(), false)
+	}
+	if err := g.ensureHistoryIndexed(ctx, drv, nativeID, gid); err != nil {
+		return protocol.NewError(v, env.ID, protocol.ErrBackendUnavailable, err.Error(), true)
+	}
+	tail := req.Tail
+	if tail <= 0 {
+		tail = 160
+	}
+	page, err := g.history.Page(gid, 0, -1, tail, 512*1024)
+	if err != nil {
+		return protocol.NewError(v, env.ID, protocol.ErrInternal, err.Error(), true)
+	}
+	rep, _ := g.journal.Replay(gid, 0, 1)
+	g.idxMu.RLock()
+	sess, ok := g.sessionCache[gid]
+	g.idxMu.RUnlock()
+	if !ok {
+		sess = agentsdk.Session{ID: gid, BackendID: drv.ID(), Title: nativeID, Status: "idle"}
+	}
+	return protocol.NewResponse(v, env.ID, "sessions.snapshot", map[string]any{
+		"session": map[string]any{
+			"session_id":   gid,
+			"title":        sess.Title,
+			"title_source": sess.BackendID,
+			"status":       sess.Status,
+			"working_dir":  sess.WorkingDir,
+			"updated_at_ms": sess.UpdatedAtMs,
+			"saved":        true,
+			"archived":     sess.Archived,
+			"agent_label":  sess.AgentLabel,
+		},
+		"messages": page.Items,
+		"epoch":    g.epoch,
+		"last_seq": rep.LatestSeq,
 	})
 }
 

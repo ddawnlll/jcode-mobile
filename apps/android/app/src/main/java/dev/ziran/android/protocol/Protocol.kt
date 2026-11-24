@@ -4,8 +4,9 @@ import androidx.compose.runtime.Immutable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
-const val PROTOCOL_VERSION = 4
+const val PROTOCOL_VERSION = 5
 const val MIN_PROTOCOL_VERSION = 2
+const val V5_WS_SUBPROTOCOL = "ziran.v5"
 const val WS_SUBPROTOCOL = "jcode.mobile.v4"
 const val JOURNAL_WS_SUBPROTOCOL = "jcode.mobile.v3"
 const val LEGACY_WS_SUBPROTOCOL = "jcode.mobile.v2"

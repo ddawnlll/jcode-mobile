@@ -10,6 +10,7 @@ import dev.ziran.android.protocol.LEGACY_WS_SUBPROTOCOL
 import dev.ziran.android.protocol.MIN_PROTOCOL_VERSION
 import dev.ziran.android.protocol.PROTOCOL_VERSION
 import dev.ziran.android.protocol.ServerInfo
+import dev.ziran.android.protocol.V5_WS_SUBPROTOCOL
 import dev.ziran.android.protocol.WS_SUBPROTOCOL
 import dev.ziran.android.protocol.parseEnvelope
 import dev.ziran.android.protocol.parseError
@@ -200,7 +201,7 @@ class AdapterClient(
         val request = Request.Builder()
             .url(ServerUrls.wsUrl(baseUrl))
             .header("Authorization", "Bearer $token")
-            .header("Sec-WebSocket-Protocol", "$WS_SUBPROTOCOL, $JOURNAL_WS_SUBPROTOCOL, $LEGACY_WS_SUBPROTOCOL")
+            .header("Sec-WebSocket-Protocol", "$V5_WS_SUBPROTOCOL, $WS_SUBPROTOCOL, $JOURNAL_WS_SUBPROTOCOL, $LEGACY_WS_SUBPROTOCOL")
             .build()
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -265,7 +266,7 @@ class AdapterClient(
     private suspend fun sendHello() {
         val ws = currentSocket() ?: throw ConnectionLost("Adapter is not connected.")
         val id = "req_" + UUID.randomUUID().toString()
-        val hello = EnvelopeWriter.helloPayload("ziran-android", "0.7.0")
+        val hello = EnvelopeWriter.helloPayload("ziran-android", "0.7.3")
         val text = EnvelopeWriter.request(id, "client.hello", hello, MIN_PROTOCOL_VERSION)
         val reply = CompletableDeferred<Result<JsonObject>>()
         pending[id] = reply

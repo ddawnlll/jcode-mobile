@@ -38,6 +38,6 @@ object EnvelopeWriter {
         put("client_version", JsonPrimitive(clientVersion))
         put("min_version", JsonPrimitive(MIN_PROTOCOL_VERSION))
         put("max_version", JsonPrimitive(PROTOCOL_VERSION))
-        put("supports", JsonArray(listOf(JsonPrimitive(WS_SUBPROTOCOL), JsonPrimitive(JOURNAL_WS_SUBPROTOCOL), JsonPrimitive(LEGACY_WS_SUBPROTOCOL))))
+        put("supports", JsonArray(listOf(JsonPrimitive(V5_WS_SUBPROTOCOL), JsonPrimitive(WS_SUBPROTOCOL), JsonPrimitive(JOURNAL_WS_SUBPROTOCOL), JsonPrimitive(LEGACY_WS_SUBPROTOCOL))))
     }.let(::JsonObject)
 }

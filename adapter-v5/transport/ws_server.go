@@ -31,7 +31,9 @@ func ListenHTTP(addr string, gw *gateway.Gateway) (*HTTPServer, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", hs.handleHealth)
 	mux.HandleFunc("/pair", hs.handlePair)
+	mux.HandleFunc("/v2/pair", hs.handlePair)
 	mux.HandleFunc("/ws", hs.handleWS)
+	mux.HandleFunc("/v2/ws", hs.handleWS)
 	hs.srv = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
@@ -56,11 +58,13 @@ func (h *HTTPServer) Close() error {
 func (h *HTTPServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"ok":               true,
-		"adapter_version":  gateway.Version,
-		"protocol_version": protocol.VersionV5,
-		"min_version":      protocol.MinVersion,
-		"capabilities":     protocol.GatewayCapabilities,
+		"ok":                   true,
+		"adapter_version":      gateway.Version,
+		"protocol_version":     protocol.VersionV5,
+		"min_protocol_version": protocol.MinVersion,
+		"min_version":          protocol.MinVersion,
+		"jcode_connected":      true,
+		"capabilities":         protocol.GatewayCapabilities,
 	})
 }
 
@@ -89,6 +93,7 @@ func (h *HTTPServer) handlePair(w http.ResponseWriter, r *http.Request) {
 		"token":     token,
 		"device":    dev,
 		"server_id": h.gw.State().ServerID(),
+		"server":    h.gw.ServerInfoMap(),
 	})
 }
 
