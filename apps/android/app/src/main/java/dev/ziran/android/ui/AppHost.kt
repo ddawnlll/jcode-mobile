@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.ziran.android.data.AppController
 import dev.ziran.android.design.InkRippleHost
+import dev.ziran.android.design.LocalAnimatorScale
 import dev.ziran.android.design.MotionMath
 import dev.ziran.android.design.Palette
 import dev.ziran.android.design.ReducedFadeScale
@@ -46,7 +48,7 @@ import dev.ziran.android.design.WuDurations
 import dev.ziran.android.design.WuEasing
 import dev.ziran.android.design.WuFonts
 import dev.ziran.android.design.rememberAnimatedPalette
-import dev.ziran.android.design.rememberAnimatorScale
+import dev.ziran.android.design.rememberObservedAnimatorScale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -55,16 +57,17 @@ import kotlinx.coroutines.withContext
 /** Hand-rolled back stack. State lives in the controller, not the screens. */
 /** Back kind: Model & Scenes roll up and away (700 ms); Thread slides right with 22% parallax (420 ms). */
 internal fun backKindFor(screen: Screen): NavKind = when (screen) {
-    Screen.Model, Screen.Scenes -> NavKind.Roll
+    is Screen.Model, Screen.Scenes -> NavKind.Roll
     else -> NavKind.Slide
 }
 
 sealed interface Screen {
     object Start : Screen
+    object Home : Screen
     object Threads : Screen
     data class Thread(val sessionId: String) : Screen
     object Plan : Screen
-    object Model : Screen
+    data class Model(val initialScope: String = "thread") : Screen
     object Scenes : Screen
 }
 
@@ -81,7 +84,7 @@ fun ZiranApp(
     controller: AppController,
     deepLink: String? = null,
     deepLinkNonce: Int = 0,
-    onThemeNightChanged: (Boolean) -> Unit = {},
+    onSystemBarsChanged: (statusBarDarkIcons: Boolean, navBarDarkIcons: Boolean) -> Unit = { _, _ -> },
     onRequestNotifications: () -> Unit = {},
 ) {
     val state by controller.state.collectAsState()
@@ -91,11 +94,11 @@ fun ZiranApp(
         "night" -> true
         else -> dark
     }
-    LaunchedEffect(isNight) { onThemeNightChanged(isNight) }
 
-    val durationScale = rememberAnimatorScale()
+    val durationScale = rememberObservedAnimatorScale()
     val reduced = durationScale <= 0.01f
     val palette = rememberAnimatedPalette(isNight = isNight, reducedMotion = reduced)
+    val threadsListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -108,6 +111,9 @@ fun ZiranApp(
     }
 
     var stack by remember { mutableStateOf(listOf<Screen>(Screen.Start)) }
+    var activeTab by remember { mutableStateOf(RootTab.Home) }
+    var newThreadSheetOpen by remember { mutableStateOf(false) }
+    var newThreadTitle by remember { mutableStateOf("") }
     var transition by remember { mutableStateOf<NavTransition?>(null) }
     val navProgress = remember { Animatable(1f) }
     var navJob by remember { mutableStateOf<Job?>(null) }
@@ -272,8 +278,8 @@ fun ZiranApp(
                 val origin = lastTap.takeIf { it != Offset.Unspecified }
                     ?: Offset(widthPx * 0.86f, heightPx * 0.90f)
                 navJob?.cancel()
-                stack = listOf(Screen.Threads)
-                transition = NavTransition(NavKind.InkDrop, Screen.Start, Screen.Threads, origin)
+                stack = listOf(Screen.Home)
+                transition = NavTransition(NavKind.InkDrop, Screen.Start, Screen.Home, origin)
                 navJob = scope.launch {
                     try {
                         runNavTransition(navProgress, NavKind.InkDrop, durationScale, reduced)
@@ -282,8 +288,8 @@ fun ZiranApp(
                     }
                 }
             } else {
-                // Returning cold-launch already paired: go straight to Threads without Start flash.
-                stack = listOf(Screen.Threads)
+                // Returning cold-launch already paired: go straight to Home without Start flash.
+                stack = listOf(Screen.Home)
             }
         }
     }
@@ -293,14 +299,37 @@ fun ZiranApp(
     LaunchedEffect(state.activeSessionId) {
         val id = state.activeSessionId
         if (state.phase == "ready" && id != null && autoOpened != id &&
-            stack == listOf(Screen.Threads) && !sawStart
+            stack == listOf(Screen.Home) && !sawStart
         ) {
             autoOpened = id
-            stack = listOf(Screen.Threads, Screen.Thread(id))
+            stack = listOf(Screen.Home, Screen.Thread(id))
         }
     }
 
     val screen = stack.last()
+    LaunchedEffect(isNight, screen, activeTab, state.scene) {
+        val navDark = !isNight
+        val paintingRes = when (screen) {
+            Screen.Start -> dev.ziran.android.design.sceneByKey("butterfly").drawableRes
+            Screen.Home -> when (activeTab) {
+                RootTab.Home -> dev.ziran.android.design.sceneByKey("misty_peaks").drawableRes
+                RootTab.Threads -> dev.ziran.android.design.sceneByKey("quiet_river").drawableRes
+                RootTab.Settings -> dev.ziran.android.design.sceneByKey("sage_under_pine").drawableRes
+            }
+            Screen.Threads -> dev.ziran.android.design.sceneByKey("quiet_river").drawableRes
+            is Screen.Thread -> dev.ziran.android.design.sceneByKey(state.scene).drawableRes
+            Screen.Plan -> dev.ziran.android.design.FlockScene.drawableRes
+            Screen.Scenes -> dev.ziran.android.design.sceneByKey(state.scene).drawableRes
+            is Screen.Model -> null
+        }
+        val statusDark = if (paintingRes != null) {
+            val lum = dev.ziran.android.design.BitmapCache.topBandLuminance(context.resources, paintingRes, isNight)
+            dev.ziran.android.design.statusBarUsesDarkIcons(lum)
+        } else {
+            !isNight
+        }
+        onSystemBarsChanged(statusDark, navDark)
+    }
     LaunchedEffect(screen) {
         focusManager.clearFocus()
         keyboard?.hide()
@@ -308,6 +337,7 @@ fun ZiranApp(
 
     val painted = transition
 
+    CompositionLocalProvider(LocalAnimatorScale provides durationScale) {
     Box(Modifier.fillMaxSize().background(palette.paper)) {
         InkRippleHost(
             ink = palette.ink,
@@ -318,7 +348,7 @@ fun ZiranApp(
             ScreenTransition(
                 current = screen,
                 transition = painted,
-                progress = navProgress.value,
+                progressProvider = { navProgress.value },
                 widthPx = widthPx,
                 palette = palette,
                 reducedMotion = reduced,
@@ -339,26 +369,78 @@ fun ZiranApp(
                         onPaste = paste,
                         reducedMotion = reduced,
                     )
-                    Screen.Threads -> ThreadsScreen(
-                        palette = palette,
-                        sessions = state.sessions,
-                        serverName = state.serverName ?: "studio-vps",
-                        sceneKey = "pavilion",
-                        onOpen = { id ->
-                            go(Screen.Thread(id), NavKind.InkDrop, lastTap)
-                            scope.launch { controller.openSession(id) }
-                        },
-                        onScenes = { go(Screen.Scenes, NavKind.Unroll, Offset.Unspecified) },
-                        onArchive = { id -> scope.launch { controller.archiveSession(id) } },
-                        onRestore = { id -> scope.launch { controller.restoreSession(id) } },
-                        onRename = { id, title -> scope.launch { controller.renameSession(id, title) } },
-                        onRefresh = { scope.launch { controller.refreshSessions() } },
-                        onCreateThread = { title -> scope.launch { controller.createSession(null, title) } },
-                        reducedMotion = reduced,
-                    )
+                    Screen.Home, Screen.Threads -> Box(Modifier.fillMaxSize()) {
+                        androidx.compose.animation.Crossfade(
+                            targetState = activeTab,
+                            animationSpec = tween(if (reduced) WuDurations.ReducedFade else 300, easing = WuEasing.Default),
+                            label = "root-tab-fade",
+                        ) { tab ->
+                            when (tab) {
+                                RootTab.Home -> HomeScreen(
+                                    palette = palette,
+                                    state = state,
+                                    onOpenThread = { id ->
+                                        go(Screen.Thread(id), NavKind.InkDrop, lastTap)
+                                        scope.launch { controller.openSession(id) }
+                                    },
+                                    onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
+                                    onNewThread = { newThreadSheetOpen = true },
+                                    reducedMotion = reduced,
+                                )
+                                RootTab.Threads -> ThreadsScreen(
+                                    palette = palette,
+                                    sessions = state.sessions,
+                                    snapshotAgents = state.agents,
+                                    activeParentId = state.activeSessionId,
+                                    sortMode = state.threadsSort,
+                                    listState = threadsListState,
+                                    onSortChange = { sort -> scope.launch { controller.setThreadsSort(sort) } },
+                                    onOpen = { id ->
+                                        go(Screen.Thread(id), NavKind.InkDrop, lastTap)
+                                        scope.launch { controller.openSession(id) }
+                                    },
+                                    onArchive = { id -> scope.launch { controller.archiveSession(id) } },
+                                    onRestore = { id -> scope.launch { controller.restoreSession(id) } },
+                                    onRefresh = { scope.launch { controller.refreshSessions() } },
+                                    onNewThread = { newThreadSheetOpen = true },
+                                    reducedMotion = reduced,
+                                )
+                                RootTab.Settings -> SettingsScreen(
+                                    palette = palette,
+                                    state = state,
+                                    onPairAnother = { go(Screen.Start, NavKind.Unroll, Offset.Unspecified) },
+                                    onForgetServer = { id -> scope.launch { controller.forgetServer(id) } },
+                                    onSelectTheme = { mode -> scope.launch { controller.setThemeMode(mode) } },
+                                    onOpenScenes = { go(Screen.Scenes, NavKind.Unroll, Offset.Unspecified) },
+                                    onOpenDefaultModel = {
+                                        go(Screen.Model(initialScope = "new"), NavKind.Unroll, Offset.Unspecified)
+                                        scope.launch { controller.refreshModels() }
+                                    },
+                                    onSelectSteerDefault = { mode -> scope.launch { controller.setSteerDefault(mode) } },
+                                    onToggleNotifyWaiting = { v -> scope.launch { controller.setNotifyWaiting(v) } },
+                                    onToggleNotifyDone = { v -> scope.launch { controller.setNotifyDone(v) } },
+                                    onToggleNotifyOnlyClosed = { v -> scope.launch { controller.setNotifyOnlyClosed(v) } },
+                                    reducedMotion = reduced,
+                                )
+                            }
+                        }
+                        WuBottomNav(
+                            activeTab = activeTab,
+                            palette = palette,
+                            reducedMotion = reduced,
+                            onSelect = { tab ->
+                                activeTab = tab
+                                if (tab == RootTab.Settings) {
+                                    scope.launch { controller.refreshConnectedHealth() }
+                                }
+                            },
+                            modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
+                        )
+                    }
                     is Screen.Thread -> ThreadScreen(
                         palette = palette,
                         state = state,
+                        composerTextFlow = controller.composerText,
                         sceneKey = state.scene,
                         onBack = back,
                         onPlan = {
@@ -366,12 +448,14 @@ fun ZiranApp(
                             scope.launch { controller.refreshPlan() }
                         },
                         onModel = {
-                            go(Screen.Model, NavKind.Unroll, Offset.Unspecified)
+                            go(Screen.Model(initialScope = "thread"), NavKind.Unroll, Offset.Unspecified)
                             scope.launch { controller.refreshModels() }
                         },
                         onScenes = { go(Screen.Scenes, NavKind.Unroll, Offset.Unspecified) },
                         onTextChange = controller::setComposerText,
                         onSend = { text -> scope.launch { controller.sendText(text) } },
+                        onSendWithMode = { text, mode -> scope.launch { controller.sendText(text, steerModeOverride = mode) } },
+                        onSteerModeChange = controller::setActiveSteerMode,
                         onStop = { scope.launch { controller.stop() } },
                         onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
                         reducedMotion = reduced,
@@ -392,13 +476,15 @@ fun ZiranApp(
                             reducedMotion = reduced,
                         )
                     }
-                    Screen.Model -> ModelScreen(
+                    is Screen.Model -> ModelScreen(
                         palette = palette,
                         state = state,
-                        sceneKey = "riders",
+                        initialScope = target.initialScope,
                         onBack = back,
-                        onSelectModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
-                        onSetEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
+                        onSelectThreadModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
+                        onSetThreadEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
+                        onSelectDefaultModel = { model -> scope.launch { controller.setDefaultModel(model.model, model.provider, model.apiMethod) } },
+                        onSetDefaultEffort = { effort -> scope.launch { controller.setDefaultEffort(effort) } },
                         reducedMotion = reduced,
                     )
                     Screen.Scenes -> ScenesScreen(
@@ -413,6 +499,42 @@ fun ZiranApp(
                 }
             }
         }
+        // New thread sheet (from Home / Threads floating seal).
+        SheetHost(
+            visible = newThreadSheetOpen,
+            palette = palette,
+            reducedMotion = reduced,
+            onDismiss = { newThreadSheetOpen = false },
+        ) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 10.dp)) {
+                Text(
+                    "Begin a new thread",
+                    style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 20.sp, color = palette.ink),
+                )
+                WuSearchField(
+                    value = newThreadTitle,
+                    placeholder = "thread title…",
+                    palette = palette,
+                    onValueChange = { newThreadTitle = it },
+                    modifier = Modifier.padding(top = 10.dp, bottom = 14.dp),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                    dev.ziran.android.design.SealButton(
+                        sizeDp = 48,
+                        backgroundColor = palette.seal,
+                        strokeColor = palette.onSeal,
+                        label = "Create thread",
+                        reducedMotion = reduced,
+                        onClick = {
+                            val t = newThreadTitle.trim()
+                            newThreadTitle = ""
+                            newThreadSheetOpen = false
+                            scope.launch { controller.createSession(null, t.ifEmpty { "New thread" }) }
+                        },
+                    )
+                }
+            }
+        }
         // Tiled 256 dp paper grain sits above screens (non-interactive, z-index: 5).
         GrainOverlay(nightFactor = palette.nightFactor)
         if (state.notificationsPrompt) {
@@ -423,6 +545,7 @@ fun ZiranApp(
                 modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
             )
         }
+    }
     }
 }
 

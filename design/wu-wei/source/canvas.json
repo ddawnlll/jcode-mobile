@@ -84,7 +84,7 @@
     "Sessions-Night.dc.html": {
       "h": 844,
       "is_interactive": true,
-      "title": "sessions · night",
+      "title": "threads · search, sort, sub-agents · night",
       "w": 390,
       "x": 470,
       "y": 1300
@@ -92,7 +92,7 @@
     "Sessions.dc.html": {
       "h": 844,
       "is_interactive": true,
-      "title": "sessions · day",
+      "title": "threads · search, sort, sub-agents · day",
       "w": 390,
       "x": 470,
       "y": 0
@@ -241,6 +241,54 @@
       "w": 1280,
       "x": 5600,
       "y": 4220
+    },
+    "Home.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "home · day",
+      "w": 390,
+      "x": 3290,
+      "y": 0
+    },
+    "Home-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "home · night",
+      "w": 390,
+      "x": 3290,
+      "y": 1300
+    },
+    "Settings.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "settings · day",
+      "w": 390,
+      "x": 3760,
+      "y": 0
+    },
+    "Settings-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "settings · night",
+      "w": 390,
+      "x": 3760,
+      "y": 1300
+    },
+    "Steer.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "while an agent works · steer, stop, wait · day",
+      "w": 390,
+      "x": 4230,
+      "y": 0
+    },
+    "Steer-Night.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "while an agent works · steer, stop, wait · night",
+      "w": 390,
+      "x": 4230,
+      "y": 1300
     }
   },
   "createdOnFiles": {
@@ -264,7 +312,7 @@
   "notes": {
     "day": {
       "kind": "title1",
-      "maxW": 3210,
+      "maxW": 4620,
       "text": "day",
       "w": 240,
       "x": 0,
@@ -294,7 +342,7 @@
     },
     "night": {
       "kind": "title1",
-      "maxW": 3210,
+      "maxW": 4620,
       "text": "night",
       "w": 240,
       "x": 0,
@@ -350,7 +398,13 @@
     "Plan.dc.html",
     "Plan-Night.dc.html",
     "Mac-Plan.dc.html",
-    "Mac-Plan-Night.dc.html"
+    "Mac-Plan-Night.dc.html",
+    "Home.dc.html",
+    "Home-Night.dc.html",
+    "Settings.dc.html",
+    "Settings-Night.dc.html",
+    "Steer.dc.html",
+    "Steer-Night.dc.html"
   ],
   "pages": [],
   "title": "JCode Mobile Wu wei"

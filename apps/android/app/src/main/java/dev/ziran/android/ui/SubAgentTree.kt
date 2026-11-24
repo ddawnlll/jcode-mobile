@@ -1,0 +1,116 @@
+package dev.ziran.android.ui
+
+import androidx.compose.runtime.Immutable
+import dev.ziran.android.protocol.SessionSummary
+import dev.ziran.android.protocol.SwarmAgentView
+
+/** Grouped top-level thread with its nested sub-agents. */
+@Immutable
+data class ThreadTreeItem(
+    val session: SessionSummary,
+    val subAgents: List<SessionSummary>,
+    val autoExpandedBySearch: Boolean = false,
+)
+
+/** Status sort rank: waiting (0) -> working (1) -> finished (2) -> resting (3). */
+fun sessionStatusRank(status: String): Int = when (status.trim().lowercase()) {
+    "waiting", "permission", "ask" -> 0
+    "working", "running", "generating", "tool_running", "processing", "live" -> 1
+    "done", "finished", "completed" -> 2
+    else -> 3
+}
+
+/**
+ * Builds the filtered, sorted tree of top-level threads and their nested sub-agents.
+ *
+ * Rules:
+ * - Any session with a non-blank `parentSessionId` is a sub-agent and NEVER appears top-level.
+ * - Search matches title, status/swarmStatus note, and agentLabel across parent and sub-agents.
+ * - If a sub-agent matches the search query, its parent is kept and marked `autoExpandedBySearch = true`.
+ * - Sort order: `recent` (updatedAtMs desc), `name` (title asc), `status` (rank asc, then recent).
+ */
+fun buildThreadTree(
+    sessions: List<SessionSummary>,
+    query: String,
+    sortMode: String,
+    snapshotAgents: List<SwarmAgentView>? = null,
+    activeParentId: String? = null,
+): List<ThreadTreeItem> {
+    val active = sessions.filter { !it.archived }
+    val childrenByParent = active
+        .filter { !it.parentSessionId.isNullOrBlank() }
+        .groupBy { it.parentSessionId!! }
+        .toMutableMap()
+
+    // Merge SwarmAgentView entries from snapshot if they aren't already in sessions list.
+    if (!snapshotAgents.isNullOrEmpty()) {
+        val knownIds = active.mapTo(mutableSetOf()) { it.sessionId }
+        for (agent in snapshotAgents) {
+            val parentId = agent.parentSessionId ?: activeParentId ?: continue
+            if (agent.sessionId == parentId || agent.sessionId in knownIds) continue
+            val synth = SessionSummary(
+                sessionId = agent.sessionId,
+                title = agent.label ?: "Sub-agent",
+                titleSource = "swarm",
+                status = agent.status,
+                workingDir = null,
+                projectId = null,
+                updatedAtMs = null,
+                transcriptBytes = null,
+                saved = false,
+                archived = false,
+                parentSessionId = parentId,
+                agentLabel = agent.label,
+                swarmStatus = agent.status,
+            )
+            childrenByParent.getOrPut(parentId) { emptyList() }.let { existing ->
+                childrenByParent[parentId] = existing + synth
+            }
+        }
+    }
+
+    val topLevel = active.filter { it.parentSessionId.isNullOrBlank() }
+    val q = query.trim()
+
+    fun matches(s: SessionSummary): Boolean {
+        if (q.isEmpty()) return true
+        val statusText = s.swarmStatus ?: s.status
+        return (s.title != null && s.title.contains(q, ignoreCase = true)) ||
+            statusText.contains(q, ignoreCase = true) ||
+            (s.agentLabel != null && s.agentLabel.contains(q, ignoreCase = true))
+    }
+
+    val filtered = topLevel.mapNotNull { parent ->
+        val subs = childrenByParent[parent.sessionId].orEmpty()
+        val parentHit = matches(parent)
+        val matchingSubs = if (q.isEmpty()) subs else subs.filter(::matches)
+        if (q.isEmpty()) {
+            ThreadTreeItem(parent, subs, autoExpandedBySearch = false)
+        } else if (parentHit || matchingSubs.isNotEmpty()) {
+            ThreadTreeItem(
+                session = parent,
+                subAgents = if (matchingSubs.isNotEmpty()) matchingSubs else subs,
+                autoExpandedBySearch = matchingSubs.isNotEmpty(),
+            )
+        } else {
+            null
+        }
+    }
+
+    val comparator = when (sortMode) {
+        "name" -> Comparator<ThreadTreeItem> { a, b ->
+            val cmp = (a.session.title ?: "").compareTo(b.session.title ?: "", ignoreCase = true)
+            if (cmp != 0) cmp else (b.session.updatedAtMs ?: 0L).compareTo(a.session.updatedAtMs ?: 0L)
+        }
+        "status" -> Comparator<ThreadTreeItem> { a, b ->
+            val ra = sessionStatusRank(a.session.swarmStatus ?: a.session.status)
+            val rb = sessionStatusRank(b.session.swarmStatus ?: b.session.status)
+            if (ra != rb) ra.compareTo(rb) else (b.session.updatedAtMs ?: 0L).compareTo(a.session.updatedAtMs ?: 0L)
+        }
+        else -> Comparator<ThreadTreeItem> { a, b ->
+            (b.session.updatedAtMs ?: 0L).compareTo(a.session.updatedAtMs ?: 0L)
+        }
+    }
+
+    return filtered.sortedWith(comparator)
+}

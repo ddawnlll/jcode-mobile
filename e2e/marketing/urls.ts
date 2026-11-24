@@ -11,5 +11,5 @@ export const BASE_URL = `http://${E2E_HOST}:${E2E_PORT}${BASE_PATH}/`;
 export const ORIGIN = `http://${E2E_HOST}:${E2E_PORT}`;
 
 export const APK_URL =
-  'https://github.com/ddawnlll/jcode-mobile/releases/download/ziran-v0.7.2/ziran-0.7.2-android-debug.apk';
+  'https://github.com/ddawnlll/jcode-mobile/releases/download/ziran-v0.7.3/ziran-0.7.3-android-release.apk';
 export const REPO_URL = 'https://github.com/ddawnlll/jcode-mobile';

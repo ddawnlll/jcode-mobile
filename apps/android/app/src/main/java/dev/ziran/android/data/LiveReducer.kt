@@ -122,10 +122,20 @@ class LiveReducer {
                         daemonRunning = true,
                         daemonStatus = "running",
                         status = if (next.live.turnId != null) next.live.status else "running",
+                        pendingSoftInterrupts = event.pendingSoftInterrupts ?: next.live.pendingSoftInterrupts,
                     ),
                 )
-                "attached" -> next
-                else -> next.copy(live = next.live.copy(daemonStatus = "unknown"))
+                "attached" -> next.copy(
+                    live = next.live.copy(
+                        pendingSoftInterrupts = event.pendingSoftInterrupts ?: next.live.pendingSoftInterrupts,
+                    ),
+                )
+                else -> next.copy(
+                    live = next.live.copy(
+                        daemonStatus = "unknown",
+                        pendingSoftInterrupts = event.pendingSoftInterrupts ?: next.live.pendingSoftInterrupts,
+                    ),
+                )
             }
             is SessionEvent.ConnectionPhase -> next.copy(live = next.live.copy(phase = event.phase))
             is SessionEvent.SessionRecovery -> next.copy(
@@ -224,7 +234,34 @@ class LiveReducer {
     }
 
     private fun finishTurn(state: AppState, turnId: String?, status: String): AppState {
+        val clearedPending = if (state.pending?.state in setOf("accepted", "observed_in_history")) {
+            null
+        } else {
+            state.pending
+        }
+        val updatedSnapshot = if (clearedPending == null && state.pending != null && state.snapshot != null) {
+            val msgs = state.snapshot.messages
+            val alreadyInHistory = msgs.lastOrNull { it.role == "user" }?.content?.trim() == state.pending.text.trim()
+            if (alreadyInHistory) {
+                state.snapshot
+            } else {
+                val nextIndex = (msgs.maxOfOrNull { it.index } ?: -1) + 1
+                state.snapshot.copy(
+                    messages = msgs + HistoryMessageView(
+                        index = nextIndex,
+                        role = "user",
+                        content = state.pending.text,
+                        toolCallId = null,
+                        toolName = null,
+                    ),
+                )
+            }
+        } else {
+            state.snapshot
+        }
         return state.copy(
+            snapshot = updatedSnapshot,
+            pending = clearedPending,
             live = state.live.copy(
                 turnId = null,
                 finishedTurnId = turnId ?: state.live.turnId ?: state.live.finishedTurnId,
@@ -234,6 +271,8 @@ class LiveReducer {
                 startedAtMs = null,
                 daemonRunning = false,
                 daemonStatus = "idle",
+                pendingSoftInterrupts = 0L,
+                sentDuringTurn = emptyList(),
                 assistants = state.live.assistants.map { if (it.done) it else it.copy(done = true) },
                 reasoning = state.live.reasoning.map { if (it.done) it else it.copy(done = true) },
                 tools = state.live.tools.map {
@@ -256,6 +295,8 @@ class LiveReducer {
                 needsReconcile = false,
                 daemonRunning = false,
                 daemonStatus = "idle",
+                pendingSoftInterrupts = 0L,
+                sentDuringTurn = emptyList(),
                 tools = state.live.tools.map {
                     if (it.status == "started" || it.status == "running") it.copy(status = "unknown") else it
                 },
@@ -351,9 +392,17 @@ fun applySnapshotToState(state: AppState, snapshot: SessionSnapshot): AppState {
         )
     }
     val sessions = state.sessions.map { if (it.sessionId == snapshot.session.sessionId) snapshot.session else it }
+    val clearedPending = if (!snapshot.stale && snapshot.activeTurn == null &&
+        state.pending?.state in setOf("accepted", "observed_in_history")
+    ) {
+        null
+    } else {
+        state.pending
+    }
     return state.copy(
         snapshot = snapshot,
         sessions = sessions,
+        pending = clearedPending,
         lastSeq = snapshot.lastSeq,
         epoch = snapshot.epoch,
         runtime = latestRuntime(state.runtime, snapshot.runtime),

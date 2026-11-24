@@ -1,5 +1,6 @@
 package dev.ziran.android.protocol
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
@@ -89,6 +90,7 @@ enum class AgentKind(val displayName: String) {
     }
 }
 
+@Immutable
 data class SessionSummary(
     val sessionId: String,
     val title: String?,
@@ -118,6 +120,7 @@ data class Project(
     val sessionCount: Int,
 )
 
+@Immutable
 data class HistoryMessageView(
     val index: Int,
     val role: String,
@@ -128,6 +131,7 @@ data class HistoryMessageView(
     val responseStats: JsonObject? = null,
 )
 
+@Immutable
 data class ModelRouteView(
     val model: String,
     val provider: String,
@@ -146,6 +150,7 @@ data class RuntimeIdentity(
     val accountLabel: String?,
 )
 
+@Immutable
 data class RuntimeView(
     val provider: String?,
     val model: String?,
@@ -159,6 +164,7 @@ data class RuntimeView(
     val source: String,
 )
 
+@Immutable
 data class SwarmAgentView(
     val sessionId: String,
     val parentSessionId: String?,
@@ -169,6 +175,7 @@ data class SwarmAgentView(
     val reasoningEffort: String?,
 )
 
+@Immutable
 data class ContextView(
     val inputTokens: Long?,
     val outputTokens: Long?,
@@ -195,6 +202,7 @@ data class DaemonStatusView(
     val source: String,
 )
 
+@Immutable
 data class SessionSnapshot(
     val session: SessionSummary,
     val messages: List<HistoryMessageView>,

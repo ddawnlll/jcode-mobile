@@ -156,12 +156,14 @@ fun PlanScreen(
             )
         }
 
+        val safeTop = rememberSafeTopInsetDp()
         Column(
             Modifier
                 .fillMaxSize()
+                .safeTopAndHorizontalPadding()
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
-            Spacer(Modifier.height(244.dp))
+            Spacer(Modifier.height(contentTopSpacerDp(244, safeTop, minClearanceDp = 56).dp))
 
             // Title + subtitle + coordinator seal.
             Row(

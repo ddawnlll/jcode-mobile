@@ -1,22 +1,22 @@
 <p align="center">
-  <img src="website/assets/media/ziran-live-day.png" alt="Ziran 0.7.2 thread on Android API 35 with header plan dots, Plan entry, and indigo agent seal" width="280" />
+  <img src="website/assets/media/ziran-live-day.png" alt="Ziran 0.7.3 thread on Android API 35 with header plan dots, Plan entry, and indigo agent seal" width="280" />
   &nbsp;&nbsp;
-  <img src="website/assets/media/ziran-plan-day.png" alt="Ziran 0.7.2 Plan screen on Android API 35 with flock painting and indigo agent seals" width="280" />
+  <img src="website/assets/media/ziran-plan-day.png" alt="Ziran 0.7.3 Plan screen on Android API 35 with flock painting and indigo agent seals" width="280" />
 </p>
 
-<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.2</code></sub></p>
+<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.3</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
 <p align="center">
-  <strong>Your server runs JCode. Ziran is the return surface.</strong><br />
-  <sub>A native Kotlin and Jetpack Compose Android client for <a href="https://github.com/1jehuang/jcode">JCode</a> on your own Linux server.</sub>
+  <strong>Your server runs JCode or Pu. Ziran is the return surface.</strong><br />
+  <sub>A native Kotlin and Jetpack Compose Android client with Wu wei motion, native markdown, and agent-agnostic Adapter v5 (Go QUIC/WS) + Adapter v4 support.</sub>
 </p>
 
 <p align="center">
   <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><img src="https://img.shields.io/github/v/release/ddawnlll/jcode-mobile?style=flat-square&label=release" alt="Latest release" /></a>
   <a href="https://github.com/ddawnlll/jcode-mobile/actions/workflows/check.yml"><img src="https://img.shields.io/github/actions/workflow/status/ddawnlll/jcode-mobile/check.yml?style=flat-square&label=CI" alt="CI status" /></a>
-  <a href="docs/ADAPTER_V4.md"><img src="https://img.shields.io/badge/API-Adapter_v4-2E4374?style=flat-square" alt="Adapter v4 API" /></a>
+  <a href="docs/ADAPTER_V5_DESIGN.md"><img src="https://img.shields.io/badge/API-Adapter_v5-2E4374?style=flat-square" alt="Adapter v5 API" /></a>
   <br />
   <a href="https://ddawnlll.github.io/jcode-mobile/"><strong>Explore the site</strong></a>
 </p>
@@ -24,31 +24,32 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ZIRAN ANDROID / 0.7.2 / 14.87 MiB</code></sub><br /><br />
+      <sub><code>ZIRAN ANDROID / 0.7.3 / 3.3 MiB R8</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><strong>Download the APK</strong></a><br />
-      <sub>Native Kotlin + Compose. Debug-signed sideload.</sub>
+      <sub>Native Kotlin + Compose (R8-shrunk). Debug-signed sideload.</sub>
     </td>
     <td width="33%" align="center" valign="top">
-      <sub><code>SERVER / JCODE + ADAPTER V4</code></sub><br /><br />
-      <a href="docs/GETTING_STARTED.md"><strong>Run the adapter</strong></a><br />
-      <sub>One pairing code or <code>ziran://pair</code> link.</sub>
+      <sub><code>SERVER / PU + JCODE + ADAPTER V5</code></sub><br /><br />
+      <a href="docs/ADAPTER_V5_DESIGN.md"><strong>Run Adapter v5</strong></a><br />
+      <sub>8.1 MB static Go binary · QUIC/UDP + WS fallback.</sub>
     </td>
     <td width="33%" align="center" valign="top">
-      <sub><code>SOURCE / KOTLIN + RUST</code></sub><br /><br />
+      <sub><code>SOURCE / KOTLIN + GO + RUST</code></sub><br /><br />
       <a href="docs/DEVELOPMENT.md"><strong>Build from source</strong></a><br />
-      <sub>Standalone Gradle app in <code>apps/android/</code> + Rust Adapter v4.</sub>
+      <sub>Gradle app in <code>apps/android/</code> + Go Adapter v5 in <code>adapter-v5/</code>.</sub>
     </td>
   </tr>
 </table>
 
-> **Ziran 0.7.2 ("Wu wei")** updates the native Kotlin and Jetpack Compose
-> Android client to the indigo Wu wei palette (`#2E4374` day / `#93A6D9` night),
-> adds the **Plan** screen (`painting-flock`, `wren` and `lynx` trigrams, live
-> `plan_updated` & `plan.snapshot`), and makes the pairing screen respond live
-> to `GET /health` probes and `pairingStage` progress. The APK is debug-signed
-> for sideloading; there is no Play Store listing or iOS client.
+> **Ziran 0.7.3 ("Wu wei")** ships an **R8-optimized 3.3 MiB Android release APK**,
+> a native **Wu wei markdown renderer** (`WuMarkdown.kt`), **200+ thread scroll &
+> zero-recomposition animation optimizations**, **live steering** (`Steer`),
+> **Home / Settings / reworked Model / Threads search, sort & sub-agents**,
+> cutout-safe insets, and an independent agent-agnostic **Adapter v5 in Go**
+> (`adapter-v5/`) supporting **Pu** and **JCode** as equal backends over QUIC/UDP
+> with WebSocket fallback.
 
-## What Ziran 0.7.2 is
+## What Ziran 0.7.3 is
 
 Ziran is two processes:
 
@@ -120,17 +121,17 @@ Cancel. Only the explicit **Stop** control targets the current turn.
 ## Install the Android APK
 
 ```text
-ziran-0.7.2-android-debug.apk
-15,589,017 bytes (14.87 MiB)
-SHA-256 a5ee4791a75c954d6b64024a3dd22d50b013b5ebcb4822c98f6fe7cf78449c1c
+ziran-0.7.3-android-release.apk (R8-optimized, recommended)
+3.3 MiB
+SHA-256 546bd746d1b243255f07b2b2aebf3ccfac6aaa7c19347bebad5c22a65441ef3f
 package dev.ziran.android
-versionCode 72, versionName 0.7.2
+versionCode 73, versionName 0.7.3
 minSdk 26, targetSdk 37, compileSdk 37
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r ziran-0.7.2-android-debug.apk
+adb install -r ziran-0.7.3-android-release.apk
 ```
 
 Because Ziran uses its own package identifier (`dev.ziran.android`), it installs
@@ -199,6 +200,9 @@ bun run marketing:test
 | Read | Why |
 | --- | --- |
 | [Getting started](docs/GETTING_STARTED.md) | Adapter v4, TLS, pairing, Ziran Android install, troubleshooting |
+| [Ziran 0.7.3 release notes](docs/V0_7_3_RELEASE_NOTES.md) | 0.7.3 scope: R8 release APK, Wu wei markdown, 200+ scroll perf, live steering, Adapter v5 |
+| [Adapter v5 design](docs/ADAPTER_V5_DESIGN.md) | Agent-agnostic Go gateway, QUIC/UDP + WS fallback, `agent.v1` SDK, Pu & JCode drivers |
+| [Adapter v5 benchmarks](docs/ADAPTER_V5_BENCHMARKS.md) | Memory, latency, wire-byte, and recovery measurements vs Adapter v4 |
 | [Ziran 0.7.2 release notes](docs/V0_7_2_RELEASE_NOTES.md) | 0.7.2 scope, indigo Wu wei, Plan screen, live pairing, APK checksum |
 | [Side-by-side evidence (0.7.2)](docs/evidence/v0.7.2/README.md) | Pairing flows, 21 s Plan loop, and Day/Night screen comparisons |
 | [Ziran 0.7.1 release notes](docs/V0_7_0_RELEASE_NOTES.md) | 0.7.1 scope, Wu wei fixes, APK checksum, verification, limits |

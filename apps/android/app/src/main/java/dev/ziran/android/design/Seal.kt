@@ -2,10 +2,12 @@ package dev.ziran.android.design
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,6 +23,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.ziran.android.protocol.AgentKind
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -56,40 +60,43 @@ val AgentKindsInBoardOrder = listOf(
     AgentKind.Crane, AgentKind.Fox, AgentKind.Heron, AgentKind.Owl, AgentKind.Moth,
 )
 
+private val RoughSealPathCache = ConcurrentHashMap<Long, Path>()
+
 /**
- * Builds a deterministic slightly rough-edged seal rectangle path matching
- * the SVG `#rough` filter on the boards, with zero runtime filter cost.
+ * Builds and caches a deterministic slightly rough-edged seal rectangle path
+ * matching the SVG `#rough` filter on the boards, with zero per-frame allocations.
  */
 private fun buildRoughSealPath(w: Float, h: Float): Path {
-    val p = Path()
-    val amp = (minOf(w, h) * 0.014f).coerceAtMost(1.8f)
-    val steps = 10
-    fun jitter(idx: Int, phase: Float): Float =
-        (sin(idx * 2.17f + phase) * 0.65f + sin(idx * 4.73f + phase * 1.9f) * 0.35f) * amp
+    val wi = w.roundToInt().coerceAtLeast(1)
+    val hi = h.roundToInt().coerceAtLeast(1)
+    val key = (wi.toLong() shl 32) or (hi.toLong() and 0xFFFFFFFFL)
+    return RoughSealPathCache.getOrPut(key) {
+        val p = Path()
+        val amp = (minOf(w, h) * 0.014f).coerceAtMost(1.8f)
+        val steps = 10
+        fun jitter(idx: Int, phase: Float): Float =
+            (sin(idx * 2.17f + phase) * 0.65f + sin(idx * 4.73f + phase * 1.9f) * 0.35f) * amp
 
-    p.moveTo(amp, amp)
-    // Top edge
-    for (i in 1..steps) {
-        val t = i.toFloat() / steps
-        p.lineTo(amp + (w - 2 * amp) * t, amp + jitter(i, 0.3f))
+        p.moveTo(amp, amp)
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            p.lineTo(amp + (w - 2 * amp) * t, amp + jitter(i, 0.3f))
+        }
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            p.lineTo(w - amp + jitter(i, 1.7f), amp + (h - 2 * amp) * t)
+        }
+        for (i in 1..steps) {
+            val t = i.toFloat() / steps
+            p.lineTo(w - amp - (w - 2 * amp) * t, h - amp + jitter(i, 3.1f))
+        }
+        for (i in 1 until steps) {
+            val t = i.toFloat() / steps
+            p.lineTo(amp + jitter(i, 4.9f), h - amp - (h - 2 * amp) * t)
+        }
+        p.close()
+        p
     }
-    // Right edge
-    for (i in 1..steps) {
-        val t = i.toFloat() / steps
-        p.lineTo(w - amp + jitter(i, 1.7f), amp + (h - 2 * amp) * t)
-    }
-    // Bottom edge
-    for (i in 1..steps) {
-        val t = i.toFloat() / steps
-        p.lineTo(w - amp - (w - 2 * amp) * t, h - amp + jitter(i, 3.1f))
-    }
-    // Left edge
-    for (i in 1 until steps) {
-        val t = i.toFloat() / steps
-        p.lineTo(amp + jitter(i, 4.9f), h - amp - (h - 2 * amp) * t)
-    }
-    p.close()
-    return p
 }
 
 private fun DrawScope.drawSendStroke(strokeColor: Color) {
@@ -135,41 +142,55 @@ fun Seal(
     strokeColor: Color? = null,
     label: String = kind.displayName,
 ) {
-    val bits = remember(kind) { kind.bits() }
-    val size = sizeDp.dp
-    Box(
+    val bits = Trigrams.forKind(kind)
+    val color = strokeColor ?: Color.White
+    Spacer(
         modifier = modifier
-            .size(size)
-            .semantics { role = Role.Image; contentDescription = "Agent $label" },
-    ) {
-        Canvas(Modifier.size(size)) {
-            if (backgroundColor != null) {
-                drawPath(buildRoughSealPath(this.size.width, this.size.height), backgroundColor)
-            }
-            // Board: SVG viewBox 24x24 scaled to 70% of the seal square, centered.
-            val box = minOf(this.size.width, this.size.height)
-            val icon = box * 0.70f
-            val ox = (this.size.width - icon) / 2f
-            val oy = (this.size.height - icon) / 2f
-            val u = icon / 24f
-            val strokeW = 2.6f * u
-            val xs = ox + 5f * u
-            val xe = ox + 19f * u
-            val xm1 = ox + 10.4f * u
-            val xm2 = ox + 13.6f * u
-            val ys = floatArrayOf(oy + 7f * u, oy + 12f * u, oy + 17f * u)
-            val color = strokeColor ?: Color.White
-            bits.forEachIndexed { index, bit ->
-                val y = ys[index]
-                if (bit == 1) {
-                    drawLine(color, Offset(xs, y), Offset(xe, y), strokeW, StrokeCap.Round)
-                } else {
-                    drawLine(color, Offset(xs, y), Offset(xm1, y), strokeW, StrokeCap.Round)
-                    drawLine(color, Offset(xm2, y), Offset(xe, y), strokeW, StrokeCap.Round)
+            .size(sizeDp.dp)
+            .semantics { role = Role.Image; contentDescription = "Agent $label" }
+            .drawWithCache {
+                val bgPath = if (backgroundColor != null) buildRoughSealPath(size.width, size.height) else null
+                val box = minOf(size.width, size.height)
+                val icon = box * 0.70f
+                val ox = (size.width - icon) / 2f
+                val oy = (size.height - icon) / 2f
+                val u = icon / 24f
+                val strokeW = 2.6f * u
+                val xs = ox + 5f * u
+                val xe = ox + 19f * u
+                val xm1 = ox + 10.4f * u
+                val xm2 = ox + 13.6f * u
+                val y0 = oy + 7f * u
+                val y1 = oy + 12f * u
+                val y2 = oy + 17f * u
+                val b0 = bits[0] == 1
+                val b1 = bits[1] == 1
+                val b2 = bits[2] == 1
+                onDrawBehind {
+                    if (bgPath != null && backgroundColor != null) {
+                        drawPath(bgPath, backgroundColor)
+                    }
+                    if (b0) {
+                        drawLine(color, Offset(xs, y0), Offset(xe, y0), strokeW, StrokeCap.Round)
+                    } else {
+                        drawLine(color, Offset(xs, y0), Offset(xm1, y0), strokeW, StrokeCap.Round)
+                        drawLine(color, Offset(xm2, y0), Offset(xe, y0), strokeW, StrokeCap.Round)
+                    }
+                    if (b1) {
+                        drawLine(color, Offset(xs, y1), Offset(xe, y1), strokeW, StrokeCap.Round)
+                    } else {
+                        drawLine(color, Offset(xs, y1), Offset(xm1, y1), strokeW, StrokeCap.Round)
+                        drawLine(color, Offset(xm2, y1), Offset(xe, y1), strokeW, StrokeCap.Round)
+                    }
+                    if (b2) {
+                        drawLine(color, Offset(xs, y2), Offset(xe, y2), strokeW, StrokeCap.Round)
+                    } else {
+                        drawLine(color, Offset(xs, y2), Offset(xm1, y2), strokeW, StrokeCap.Round)
+                        drawLine(color, Offset(xm2, y2), Offset(xe, y2), strokeW, StrokeCap.Round)
+                    }
                 }
-            }
-        }
-    }
+            },
+    )
 }
 
 /**

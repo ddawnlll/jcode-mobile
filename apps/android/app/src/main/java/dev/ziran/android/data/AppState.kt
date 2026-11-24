@@ -1,5 +1,6 @@
 package dev.ziran.android.data
 
+import androidx.compose.runtime.Immutable
 import dev.ziran.android.protocol.ContextView
 import dev.ziran.android.protocol.HistoryMessageView
 import dev.ziran.android.protocol.ModelRouteView
@@ -13,6 +14,7 @@ import dev.ziran.android.protocol.SwarmAgentView
 
 /** App-level state. One store survives screen unmounts. */
 
+@Immutable
 data class LiveTool(
     val seq: Long,
     val callId: String,
@@ -24,8 +26,10 @@ data class LiveTool(
     val startedAtMs: Long = System.currentTimeMillis(),
 )
 
+@Immutable
 data class LiveBlock(val seq: Long, val id: String, val text: String, val done: Boolean)
 
+@Immutable
 data class PendingMessage(
     val text: String,
     val operationId: String,
@@ -34,6 +38,10 @@ data class PendingMessage(
     val createdAt: Long,
 )
 
+@Immutable
+data class SentTurnNote(val text: String, val tag: String)
+
+@Immutable
 data class LiveState(
     val turnId: String? = null,
     val operationId: String? = null,
@@ -45,6 +53,8 @@ data class LiveState(
     val startedAtMs: Long? = null,
     val reasoningStartedAtMs: Long? = null,
     val reasoningDurationSecs: Long? = null,
+    val pendingSoftInterrupts: Long = 0L,
+    val sentDuringTurn: List<SentTurnNote> = emptyList(),
     val assistants: List<LiveBlock> = emptyList(),
     val reasoning: List<LiveBlock> = emptyList(),
     val tools: List<LiveTool> = emptyList(),
@@ -54,9 +64,12 @@ data class LiveState(
     val needsReconcile: Boolean = false,
 )
 
+@Immutable
 data class PermissionRequest(val requestId: String, val toolName: String, val description: String)
+@Immutable
 data class Recovery(val continuation: String, val notice: String?)
 
+@Immutable
 data class AppState(
     val phase: String = "loading", // loading | unpaired | pairing | ready
     val pairingError: String? = null,
@@ -94,7 +107,24 @@ data class AppState(
     val queuedMessages: List<String> = emptyList(),
     val queuedNotice: String? = null,
     val serverName: String? = null,
+    val adapterVersion: String? = null,
     val protocolVersion: Int? = null,
+    val pairedServers: List<String> = emptyList(),
+    /** Settings: steer | wait | ask */
+    val steerDefault: String = "steer",
+    /** Active composer mode while working: steer | stop | after */
+    val activeSteerMode: String = "steer",
+    /** Threads sort: recent | name | status */
+    val threadsSort: String = "recent",
+    /** Stored default model & effort for new threads. */
+    val defaultModel: String? = null,
+    val defaultProvider: String? = null,
+    val defaultApiMethod: String? = null,
+    val defaultEffort: String? = null,
+    /** Notification toggles persisted in DataStore. */
+    val notifyWaiting: Boolean = true,
+    val notifyDone: Boolean = true,
+    val notifyOnlyClosed: Boolean = true,
     /** True when the POST_NOTIFICATIONS reason should be on screen. */
     val notificationsPrompt: Boolean = false,
 )

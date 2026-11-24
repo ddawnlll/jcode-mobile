@@ -11,14 +11,16 @@ android {
         applicationId = "dev.ziran.android"
         minSdk = 26
         targetSdk = 37
-        versionCode = 72
-        versionName = "0.7.2"
+        versionCode = 73
+        versionName = "0.7.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

@@ -76,6 +76,9 @@ val FlockScene = Scene("flock", "flock", dev.ziran.android.R.drawable.painting_f
 
 fun sceneByKey(key: String): Scene = Scenes.firstOrNull { it.key == key } ?: Scenes.first()
 
+/** True when status bar icons should be dark over a painting's top band. */
+fun statusBarUsesDarkIcons(topBandLuminance: Float): Boolean = topBandLuminance >= 0.45f
+
 /**
  * Decodes each painting ONCE at display size and pre-scales the 256 dp grain
  * tile ONCE so BitmapShader runs with an identity matrix (zero per-frame resampling).
@@ -83,6 +86,36 @@ fun sceneByKey(key: String): Scene = Scenes.firstOrNull { it.key == key } ?: Sce
 object BitmapCache {
     private val paintings = ConcurrentHashMap<Long, ImageBitmap>()
     private val grainShaders = ConcurrentHashMap<Long, ShaderBrush>()
+    private val topLuminance = ConcurrentHashMap<Long, Float>()
+
+    fun topBandLuminance(resources: Resources, @DrawableRes resId: Int, isNight: Boolean): Float {
+        val key = (resId.toLong() shl 1) or (if (isNight) 1L else 0L)
+        return topLuminance.getOrPut(key) {
+            val bmp = decodeSampled(resources, resId, 128)
+            val rows = (bmp.height * 0.16f).roundToInt().coerceAtLeast(1)
+            var sum = 0.0
+            var count = 0
+            val stepX = (bmp.width / 16).coerceAtLeast(1)
+            val stepY = (rows / 6).coerceAtLeast(1)
+            var y = 0
+            while (y < rows) {
+                var x = 0
+                while (x < bmp.width) {
+                    val c = bmp.getPixel(x, y)
+                    val r = ((c shr 16) and 0xFF) / 255.0
+                    val g = ((c shr 8) and 0xFF) / 255.0
+                    val b = (c and 0xFF) / 255.0
+                    sum += 0.2126 * r + 0.7152 * g + 0.0722 * b
+                    count += 1
+                    x += stepX
+                }
+                y += stepY
+            }
+            bmp.recycle()
+            val raw = if (count > 0) (sum / count).toFloat() else 0.5f
+            if (isNight) raw * Tokens.NightBrightness else raw
+        }
+    }
 
     fun painting(resources: Resources, @DrawableRes resId: Int, targetWidthPx: Int): ImageBitmap {
         val bucket = ((targetWidthPx.coerceAtLeast(128) + 127) / 128) * 128
@@ -175,7 +208,8 @@ fun Painting(
     val tyTargetPx = with(density) { (-6).dp.toPx() }
     val mistShiftPx = with(density) { 26.dp.toPx() }
 
-    var kbPhase by remember { mutableFloatStateOf(0f) }
+    val slowDriftState = androidx.compose.runtime.rememberUpdatedState(slowDrift)
+    val kbPhaseState = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(reducedMotion) {
         if (reducedMotion) return@LaunchedEffect
         var lastNs = withFrameNanos { it }
@@ -183,16 +217,12 @@ fun Painting(
             withFrameNanos { nowNs ->
                 val dtSec = ((nowNs - lastNs).coerceIn(0L, 100_000_000L)) / 1_000_000_000f
                 lastNs = nowNs
-                val speed = if (slowDrift) 0.25f else 1f
+                val speed = if (slowDriftState.value) 0.25f else 1f
                 // Full cycle = 2 * KenBurns (34s forward + 34s reverse)
                 val periodSec = (WuDurations.KenBurns * 2f) / 1000f
-                kbPhase = (kbPhase + (dtSec * speed) / periodSec) % 1f
+                kbPhaseState.floatValue = (kbPhaseState.floatValue + (dtSec * speed) / periodSec) % 1f
             }
         }
-    }
-    val kbValue = if (reducedMotion) 0f else {
-        // Smooth cosine ease 0 -> 1 -> 0 over kbPhase in 0..1
-        ((1f - kotlin.math.cos(kbPhase * 2f * kotlin.math.PI.toFloat())) * 0.5f)
     }
 
     val transition = if (reducedMotion) null else rememberInfiniteTransition(label = "painting-motion")
@@ -231,7 +261,9 @@ fun Painting(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        val p = kbValue
+                        val p = if (reducedMotion) 0f else {
+                            ((1f - kotlin.math.cos(kbPhaseState.floatValue * 2f * kotlin.math.PI.toFloat())) * 0.5f)
+                        }
                         val scale = if (reducedMotion) 1.03f else 1.03f + 0.07f * p
                         scaleX = scale
                         scaleY = scale

@@ -36,6 +36,15 @@ object OperationReconciler {
     fun isStaleEcho(previous: OperationView?, incoming: OperationView): Boolean =
         previous != null && incoming.state == "dispatching" && previous.state in TERMINAL_STATES
 
+    /**
+     * True only while an operation's delivery is still unresolved.
+     * `accepted` and `observed_in_history` prove the adapter already took the
+     * message, so they must never block the user from sending the next message
+     * after a turn finishes (or steering while a turn runs).
+     */
+    fun isBlockingNewSend(pending: PendingMessage?): Boolean =
+        pending != null && pending.state in setOf("staged", "reserved", "dispatching", "unknown")
+
     fun reconcile(pending: PendingMessage?, operation: OperationView): PendingOutcome {
         if (pending == null || pending.operationId != operation.operationId) {
             return PendingOutcome(pending)

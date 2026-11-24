@@ -62,8 +62,19 @@ class AppController(
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
+    /** Scoped composer flow so typing never recomposes ZiranApp root. */
+    private val _composerText = MutableStateFlow("")
+    val composerText: StateFlow<String> = _composerText.asStateFlow()
+    private var draftSaveJob: Job? = null
+
     private fun setState(update: (AppState) -> AppState) {
-        _state.update(update)
+        _state.update { prev ->
+            val next = update(prev)
+            if (next.composerText != prev.composerText) {
+                _composerText.value = next.composerText
+            }
+            next
+        }
     }
 
     fun scope(): CoroutineScope = scope
@@ -72,15 +83,38 @@ class AppController(
 
     fun start() {
         scope.launch {
-            // Saved scene and theme resolve before the first paint settles.
+            // Saved scene, theme, and settings resolve before the first paint settles.
             val scene = store.getScene()
             val theme = store.getThemeMode()
-            setState { it.copy(scene = scene, themeMode = theme) }
+            val steerDef = store.getSteerDefault()
+            val threadsSort = store.getThreadsSort()
+            val (defModel, defProvider, defApi) = store.getDefaultModel()
+            val defEffort = store.getDefaultEffort()
+            val nWait = store.getNotifyWaiting()
+            val nDone = store.getNotifyDone()
+            val nClosed = store.getNotifyOnlyClosed()
+            val serverIds = store.listServerIds()
+            setState {
+                it.copy(
+                    scene = scene,
+                    themeMode = theme,
+                    steerDefault = steerDef,
+                    activeSteerMode = if (steerDef == "wait") "after" else "steer",
+                    threadsSort = threadsSort,
+                    defaultModel = defModel,
+                    defaultProvider = defProvider,
+                    defaultApiMethod = defApi,
+                    defaultEffort = defEffort,
+                    notifyWaiting = nWait,
+                    notifyDone = nDone,
+                    notifyOnlyClosed = nClosed,
+                    pairedServers = serverIds,
+                )
+            }
             context?.let { LocalNotifications.ensureChannels(it) }
             // Ask once, after the first successful pairing, with the reason on
             // screen. Never before pairing: nothing to notify about yet.
             setState { it.copy(notificationsPrompt = false) }
-            val serverIds = store.listServerIds()
             val first = serverIds.firstOrNull()
             if (first == null) {
                 setState { it.copy(phase = "unpaired") }
@@ -94,6 +128,7 @@ class AppController(
             }
             setState { it.copy(phase = "ready", serverName = credential.serverId) }
             startClient(credential)
+            scope.launch { refreshConnectedHealth(credential.baseUrl) }
             awaitReady()
         }
     }
@@ -161,7 +196,10 @@ class AppController(
                         serverName = adapter.server.value?.name ?: it.serverName,
                     )
                 }
-                if (status == dev.ziran.android.connection.ConnectionStatus.Connected) maybeDrainQueue()
+                if (status == dev.ziran.android.connection.ConnectionStatus.Connected) {
+                    maybeDrainQueue()
+                    scope.launch { refreshConnectedHealth(credential.baseUrl) }
+                }
             }
         }
         scope.launch {
@@ -295,6 +333,97 @@ class AppController(
         setState { it.copy(themeMode = mode) }
     }
 
+    suspend fun setSteerDefault(mode: String) {
+        store.setSteerDefault(mode)
+        setState {
+            it.copy(
+                steerDefault = mode,
+                activeSteerMode = when (mode) {
+                    "wait" -> "after"
+                    "steer" -> "steer"
+                    else -> it.activeSteerMode
+                },
+            )
+        }
+    }
+
+    fun setActiveSteerMode(mode: String) {
+        setState { it.copy(activeSteerMode = mode) }
+    }
+
+    suspend fun setThreadsSort(sort: String) {
+        store.setThreadsSort(sort)
+        setState { it.copy(threadsSort = sort) }
+    }
+
+    suspend fun setDefaultModel(model: String, provider: String, apiMethod: String) {
+        store.setDefaultModel(model, provider, apiMethod)
+        setState { it.copy(defaultModel = model, defaultProvider = provider, defaultApiMethod = apiMethod) }
+    }
+
+    suspend fun setDefaultEffort(effort: String) {
+        store.setDefaultEffort(effort)
+        setState { it.copy(defaultEffort = effort) }
+    }
+
+    suspend fun setNotifyWaiting(enabled: Boolean) {
+        store.setNotifyWaiting(enabled)
+        setState { it.copy(notifyWaiting = enabled) }
+    }
+
+    suspend fun setNotifyDone(enabled: Boolean) {
+        store.setNotifyDone(enabled)
+        setState { it.copy(notifyDone = enabled) }
+    }
+
+    suspend fun setNotifyOnlyClosed(enabled: Boolean) {
+        store.setNotifyOnlyClosed(enabled)
+        setState { it.copy(notifyOnlyClosed = enabled) }
+    }
+
+    suspend fun refreshConnectedHealth(baseUrl: String? = currentCredential()?.baseUrl) {
+        val url = baseUrl ?: return
+        val result = PairingHttp.probeHealth(url, http)
+        if (result is dev.ziran.android.protocol.HealthProbeResult.Reachable) {
+            setState {
+                it.copy(
+                    adapterVersion = result.adapterVersion,
+                    protocolVersion = result.protocolVersion,
+                    jcodeConnected = result.jcodeConnected,
+                )
+            }
+        }
+    }
+
+    suspend fun forgetServer(serverId: String) {
+        store.removeServer(serverId)
+        val remaining = store.listServerIds()
+        if (currentCredential()?.serverId == serverId) {
+            client?.close()
+            client = null
+            credential = null
+            setState {
+                it.copy(
+                    phase = if (remaining.isEmpty()) "unpaired" else it.phase,
+                    pairedServers = remaining,
+                    sessions = emptyList(),
+                    activeSessionId = null,
+                    snapshot = null,
+                    connection = "offline",
+                )
+            }
+            if (remaining.isNotEmpty()) {
+                val nextCred = loadCredential(remaining.first())
+                if (nextCred != null) {
+                    setState { it.copy(phase = "ready", serverName = nextCred.serverId) }
+                    startClient(nextCred)
+                }
+            }
+        } else {
+            setState { it.copy(pairedServers = remaining) }
+        }
+    }
+
     // -- envelope routing -----------------------------------------------------
 
     private fun handleEnvelope(envelope: dev.ziran.android.protocol.Envelope) {
@@ -397,8 +526,14 @@ class AppController(
         }
     }
 
+    private var sessionsRefreshJob: kotlinx.coroutines.Job? = null
+
     private fun scheduleSessionsRefresh() {
-        scope.launch { kotlinx.coroutines.delay(32); refreshSessions() }
+        sessionsRefreshJob?.cancel()
+        sessionsRefreshJob = scope.launch {
+            kotlinx.coroutines.delay(120)
+            refreshSessions()
+        }
     }
 
     private suspend fun loadCachedSessions(serverId: String): List<SessionSummary>? {
@@ -550,7 +685,10 @@ class AppController(
 
     private fun applySnapshot(snapshot: SessionSnapshot) {
         val credential = currentCredential() ?: return
-        scope.launch { store.saveSnapshotCache(credential.serverId, snapshot.session.sessionId, snapshot.toString()) }
+        scope.launch {
+            dev.ziran.android.ui.MarkdownCache.prewarm(snapshot.messages)
+            store.saveSnapshotCache(credential.serverId, snapshot.session.sessionId, snapshot.toString())
+        }
         setState { applySnapshotToState(it, snapshot) }
         // Delivery is decided by operation state, never by matching text: an
         // older message with the same words is not proof that this send landed.
@@ -619,8 +757,11 @@ class AppController(
         when (val event = payload.event) {
             is dev.ziran.android.protocol.SessionEvent.PermissionRequest ->
                 notify(LocalNotifications.CHANNEL_APPROVAL, "Approval needed", "${event.toolName}: ${event.description}".take(160))
-            is dev.ziran.android.protocol.SessionEvent.TurnDone ->
+            is dev.ziran.android.protocol.SessionEvent.TurnDone -> {
                 notify(LocalNotifications.CHANNEL_TURNS, "Turn complete", "The agent finished in this thread.")
+                scheduleSnapshot(150)
+            }
+            is dev.ziran.android.protocol.SessionEvent.TurnStopped -> scheduleSnapshot(150)
             else -> Unit
         }
         maybeDrainQueue()
@@ -629,13 +770,42 @@ class AppController(
     // -- send / stop / permission ---------------------------------------------
 
     fun setComposerText(text: String) {
-        setState { it.copy(composerText = text) }
+        _composerText.value = text
         val credential = currentCredential() ?: return
         val sessionId = _state.value.activeSessionId ?: return
-        scope.launch { store.saveDraft(credential.serverId, sessionId, text) }
+        draftSaveJob?.cancel()
+        draftSaveJob = scope.launch {
+            kotlinx.coroutines.delay(250L)
+            store.saveDraft(credential.serverId, sessionId, text)
+        }
     }
 
-    suspend fun send() = sendText(_state.value.composerText)
+    /** Persist per-device reading position when connected to an Adapter v5 server. */
+    fun reportReadingPosition(sessionId: String, messageIndex: Int, scrollOffsetPx: Int = 0) {
+        val adapter = client ?: return
+        if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
+        val caps = adapter.server.value?.capabilities.orEmpty()
+        if ("reading.positions" !in caps) return
+        scope.launch {
+            runCatching {
+                adapter.request(
+                    "reading.set",
+                    JsonObject(
+                        mapOf(
+                            "session_id" to JsonPrimitive(sessionId),
+                            "message_index" to JsonPrimitive(messageIndex),
+                            "scroll_offset_px" to JsonPrimitive(scrollOffsetPx),
+                            "last_read_seq" to JsonPrimitive(_state.value.lastSeq),
+                        ),
+                    ),
+                    sessionId = sessionId,
+                    timeoutMs = 5000,
+                )
+            }
+        }
+    }
+
+    suspend fun send() = sendText(_composerText.value.ifEmpty { _state.value.composerText })
 
     /**
      * Send exactly the given text.
@@ -644,7 +814,12 @@ class AppController(
      * in thread A still lands in A when thread B is on screen. It never touches
      * the composer.
      */
-    suspend fun sendText(rawText: String, targetSessionId: String? = null, fromQueue: Boolean = false) {
+    suspend fun sendText(
+        rawText: String,
+        targetSessionId: String? = null,
+        fromQueue: Boolean = false,
+        steerModeOverride: String? = null,
+    ) {
         val text = rawText.trim()
         val sessionId = targetSessionId ?: _state.value.activeSessionId ?: return
         val isActive = _state.value.activeSessionId == sessionId
@@ -655,19 +830,68 @@ class AppController(
         }
         if (text.isEmpty()) return
         val pending = if (isActive) _state.value.pending else null
-        if (pending != null && pending.state in listOf("staged", "reserved", "dispatching", "accepted", "unknown")) {
+        if (OperationReconciler.isBlockingNewSend(pending)) {
             setState { it.copy(sessionsError = "This message is still being resolved. Do not resend it.") }
             return
         }
-        if (isActive && (_state.value.live.turnId != null || _state.value.live.daemonRunning)) {
-            // A message written while the turn runs is a soft interrupt: it
-            // waits in this session's queue and is sent once that turn
-            // settles. Nothing is cancelled.
-            enqueue(sessionId, text)
-            setState { it.copy(composerText = "") }
-            val serverId = currentCredential()?.serverId
-            if (serverId != null) store.saveDraft(serverId, sessionId, "")
-            return
+        val isWorking = isActive && (_state.value.live.turnId != null || _state.value.live.daemonRunning)
+        var expectedTurnId: String? = null
+        var sentTag: String? = null
+        if (isWorking && !fromQueue) {
+            val mode = steerModeOverride ?: _state.value.activeSteerMode
+            when (mode) {
+                "after" -> {
+                    enqueue(sessionId, text)
+                    setState {
+                        it.copy(
+                            composerText = "",
+                            live = it.live.copy(sentDuringTurn = it.live.sentDuringTurn + SentTurnNote(text, "waits for the turn")),
+                        )
+                    }
+                    val serverId = currentCredential()?.serverId
+                    if (serverId != null) store.saveDraft(serverId, sessionId, "")
+                    return
+                }
+                "stop" -> {
+                    stop()
+                    // Wait for turn_stopped / idle before sending; never dispatch while still running.
+                    var waited = 0
+                    while (waited < 20000 && (_state.value.live.turnId != null || _state.value.live.daemonRunning)) {
+                        kotlinx.coroutines.delay(100L)
+                        waited += 100
+                    }
+                    if (_state.value.live.turnId != null || _state.value.live.daemonRunning) {
+                        setState {
+                            it.copy(
+                                sessionsError = "The current turn is still stopping. Wait for it to settle before sending.",
+                            )
+                        }
+                        return
+                    }
+                    expectedTurnId = null
+                    sentTag = "sent after stop"
+                }
+                else -> {
+                    // Steer now: reserve with expected_turn_id = active turn id (soft interrupt).
+                    val activeTurn = _state.value.live.turnId
+                    if (activeTurn != null) {
+                        expectedTurnId = activeTurn
+                        sentTag = "steering"
+                    } else {
+                        // Honest fallback when turn_id is unknown: queue after this turn.
+                        enqueue(sessionId, text)
+                        setState {
+                            it.copy(
+                                composerText = "",
+                                live = it.live.copy(sentDuringTurn = it.live.sentDuringTurn + SentTurnNote(text, "waits for the turn")),
+                            )
+                        }
+                        val serverId = currentCredential()?.serverId
+                        if (serverId != null) store.saveDraft(serverId, sessionId, "")
+                        return
+                    }
+                }
+            }
         }
         val credential = currentCredential() ?: return
         val operationId = UUID.randomUUID().toString()
@@ -675,7 +899,15 @@ class AppController(
         // A queue drain must leave the user's draft exactly as it is.
         if (!fromQueue) store.saveDraft(credential.serverId, sessionId, text)
         store.savePending(credential.serverId, sessionId, operationId, text, "staged", next.createdAt)
-        setState { it.copy(pending = if (isActive) next else it.pending, composerText = if (isActive) "" else it.composerText) }
+        setState {
+            it.copy(
+                pending = if (isActive) next else it.pending,
+                composerText = if (isActive) "" else it.composerText,
+                live = if (isActive && sentTag != null) {
+                    it.live.copy(sentDuringTurn = it.live.sentDuringTurn + SentTurnNote(text, sentTag))
+                } else it.live,
+            )
+        }
         try {
             val reserved = adapter.request(
                 "operations.reserve",
@@ -683,7 +915,7 @@ class AppController(
                     operationId = operationId,
                     sessionId = sessionId,
                     body = text,
-                    expectedTurnId = null,
+                    expectedTurnId = expectedTurnId,
                 ),
                 sessionId = sessionId,
                 operationId = operationId,
@@ -822,8 +1054,15 @@ class AppController(
 
     private fun notify(kind: String, title: String, body: String) {
         val ctx = context ?: return
-        val sessionId = _state.value.activeSessionId ?: return
-        LocalNotifications.postIfBackgrounded(ctx, kind, sessionId, title, body)
+        val st = _state.value
+        val sessionId = st.activeSessionId ?: return
+        val allowed = when (kind) {
+            LocalNotifications.CHANNEL_APPROVAL -> st.notifyWaiting
+            LocalNotifications.CHANNEL_TURNS -> st.notifyDone
+            else -> true
+        }
+        if (!allowed) return
+        LocalNotifications.postIfBackgrounded(ctx, kind, sessionId, title, body, onlyWhenClosed = st.notifyOnlyClosed)
     }
 
     /**
@@ -982,7 +1221,7 @@ class AppController(
 
     suspend fun refreshModels() {
         val adapter = client ?: return
-        val sessionId = _state.value.activeSessionId ?: return
+        val sessionId = _state.value.activeSessionId ?: _state.value.sessions.firstOrNull()?.sessionId ?: return
         if (adapter.status.value != dev.ziran.android.connection.ConnectionStatus.Connected) return
         try {
             val payload = adapter.request("models.list", JsonObject(mapOf("session_id" to JsonPrimitive(sessionId))), sessionId = sessionId, timeoutMs = 25000)
@@ -990,11 +1229,13 @@ class AppController(
             val models = payload["models"]?.let {
                 (it as? kotlinx.serialization.json.JsonArray)?.mapNotNull { item -> (item as? JsonObject)?.let { m -> dev.ziran.android.protocol.parseRoute(m) } }
             } ?: emptyList()
-            if (_state.value.activeSessionId == sessionId) {
+            if (_state.value.activeSessionId == null || _state.value.activeSessionId == sessionId) {
                 setState { it.copy(models = models, runtime = latestRuntime(it.runtime, runtime), modelsError = null) }
             }
         } catch (_: Exception) {
-            if (_state.value.activeSessionId == sessionId) setState { it.copy(models = emptyList()) }
+            if (_state.value.activeSessionId == null || _state.value.activeSessionId == sessionId) {
+                setState { it.copy(models = emptyList()) }
+            }
         }
     }
 

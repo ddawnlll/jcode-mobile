@@ -2,13 +2,13 @@ package dev.ziran.android.design
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
@@ -27,12 +27,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.invalidatePlacement
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -169,7 +177,86 @@ fun InkRippleHost(
 }
 
 /**
- * Wu wei press feedback: replaces Material ripple (`indication = null`).
+ * Zero-overhead IndicationNodeFactory for Wu wei press feedback.
+ * Allocates NO Animatable and NO graphicsLayer while idle or scrolling 200+ rows;
+ * only animates on actual press via LayoutModifierNode.placeWithLayer.
+ */
+private data class WuPressIndication(
+    val isSeal: Boolean,
+    val reducedMotion: Boolean,
+) : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode =
+        WuPressIndicationNode(interactionSource, isSeal, reducedMotion)
+}
+
+private class WuPressIndicationNode(
+    private val interactionSource: InteractionSource,
+    private val isSeal: Boolean,
+    private val reducedMotion: Boolean,
+) : Modifier.Node(), LayoutModifierNode {
+    private var pressAnim: Animatable<Float, AnimationVector1D>? = null
+    private var animJob: Job? = null
+    private var activePressCount = 0
+
+    override fun onAttach() {
+        if (reducedMotion) return
+        coroutineScope.launch {
+            interactionSource.interactions.collect { interaction ->
+                when (interaction) {
+                    is PressInteraction.Press -> {
+                        activePressCount += 1
+                        animatePress(1f)
+                    }
+                    is PressInteraction.Release, is PressInteraction.Cancel -> {
+                        activePressCount = (activePressCount - 1).coerceAtLeast(0)
+                        if (activePressCount == 0) animatePress(0f)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun animatePress(target: Float) {
+        val created = pressAnim == null
+        val anim = pressAnim ?: Animatable(0f).also { pressAnim = it }
+        if (created) invalidatePlacement()
+        animJob?.cancel()
+        animJob = coroutineScope.launch {
+            anim.animateTo(target, tween(WuDurations.Press, easing = WuEasing.Default))
+        }
+    }
+
+    override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
+        val placeable = measurable.measure(constraints)
+        val minScale = pressScale(isSeal)
+        return layout(placeable.width, placeable.height) {
+            val anim = pressAnim
+            if (anim == null) {
+                placeable.place(0, 0)
+            } else {
+                placeable.placeWithLayer(0, 0) {
+                    val p = anim.value
+                    if (p > 0.0001f) {
+                        val s = 1f + (minScale - 1f) * p
+                        scaleX = s
+                        scaleY = s
+                        if (!isSeal) {
+                            alpha = 1f - 0.15f * p
+                        } else {
+                            rotationZ += -3f * p
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val WuControlIndication = WuPressIndication(isSeal = false, reducedMotion = false)
+private val WuSealIndication = WuPressIndication(isSeal = true, reducedMotion = false)
+
+/**
+ * Wu wei press feedback: replaces Material ripple with a zero-composed Modifier.Node.
  * Controls sink to 97% (alpha 85%), seals sink to 90% with a -3° tilt in 180 ms.
  * Seals also emit CONTEXT_CLICK haptic feedback.
  */
@@ -178,35 +265,32 @@ fun Modifier.wuClickable(
     isSeal: Boolean = false,
     reducedMotion: Boolean = false,
     onClick: () -> Unit,
-): Modifier = composed {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val view = LocalView.current
-    val dur = if (reducedMotion) 1 else WuDurations.Press
-    val targetScale = if (pressed && !reducedMotion) pressScale(isSeal) else 1f
-    val targetAlpha = if (pressed && !isSeal && !reducedMotion) 0.85f else 1f
-    val targetTilt = if (pressed && isSeal && !reducedMotion) -3f else 0f
-
-    val scale by animateFloatAsState(targetScale, tween(dur, easing = WuEasing.Default), label = "wu-press-scale")
-    val alpha by animateFloatAsState(targetAlpha, tween(dur, easing = WuEasing.Default), label = "wu-press-alpha")
-    val tilt by animateFloatAsState(targetTilt, tween(dur, easing = WuEasing.Default), label = "wu-press-tilt")
-
-    this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-            this.alpha = alpha
-            rotationZ += tilt
-        }
-        .clickable(
+): Modifier {
+    val indication = when {
+        reducedMotion -> null
+        isSeal -> WuSealIndication
+        else -> WuControlIndication
+    }
+    if (!isSeal) {
+        return this.clickable(
             enabled = enabled,
-            interactionSource = interactionSource,
-            indication = null,
+            interactionSource = null,
+            indication = indication,
+            onClick = onClick,
+        )
+    }
+    return composed {
+        val view = LocalView.current
+        this.clickable(
+            enabled = enabled,
+            interactionSource = null,
+            indication = indication,
             onClick = {
-                if (isSeal) view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                 onClick()
             },
         )
+    }
 }
 
 /**

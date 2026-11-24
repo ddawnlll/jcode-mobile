@@ -32,7 +32,8 @@ fun BackChevron(
 ) {
     Box(
         Modifier
-            .padding(start = 8.dp, top = 50.dp)
+            .safeTopAndHorizontalPadding()
+            .padding(start = 8.dp, top = 6.dp)
             .size(44.dp)
             .wuClickable(reducedMotion = reducedMotion, onClick = onBack)
             .semantics { role = Role.Button; contentDescription = label },
@@ -66,7 +67,8 @@ fun ThreadsMenuButton(
 ) {
     Box(
         Modifier
-            .padding(start = 8.dp, top = 50.dp)
+            .safeTopAndHorizontalPadding()
+            .padding(start = 8.dp, top = 6.dp)
             .size(44.dp)
             .wuClickable(reducedMotion = reducedMotion, onClick = onClick)
             .semantics { role = Role.Button; contentDescription = "Threads" },
@@ -101,7 +103,8 @@ fun PlanButton(
 ) {
     Box(
         modifier
-            .padding(end = 8.dp, top = 50.dp)
+            .safeTopAndHorizontalPadding()
+            .padding(end = 8.dp, top = 6.dp)
             .size(44.dp)
             .wuClickable(reducedMotion = reducedMotion, onClick = onClick)
             .semantics { role = Role.Button; contentDescription = "The plan" },

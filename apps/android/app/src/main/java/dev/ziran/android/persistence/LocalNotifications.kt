@@ -51,9 +51,16 @@ object LocalNotifications {
         ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
     }
 
-    /** Post if backgrounded and permitted. Returns true when posted. */
-    fun postIfBackgrounded(context: Context, channel: String, sessionId: String, title: String, body: String): Boolean {
-        if (!isBackgrounded(context)) return false
+    /** Post if permitted (and backgrounded when [onlyWhenClosed] is true). Returns true when posted. */
+    fun postIfBackgrounded(
+        context: Context,
+        channel: String,
+        sessionId: String,
+        title: String,
+        body: String,
+        onlyWhenClosed: Boolean = true,
+    ): Boolean {
+        if (onlyWhenClosed && !isBackgrounded(context)) return false
         if (!hasPermission(context)) return false
         ensureChannels(context)
         val intent = Intent(Intent.ACTION_VIEW, "ziran://session/$sessionId".toUri())

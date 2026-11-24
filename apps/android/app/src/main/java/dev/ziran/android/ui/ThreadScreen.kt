@@ -49,6 +49,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -119,6 +120,7 @@ fun ThreadScreen(
     palette: Palette,
     state: AppState,
     modifier: Modifier = Modifier,
+    composerTextFlow: kotlinx.coroutines.flow.StateFlow<String>? = null,
     sceneKey: String = "peaks",
     listState: LazyListState = rememberLazyListState(),
     onBack: () -> Unit = {},
@@ -127,6 +129,8 @@ fun ThreadScreen(
     onScenes: () -> Unit = {},
     onTextChange: (String) -> Unit = {},
     onSend: (String) -> Unit = {},
+    onSendWithMode: (String, String) -> Unit = { text, _ -> onSend(text) },
+    onSteerModeChange: (String) -> Unit = {},
     onStop: () -> Unit = {},
     onPermission: (String) -> Unit = {},
     reducedMotion: Boolean = false,
@@ -160,8 +164,22 @@ fun ThreadScreen(
     }
 
     var sendStamp by remember { mutableIntStateOf(0) }
-    val userPromptCount = (snapshot?.messages?.count { it.role == "user" } ?: 0) +
-        (if (state.pending != null) 1 else 0)
+    var steerSheetOpen by remember { mutableStateOf(false) }
+    var pendingAskText by remember { mutableStateOf<String?>(null) }
+    val historyMessages = snapshot?.messages.orEmpty()
+    val userOrdinals = remember(historyMessages) {
+        buildMap {
+            var ord = 0
+            historyMessages.forEachIndexed { idx, msg ->
+                if (msg.role == "user") {
+                    ord += 1
+                    put(idx, ord)
+                }
+            }
+        }
+    }
+    val historyUserCount = userOrdinals.size
+    val userPromptCount = historyUserCount + (if (state.pending != null) 1 else 0)
 
     Box(modifier.fillMaxSize().background(palette.paper)) {
         // Painting header stays still at the top even while the IME rises.
@@ -214,13 +232,15 @@ fun ThreadScreen(
             }
         }
 
+        val safeTop = rememberSafeTopInsetDp()
         // Foreground layout rides the IME cleanly via WindowInsetsAnimationCompat.
         Column(
             Modifier
                 .fillMaxSize()
+                .safeTopAndHorizontalPadding()
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
-            Spacer(Modifier.height(170.dp))
+            Spacer(Modifier.height(contentTopSpacerDp(170, safeTop, minClearanceDp = 56).dp))
 
             // Title + subtitle + stamped agent seal (top: 170 dp).
             Row(
@@ -270,20 +290,40 @@ fun ThreadScreen(
                     .weight(1f)
                     .padding(horizontal = 22.dp),
             ) {
-                if (snapshot != null) {
-                    var promptOrdinal = 0
-                    items(
-                        snapshot.messages,
-                        key = { message -> "history-${message.index}-${message.role}" },
-                    ) { message ->
-                        if (message.role == "user") promptOrdinal += 1
-                        HistoryRow(message, promptOrdinal.coerceAtLeast(1), palette)
+                if (historyMessages.isNotEmpty()) {
+                    historyMessages.forEachIndexed { idx, message ->
+                        val baseKey = "history-$idx-${message.index}-${message.role}"
+                        when {
+                            message.role == "user" -> {
+                                val ord = userOrdinals[idx] ?: 1
+                                item(key = baseKey, contentType = "history-user") {
+                                    PromptRow(ordinal = ord, text = message.content, palette = palette, animate = false)
+                                }
+                            }
+                            message.role == "assistant" -> {
+                                wuMarkdownItems(
+                                    keyPrefix = baseKey,
+                                    markdown = message.content,
+                                    palette = palette,
+                                    reducedMotion = reducedMotion,
+                                )
+                            }
+                            message.toolName != null -> {
+                                item(key = baseKey, contentType = "history-tool") {
+                                    Text(
+                                        "${message.toolName} ${message.content.take(80)}",
+                                        style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3),
+                                        modifier = Modifier.padding(vertical = 2.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 if (state.pending != null) {
-                    item(key = "pending-${state.pending.operationId}") {
+                    item(key = "pending-${state.pending.operationId}", contentType = "pending") {
                         PromptRow(
-                            ordinal = (snapshot?.messages?.count { it.role == "user" } ?: 0) + 1,
+                            ordinal = historyUserCount + 1,
                             text = state.pending.text,
                             palette = palette,
                             reducedMotion = reducedMotion,
@@ -291,7 +331,10 @@ fun ThreadScreen(
                     }
                 }
                 if (state.live.reasoning.isNotEmpty()) {
-                    item(key = "thinking-${state.live.turnId ?: state.live.finishedTurnId ?: "live"}") {
+                    item(
+                        key = "thinking-${state.live.turnId ?: state.live.finishedTurnId ?: "live"}",
+                        contentType = "thinking",
+                    ) {
                         ThinkingFold(
                             reasoning = state.live.reasoning,
                             durationSecs = state.live.reasoningDurationSecs,
@@ -300,48 +343,138 @@ fun ThreadScreen(
                         )
                     }
                 }
-                items(state.live.tools, key = { tool -> "tool-${tool.callId}" }) { tool ->
+                items(
+                    state.live.tools,
+                    key = { tool -> "tool-${tool.callId}" },
+                    contentType = { "tool" },
+                ) { tool ->
                     ToolRow(tool = tool, palette = palette, reducedMotion = reducedMotion)
                 }
                 if (state.live.assistants.isNotEmpty()) {
-                    item(key = "answer-${state.live.turnId ?: state.live.finishedTurnId ?: "live"}") {
-                        AnswerBlock(state.live.assistants, palette, reducedMotion)
+                    val turnKey = state.live.turnId ?: state.live.finishedTurnId ?: "live"
+                    state.live.assistants.forEachIndexed { bIdx, block ->
+                        wuMarkdownItems(
+                            keyPrefix = "answer-$turnKey-$bIdx-${block.id}",
+                            markdown = block.text,
+                            palette = palette,
+                            reducedMotion = reducedMotion,
+                            animateLastBlock = !block.done && bIdx == state.live.assistants.lastIndex,
+                        )
                     }
                 }
                 if (state.live.permission != null) {
                     val perm = state.live.permission
-                    item(key = "perm-${perm.requestId}") {
+                    item(key = "perm-${perm.requestId}", contentType = "permission") {
                         PermissionCard(perm.toolName, perm.description, palette, reducedMotion, onPermission)
                     }
                 }
-                itemsIndexed(state.queuedMessages, key = { index, q -> "queued-$index-${q.hashCode()}" }) { index, queued ->
+                itemsIndexed(
+                    state.live.sentDuringTurn,
+                    key = { index, s -> "steer-$index-${s.text.hashCode()}" },
+                    contentType = { _, _ -> "queued" },
+                ) { index, note ->
                     QueuedRow(
                         ordinal = (userPromptCount + index + 1).coerceAtLeast(2),
-                        text = queued,
-                        tag = if (isWorking) "queued" else "sent",
+                        text = note.text,
+                        tag = note.tag,
                         palette = palette,
                         reducedMotion = reducedMotion,
                     )
                 }
+                itemsIndexed(
+                    state.queuedMessages,
+                    key = { index, q -> "queued-$index-${q.hashCode()}" },
+                    contentType = { _, _ -> "queued" },
+                ) { index, queued ->
+                    if (state.live.sentDuringTurn.none { it.text == queued }) {
+                        QueuedRow(
+                            ordinal = (userPromptCount + state.live.sentDuringTurn.size + index + 1).coerceAtLeast(2),
+                            text = queued,
+                            tag = if (isWorking) "waits for the turn" else "sent",
+                            palette = palette,
+                            reducedMotion = reducedMotion,
+                        )
+                    }
+                }
             }
 
-            // Composer + footer (rides the IME frame by frame).
+            // Composer + steer chip + footer (rides the IME frame by frame).
             Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(start = 20.dp, end = 16.dp, top = 4.dp, bottom = 14.dp),
             ) {
+                if (isWorking) {
+                    val modeLabel = when (state.activeSteerMode) {
+                        "stop" -> "stop, then send"
+                        "after" -> "after this turn"
+                        else -> "steer now"
+                    }
+                    val softCount = state.live.pendingSoftInterrupts
+                    val chipText = if (softCount > 0 && state.activeSteerMode == "steer") {
+                        "$modeLabel ($softCount) ▾"
+                    } else {
+                        "$modeLabel ▾"
+                    }
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            Modifier
+                                .height(30.dp)
+                                .border(1.dp, palette.line, RoundedCornerShape(15.dp))
+                                .wuClickable(reducedMotion = reducedMotion, onClick = {
+                                    pendingAskText = null
+                                    steerSheetOpen = true
+                                })
+                                .padding(horizontal = 10.dp)
+                                .semantics { role = Role.Button; contentDescription = "Send mode: $modeLabel" },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(Modifier.size(6.dp).background(palette.blue, CircleShape))
+                            Text(
+                                chipText,
+                                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink2),
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Row(
+                            Modifier
+                                .height(30.dp)
+                                .border(1.dp, palette.line, RoundedCornerShape(15.dp))
+                                .wuClickable(reducedMotion = reducedMotion, onClick = onStop)
+                                .padding(horizontal = 12.dp)
+                                .semantics { role = Role.Button; contentDescription = "Stop" },
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(Modifier.size(8.dp).background(palette.ink2, RoundedCornerShape(1.5.dp)))
+                            Text(
+                                "stop",
+                                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink2),
+                            )
+                        }
+                    }
+                }
                 ComposerWithStop(
                     palette = palette,
-                    value = state.composerText,
+                    value = composerTextFlow?.collectAsState()?.value ?: state.composerText,
                     placeholder = "write to $agent…",
-                    isWorking = isWorking,
+                    isWorking = false,
                     stampTrigger = sendStamp,
                     reducedMotion = reducedMotion,
                     onValueChange = onTextChange,
                     onSend = { text ->
-                        sendStamp += 1
-                        onSend(text)
+                        if (isWorking && state.steerDefault == "ask") {
+                            pendingAskText = text
+                            steerSheetOpen = true
+                        } else {
+                            sendStamp += 1
+                            onSend(text)
+                        }
                     },
                     onStop = onStop,
                     sessionKey = state.activeSessionId ?: "thread",
@@ -396,6 +529,113 @@ fun ThreadScreen(
             modifier = Modifier.align(Alignment.TopEnd),
             reducedMotion = reducedMotion,
         )
+
+        // Steer mode bottom sheet (`Steer.dc.html`).
+        SheetHost(
+            visible = steerSheetOpen,
+            palette = palette,
+            reducedMotion = reducedMotion,
+            onDismiss = {
+                steerSheetOpen = false
+                pendingAskText = null
+            },
+        ) {
+            SteerSheetContent(
+                agent = agent,
+                selectedMode = state.activeSteerMode,
+                palette = palette,
+                reducedMotion = reducedMotion,
+                onPick = { mode ->
+                    onSteerModeChange(mode)
+                    steerSheetOpen = false
+                    val askText = pendingAskText
+                    pendingAskText = null
+                    if (askText != null) {
+                        sendStamp += 1
+                        onSendWithMode(askText, mode)
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SteerSheetContent(
+    agent: String,
+    selectedMode: String,
+    palette: Palette,
+    reducedMotion: Boolean,
+    onPick: (String) -> Unit,
+) {
+    val options = listOf(
+        Triple("steer", "Steer now", "$agent reads it at its next step. Its work goes on."),
+        Triple("stop", "Stop, then send", "$agent stops the current work first, then reads it."),
+        Triple("after", "After this turn", "Waits until $agent is done, then goes."),
+    )
+    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp)) {
+        Text(
+            "$agent is working. Your message should…",
+            style = TextStyle(
+                fontFamily = WuFonts.Garamond,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium,
+                color = palette.ink,
+            ),
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+        options.forEach { (key, title, note) ->
+            val on = key == selectedMode
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .wuClickable(reducedMotion = reducedMotion, onClick = { onPick(key) })
+                    .drawBehind {
+                        drawLine(
+                            color = palette.line,
+                            start = Offset(0f, size.height),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 1.dp.toPx(),
+                        )
+                    }
+                    .semantics { role = Role.RadioButton; contentDescription = "$title: $note" },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 17.sp, color = palette.ink),
+                    )
+                    Text(
+                        note,
+                        style = TextStyle(
+                            fontFamily = WuFonts.Garamond,
+                            fontSize = 14.5.sp,
+                            fontStyle = FontStyle.Italic,
+                            color = palette.ink3,
+                        ),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+                    if (on) {
+                        Canvas(Modifier.size(18.dp)) {
+                            drawCircle(
+                                color = palette.seal,
+                                radius = size.minDimension * 0.41f,
+                                style = Stroke(width = 1.6.dp.toPx()),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            "the default is set in settings · while an agent works",
+            style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 10.5.sp, color = palette.ink3),
+            modifier = Modifier.padding(top = 10.dp, bottom = 12.dp),
+        )
     }
 }
 
@@ -408,29 +648,6 @@ private fun statusLineFor(state: AppState): String = when {
     state.reconciling -> "reconciling"
     state.savedOnPhone -> "saved on this phone"
     else -> "idle"
-}
-
-@Composable
-private fun HistoryRow(message: HistoryMessageView, ordinal: Int, palette: Palette) {
-    when {
-        message.role == "user" -> PromptRow(ordinal = ordinal, text = message.content, palette = palette, animate = false)
-        message.role == "assistant" -> Text(
-            message.content,
-            style = TextStyle(
-                fontFamily = WuFonts.Garamond,
-                fontSize = 16.5.sp,
-                lineHeight = 24.sp,
-                fontStyle = FontStyle.Italic,
-                color = palette.ink2,
-            ),
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        message.toolName != null -> Text(
-            "${message.toolName} ${message.content.take(80)}",
-            style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3),
-            modifier = Modifier.padding(vertical = 2.dp),
-        )
-    }
 }
 
 @Composable
@@ -620,7 +837,7 @@ private fun ThinkingFold(
                     shrinkTowards = Alignment.Top,
                 ) + fadeOut(tween(if (reducedMotion) WuDurations.ReducedFade else 500, easing = WuEasing.Default)),
             ) {
-                WordStreamText(
+                Text(
                     text = fullText,
                     style = TextStyle(
                         fontFamily = WuFonts.Garamond,
@@ -629,9 +846,6 @@ private fun ThinkingFold(
                         fontStyle = FontStyle.Italic,
                         color = palette.ink3,
                     ),
-                    staggerMs = WuDurations.WordStagger,
-                    alreadySettled = allDone,
-                    reducedMotion = reducedMotion,
                     modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
                 )
             }
@@ -679,11 +893,9 @@ private fun ToolRow(
     val dotAlpha = remember(tool.callId) { Animatable(if (startedAsLive) 0f else 1f) }
     val nameIn = remember(tool.callId) { Animatable(if (startedAsLive) 0f else 1f) }
     val intentIn = remember(tool.callId) { Animatable(if (startedAsLive) 0f else 1f) }
-    val scaleFactor = rememberAnimatorScale()
 
     LaunchedEffect(tool.callId, startedAsLive) {
         if (!startedAsLive) return@LaunchedEffect
-        val sf = scaleFactor.coerceAtLeast(0.1f)
         // Ink drop: 0 -> 1.35 (60%) -> 1.0 (100%) over 550 ms.
         dotAlpha.snapTo(1f)
         val dur = WuDurations.ToolIn
@@ -731,18 +943,6 @@ private fun ToolRow(
         animationSpec = tween(if (reducedMotion) WuDurations.ReducedFade else 500, easing = WuEasing.Default),
         label = "tool-done-${tool.callId}",
     )
-
-    // Live elapsed seconds (`0:00`, `0:01`, ...) while running.
-    var elapsedSec by remember(tool.callId) { mutableIntStateOf(0) }
-    LaunchedEffect(tool.callId, isRunning, scaleFactor) {
-        if (!isRunning) return@LaunchedEffect
-        val tickMs = (1000f * scaleFactor.coerceAtLeast(0.25f)).toLong()
-        while (true) {
-            delay(tickMs)
-            elapsedSec += 1
-        }
-    }
-    val elapsedLabel = "0:${elapsedSec.coerceAtMost(59).toString().padStart(2, '0')}"
 
     val slideOffsetPx = with(LocalDensity.current) { (-6).dp.toPx() }
     val summary = remember(tool.name, tool.output, tool.error) { toolDoneSummary(tool) }
@@ -829,9 +1029,10 @@ private fun ToolRow(
                     ) {
                         BrailleSpinnerText(color = palette.blue, fontSize = 11.sp, reducedMotion = reducedMotion)
                         Spacer(Modifier.width(4.dp))
-                        Text(
-                            elapsedLabel,
-                            style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.blue),
+                        ToolElapsedText(
+                            callId = tool.callId,
+                            isRunning = isRunning,
+                            color = palette.blue,
                         )
                     }
                 }
@@ -1043,117 +1244,21 @@ private fun ToolDoneMeta(summary: String, palette: Palette, alpha: Float) {
 }
 
 @Composable
-private fun AnswerBlock(assistants: List<LiveBlock>, palette: Palette, reducedMotion: Boolean) {
-    Column(Modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        assistants.forEach { block ->
-            WordStreamText(
-                text = block.text,
-                style = TextStyle(
-                    fontFamily = WuFonts.Garamond,
-                    fontSize = 16.5.sp,
-                    lineHeight = 24.sp,
-                    fontStyle = FontStyle.Italic,
-                    color = palette.ink2,
-                ),
-                staggerMs = WuDurations.AnswerWordStagger,
-                alreadySettled = false,
-                reducedMotion = reducedMotion,
-            )
-        }
-    }
-}
-
-/**
- * Word-by-word settling text (`l-word`: 500 ms ease + 3 dp upward rise, staggered).
- * Uses ONE frame-driven clock that automatically stops once all visible words reach 1.0,
- * driving GPU graphicsLayer transforms with zero relayout and zero ghost pre-rendering.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun WordStreamText(
-    text: String,
-    style: TextStyle,
-    staggerMs: Int,
-    alreadySettled: Boolean,
-    reducedMotion: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val words = remember(text) { text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() } }
-    if (words.isEmpty()) return
-
-    if (reducedMotion || alreadySettled) {
-        Text(text, style = style, modifier = modifier)
-        return
-    }
-
-    val animatedCap = 80
-    val animatedWords = words.take(animatedCap)
-    val overflowText = if (words.size > animatedCap) words.drop(animatedCap).joinToString(" ") else null
-
-    // Record the exact arrival timestamp (in animation-scaled ms) for each word index.
-    // Clock is a Float updated in withFrameNanos and read ONLY inside graphicsLayer so
-    // streaming words run at full 120 Hz with zero per-frame recompositions.
-    val arrivalMs = remember { mutableStateMapOf<Int, Float>() }
-    var clockMs by remember { mutableFloatStateOf(0f) }
-    val scaleFactor = rememberAnimatorScale().coerceAtLeast(0.1f)
-    val risePx = with(LocalDensity.current) { 3.dp.toPx() }
-    val wordDur = WuDurations.ThrottleWord.toFloat()
-
-    // Stamp newly arrived words and tick a single frame clock until the final word settles.
-    LaunchedEffect(animatedWords.size, scaleFactor) {
-        val now = clockMs
-        val lastEnd = arrivalMs.values.maxOrNull() ?: (now - staggerMs.toFloat())
-        var cursor = maxOf(now, lastEnd + staggerMs.toFloat())
-        for (i in animatedWords.indices) {
-            if (!arrivalMs.containsKey(i)) {
-                arrivalMs[i] = if (i == 0 && arrivalMs.isEmpty()) now else cursor
-                cursor += staggerMs.toFloat()
-            }
-        }
-        val targetEnd = (arrivalMs[animatedWords.lastIndex] ?: now) + wordDur + 24f
-        if (clockMs >= targetEnd) return@LaunchedEffect
-        var prevNanos = 0L
+private fun ToolElapsedText(callId: String, isRunning: Boolean, color: Color) {
+    val scaleFactor = rememberAnimatorScale()
+    var elapsedSec by remember(callId) { mutableIntStateOf(0) }
+    LaunchedEffect(callId, isRunning, scaleFactor) {
+        if (!isRunning) return@LaunchedEffect
+        val tickMs = (1000f * scaleFactor.coerceAtLeast(0.25f)).toLong()
         while (true) {
-            val done = withFrameNanos { nanos ->
-                if (prevNanos == 0L) {
-                    prevNanos = nanos
-                    false
-                } else {
-                    val dtRealMs = (nanos - prevNanos) / 1_000_000.0
-                    prevNanos = nanos
-                    // Sub-millisecond Float delta keeps timing exact at 60/90/120/144 Hz and 0.25x.
-                    clockMs += (dtRealMs / scaleFactor).toFloat().coerceIn(0f, 100f)
-                    val endAt = (arrivalMs[animatedWords.lastIndex] ?: 0f) + wordDur + 24f
-                    clockMs >= endAt
-                }
-            }
-            if (done) break
+            delay(tickMs)
+            elapsedSec += 1
         }
     }
-
-    Column(modifier) {
-        FlowRow(
-            horizontalArrangement = Arrangement.Start,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            animatedWords.forEachIndexed { index, word ->
-                val startAt = arrivalMs[index] ?: Float.MAX_VALUE
-                Text(
-                    text = if (index < animatedWords.lastIndex || overflowText != null) "$word " else word,
-                    style = style,
-                    modifier = Modifier.graphicsLayer {
-                        val raw = ((clockMs - startAt) / wordDur).coerceIn(0f, 1f)
-                        val e = WuEasing.Default.transform(raw)
-                        alpha = e
-                        translationY = risePx * (1f - e)
-                    },
-                )
-            }
-        }
-        if (overflowText != null) {
-            Text(overflowText, style = style, modifier = Modifier.padding(top = 2.dp))
-        }
-    }
+    Text(
+        text = "0:${elapsedSec.coerceAtMost(59).toString().padStart(2, '0')}",
+        style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = color),
+    )
 }
 
 @Composable

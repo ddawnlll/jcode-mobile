@@ -43,7 +43,7 @@ class RefreshRateAndMotionTest {
 
     @Test
     fun pickersRollAwayAndThreadsSlideBack() {
-        assertEquals(NavKind.Roll, backKindFor(Screen.Model))
+        assertEquals(NavKind.Roll, backKindFor(Screen.Model()))
         assertEquals(NavKind.Roll, backKindFor(Screen.Scenes))
         assertEquals(NavKind.Slide, backKindFor(Screen.Thread("sess-fox")))
     }

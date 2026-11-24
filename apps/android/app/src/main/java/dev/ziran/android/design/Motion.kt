@@ -8,6 +8,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -88,12 +89,15 @@ object ReducedFadeScale : MotionDurationScale {
     override val scaleFactor: Float = 1f
 }
 
+/** Root-provided animator duration scale so child rows never register extra ContentObservers. */
+val LocalAnimatorScale = compositionLocalOf { 1f }
+
 /**
- * Observe ANIMATOR_DURATION_SCALE live so changing it via Settings or adb
- * updates motion and reduced-motion immediately without restarting the app.
+ * Observe ANIMATOR_DURATION_SCALE live ONCE at the app root so changing it via
+ * Settings or adb updates motion and reduced-motion immediately without restarting.
  */
 @Composable
-fun rememberAnimatorScale(): Float {
+fun rememberObservedAnimatorScale(): Float {
     val context = LocalContext.current
     fun readScale(): Float = Settings.Global.getFloat(
         context.contentResolver,
@@ -115,6 +119,10 @@ fun rememberAnimatorScale(): Float {
     }
     return scale
 }
+
+/** O(1) read of the root-observed ANIMATOR_DURATION_SCALE. */
+@Composable
+fun rememberAnimatorScale(): Float = LocalAnimatorScale.current
 
 /** Press scale: controls to 97 percent, seals to 90 percent with a tilt. */
 fun pressScale(isSeal: Boolean): Float = if (isSeal) 0.90f else 0.97f
