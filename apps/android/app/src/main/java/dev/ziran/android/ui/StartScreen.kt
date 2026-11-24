@@ -82,11 +82,9 @@ import dev.ziran.android.protocol.MIN_PROTOCOL_VERSION
 import dev.ziran.android.protocol.PROTOCOL_VERSION
 import kotlinx.coroutines.delay
 
-/** Formats raw input into `XXXX-XXXX-XXXX` (max 12 alphanumeric characters). */
-internal fun formatPairingCode(raw: String): String {
-    val clean = raw.uppercase().filter { it.isLetterOrDigit() }.take(12)
-    return clean.chunked(4).joinToString("-")
-}
+/** Sanitizes a pairing code without mangling case, dashes, or length (supports v5 & v4 codes). */
+internal fun formatPairingCode(raw: String): String =
+    raw.filter { !it.isWhitespace() }.take(64)
 
 /**
  * Start / Pairing screen: Start.dc.html + Start-Night.dc.html.
@@ -135,9 +133,9 @@ fun StartScreen(
         }
     }
 
-    val alnumCount = localCodeField.text.count { it.isLetterOrDigit() }
+    val codeLen = localCodeField.text.trim().length
     val serverReady = healthProbe is HealthProbeResult.Reachable && healthProbe.compatible
-    val isReadyToPair = alnumCount == 12 && serverReady
+    val isReadyToPair = codeLen >= 4 && serverReady
     var wasReady by remember { mutableStateOf(false) }
     var readyStampTrigger by remember { mutableIntStateOf(0) }
     LaunchedEffect(isReadyToPair) {
@@ -193,7 +191,7 @@ fun StartScreen(
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
                 Spacer(Modifier.height(contentTopSpacerDp(290, safeTop, minClearanceDp = 24).dp))
                 Text(
-                    "jcode",
+                    "ziran",
                     style = TextStyle(
                         fontFamily = WuFonts.Mono,
                         fontSize = 12.sp,
@@ -220,7 +218,7 @@ fun StartScreen(
                     "pairing" -> "exchanging the code…"
                     "connecting" -> "negotiating the channel…"
                     "verified" -> "verified"
-                    else -> "Start the adapter where jcode runs. It prints a code that works once, for ten minutes."
+                    else -> "Start the adapter on your server and enter its pairing code."
                 }
                 AnimatedContent(
                     targetState = stageSubtitle,
@@ -284,7 +282,7 @@ fun StartScreen(
                     ServerHealthStatusLine(healthProbe = healthProbe, palette = palette, reducedMotion = reducedMotion)
                 }
 
-                // One-time code field (XXXX-XXXX-XXXX, animated chars, progressive ink underline)
+                // Pairing code field (accepts v5 arbitrary codes and v4 XXXX-XXXX-XXXX codes verbatim)
                 Column(
                     Modifier
                         .padding(top = 14.dp)
@@ -305,36 +303,30 @@ fun StartScreen(
                     ) {
                         if (localCodeField.text.isEmpty()) {
                             Text(
-                                "K7QM-P2XA-9R4L",
+                                "ziran-pair",
                                 style = TextStyle(
                                     fontFamily = WuFonts.Mono,
-                                    fontSize = 20.sp,
-                                    letterSpacing = 0.16.em,
-                                    color = palette.ink3.copy(alpha = 0.38f),
+                                    fontSize = 16.sp,
+                                    letterSpacing = 0.04.em,
+                                    color = palette.ink3.copy(alpha = 0.42f),
                                 ),
-                            )
-                        } else {
-                            AnimatedCodeText(
-                                code = localCodeField.text,
-                                pasteNonce = pasteNonce,
-                                color = palette.ink,
-                                reducedMotion = reducedMotion,
                             )
                         }
                         BasicTextField(
                             value = localCodeField,
                             onValueChange = { next ->
-                                val formatted = formatPairingCode(next.text)
-                                val updated = TextFieldValue(formatted, TextRange(formatted.length))
+                                val clean = formatPairingCode(next.text)
+                                val cursor = next.selection.end.coerceIn(0, clean.length)
+                                val updated = TextFieldValue(clean, TextRange(cursor))
                                 localCodeField = updated
-                                lastCode = formatted
-                                onCodeChange(formatted)
+                                lastCode = clean
+                                onCodeChange(clean)
                             },
                             textStyle = TextStyle(
                                 fontFamily = WuFonts.Mono,
-                                fontSize = 20.sp,
-                                letterSpacing = 0.16.em,
-                                color = Color.Transparent,
+                                fontSize = 16.sp,
+                                letterSpacing = 0.04.em,
+                                color = palette.ink,
                             ),
                             cursorBrush = SolidColor(palette.ink),
                             singleLine = true,
@@ -343,7 +335,7 @@ fun StartScreen(
                     }
                     // Progressive ink underline following character count; indigo on failure.
                     CodeInkUnderline(
-                        fraction = alnumCount / 12f,
+                        fraction = (codeLen / 10f).coerceIn(0f, 1f),
                         isError = error != null,
                         palette = palette,
                         reducedMotion = reducedMotion,
