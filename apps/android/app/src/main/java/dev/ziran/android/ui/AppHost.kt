@@ -7,13 +7,20 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -255,7 +262,7 @@ fun ZiranApp(
                 }
                 is DeepLinks.Route.Session -> {
                     stack = listOf(Screen.Threads, Screen.Thread(route.sessionId))
-                    controller.scope().launch { controller.openSession(route.sessionId) }
+                    controller.scope().launch { controller.openSession(route.sessionId, targetServerId = route.serverId) }
                 }
                 DeepLinks.Route.Unknown -> {
                     stack = listOf(Screen.Start)
@@ -384,7 +391,13 @@ fun ZiranApp(
                                         scope.launch { controller.openSession(id) }
                                     },
                                     onPermission = { decision -> scope.launch { controller.respondPermission(decision) } },
-                                    onNewThread = { newThreadSheetOpen = true },
+                                    onNewThread = {
+                                        controller.clearCreateSessionError()
+                                        newThreadSheetOpen = true
+                                    },
+                                    onReconnect = { controller.reconnectNow() },
+                                    onOpenUpdate = { activeTab = RootTab.Settings },
+                                    onDismissUpdateBanner = { controller.dismissUpdateBanner() },
                                     reducedMotion = reduced,
                                 )
                                 RootTab.Threads -> ThreadsScreen(
@@ -420,6 +433,8 @@ fun ZiranApp(
                                     onToggleNotifyWaiting = { v -> scope.launch { controller.setNotifyWaiting(v) } },
                                     onToggleNotifyDone = { v -> scope.launch { controller.setNotifyDone(v) } },
                                     onToggleNotifyOnlyClosed = { v -> scope.launch { controller.setNotifyOnlyClosed(v) } },
+                                    onCheckUpdates = { controller.checkForUpdates(manual = true) },
+                                    onInstallUpdate = { controller.downloadAndInstallUpdate() },
                                     reducedMotion = reduced,
                                 )
                             }
@@ -481,6 +496,7 @@ fun ZiranApp(
                         state = state,
                         initialScope = target.initialScope,
                         onBack = back,
+                        onRetryModels = { scope.launch { controller.refreshModels() } },
                         onSelectThreadModel = { model -> scope.launch { controller.selectModel(model.model, model.provider, model.apiMethod) } },
                         onSetThreadEffort = { effort -> scope.launch { controller.setReasoning(effort) } },
                         onSelectDefaultModel = { model -> scope.launch { controller.setDefaultModel(model.model, model.provider, model.apiMethod) } },
@@ -500,11 +516,17 @@ fun ZiranApp(
             }
         }
         // New thread sheet (from Home / Threads floating seal).
+        // Retains title and stays open on failure so user input is never lost (#121).
         SheetHost(
             visible = newThreadSheetOpen,
             palette = palette,
             reducedMotion = reduced,
-            onDismiss = { newThreadSheetOpen = false },
+            onDismiss = {
+                if (!state.creatingSession) {
+                    newThreadSheetOpen = false
+                    controller.clearCreateSessionError()
+                }
+            },
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 10.dp)) {
                 Text(
@@ -515,21 +537,48 @@ fun ZiranApp(
                     value = newThreadTitle,
                     placeholder = "thread title…",
                     palette = palette,
-                    onValueChange = { newThreadTitle = it },
-                    modifier = Modifier.padding(top = 10.dp, bottom = 14.dp),
+                    onValueChange = {
+                        newThreadTitle = it
+                        if (state.createSessionError != null) controller.clearCreateSessionError()
+                    },
+                    modifier = Modifier.padding(top = 10.dp, bottom = 10.dp),
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
+                if (state.createSessionError != null) {
+                    Text(
+                        state.createSessionError!!,
+                        style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.5.sp, color = palette.seal),
+                        modifier = Modifier.padding(bottom = 10.dp),
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (state.creatingSession) {
+                        Text(
+                            "Creating…",
+                            style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 12.sp, color = palette.ink3),
+                            modifier = Modifier.padding(end = 12.dp),
+                        )
+                    }
                     dev.ziran.android.design.SealButton(
                         sizeDp = 48,
-                        backgroundColor = palette.seal,
+                        backgroundColor = if (state.creatingSession) palette.ink3 else palette.seal,
                         strokeColor = palette.onSeal,
                         label = "Create thread",
                         reducedMotion = reduced,
                         onClick = {
+                            if (state.creatingSession) return@SealButton
                             val t = newThreadTitle.trim()
-                            newThreadTitle = ""
-                            newThreadSheetOpen = false
-                            scope.launch { controller.createSession(null, t.ifEmpty { "New thread" }) }
+                            scope.launch {
+                                val created = controller.createSession(null, t.ifEmpty { "New thread" })
+                                if (created != null) {
+                                    newThreadTitle = ""
+                                    newThreadSheetOpen = false
+                                    go(Screen.Thread(created.sessionId), NavKind.InkDrop, lastTap)
+                                }
+                            }
                         },
                     )
                 }
@@ -538,11 +587,10 @@ fun ZiranApp(
         // Tiled 256 dp paper grain sits above screens (non-interactive, z-index: 5).
         GrainOverlay(nightFactor = palette.nightFactor)
         if (state.notificationsPrompt) {
-            NotificationReasonBar(
+            NotificationReasonModal(
                 palette = palette,
                 onAllow = onRequestNotifications,
                 onDismiss = { controller.notificationsHandled(false) },
-                modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter),
             )
         }
     }
@@ -550,66 +598,92 @@ fun ZiranApp(
 }
 
 /**
- * The reason for POST_NOTIFICATIONS, on screen, before the system dialog.
- * Turn-done and approval notices are local only; nothing claims remote push.
+ * Modal permission rationale for POST_NOTIFICATIONS (#116, #117).
+ * Dims the background, respects navigationBarsPadding() above both 3-button
+ * and gesture bars, and gives Not now / Allow full 48 dp touch targets.
  */
 @Composable
-private fun NotificationReasonBar(
+private fun NotificationReasonModal(
     palette: Palette,
     onAllow: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier
-            .fillMaxWidth()
-            .background(palette.paper2)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.42f))
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Text(
-            "Turn notices",
-            style = TextStyle(
-                fontFamily = WuFonts.Garamond,
-                fontSize = 16.sp,
-                color = palette.ink,
-            ),
-        )
-        Text(
-            "A local notice when a turn finishes or an approval is needed while Ziran is in the background. Nothing is sent from a server.",
-            style = TextStyle(
-                fontFamily = WuFonts.Garamond,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
-                color = palette.ink3,
-            ),
-            modifier = Modifier.padding(top = 2.dp),
-        )
-        Row(Modifier.padding(top = 8.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(palette.paper2, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+                .clickable(enabled = false, onClick = {})
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp, vertical = 18.dp),
+        ) {
             Text(
-                "not now",
+                "Turn notices",
                 style = TextStyle(
-                    fontFamily = WuFonts.Mono,
-                    fontSize = 12.sp,
+                    fontFamily = WuFonts.Garamond,
+                    fontSize = 20.sp,
+                    color = palette.ink,
+                ),
+            )
+            Text(
+                "A local notice when a turn finishes or an approval is needed while Ziran is in the background. Nothing is sent from a server.",
+                style = TextStyle(
+                    fontFamily = WuFonts.Garamond,
+                    fontSize = 14.5.sp,
+                    lineHeight = 21.sp,
                     color = palette.ink3,
-                    textDecoration = TextDecoration.Underline,
                 ),
-                modifier = Modifier
-                    .padding(end = 18.dp)
-                    .semantics { role = Role.Button; contentDescription = "Not now" }
-                    .clickable { onDismiss() },
+                modifier = Modifier.padding(top = 6.dp),
             )
-            Text(
-                "allow",
-                style = TextStyle(
-                    fontFamily = WuFonts.Mono,
-                    fontSize = 12.sp,
-                    color = palette.seal,
-                    textDecoration = TextDecoration.Underline,
-                ),
-                modifier = Modifier
-                    .semantics { role = Role.Button; contentDescription = "Allow notifications" }
-                    .clickable { onAllow() },
-            )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .defaultMinSize(minHeight = 48.dp)
+                        .background(palette.paper, RoundedCornerShape(10.dp))
+                        .clickable { onDismiss() }
+                        .semantics { role = Role.Button; contentDescription = "Not now" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "Not now",
+                        style = TextStyle(
+                            fontFamily = WuFonts.Mono,
+                            fontSize = 12.5.sp,
+                            color = palette.ink2,
+                        ),
+                    )
+                }
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .defaultMinSize(minHeight = 48.dp)
+                        .background(palette.seal, RoundedCornerShape(10.dp))
+                        .clickable { onAllow() }
+                        .semantics { role = Role.Button; contentDescription = "Allow notifications" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "Allow",
+                        style = TextStyle(
+                            fontFamily = WuFonts.Mono,
+                            fontSize = 12.5.sp,
+                            color = palette.onSeal,
+                        ),
+                    )
+                }
+            }
         }
     }
 }

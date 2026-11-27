@@ -870,20 +870,12 @@ private fun ToolRow(
     val isDone = tool.status == "done" || tool.status == "failed"
     val isRunning = !isDone
 
-    // Parse intent (line 1 of input) vs optional unfolding panel lines (lines 2+ of input or output).
-    val inputLines = remember(tool.input) { tool.input.lines() }
-    val intentText = inputLines.firstOrNull().orEmpty().take(80)
-    val panelText = remember(tool.input, tool.output, tool.error) {
-        val fromInput = if (inputLines.size > 1) inputLines.drop(1).joinToString("\n").trim() else ""
-        val fromOutput = if (tool.output.contains('\n')) tool.output.trim() else ""
-        when {
-            fromOutput.isNotEmpty() -> fromOutput
-            fromInput.isNotEmpty() -> fromInput
-            tool.error != null -> tool.error
-            else -> ""
-        }
+    // Structured, human-readable collapsed summary (#115) — never raw JSON.
+    val sections = remember(tool.name, tool.input, tool.output, tool.error) {
+        ToolPresentation.buildSections(tool)
     }
-    val hasPanel = panelText.isNotEmpty()
+    val intentText = sections.summary
+    val hasPanel = sections.output != null || sections.error != null || sections.formattedInput != null
     var userToggled by remember(tool.callId) { mutableStateOf(false) }
     val panelOpen = hasPanel && (if (isRunning) true else userToggled)
 
@@ -1073,8 +1065,9 @@ private fun ToolRow(
             ) + fadeOut(tween(if (reducedMotion) WuDurations.ReducedFade else 500, easing = WuEasing.Default)),
         ) {
             ToolDetailPanel(
-                toolName = tool.name,
-                text = panelText,
+                tool = tool,
+                sections = sections,
+                isRunning = isRunning,
                 palette = palette,
                 reducedMotion = reducedMotion,
             )
@@ -1118,67 +1111,134 @@ private fun FlowingHairline(
 
 @Composable
 private fun ToolDetailPanel(
-    toolName: String,
-    text: String,
+    tool: LiveTool,
+    sections: ToolPresentation.ToolDetailSections,
+    isRunning: Boolean,
     palette: Palette,
     reducedMotion: Boolean,
 ) {
-    val lines = remember(text) { text.lines().take(16) }
-    val isDiff = remember(toolName, lines) {
-        toolName == "edit" || lines.any { it.startsWith("- ") || it.startsWith("+ ") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var shownLines by remember(tool.callId) { mutableIntStateOf(ToolPresentation.INITIAL_PREVIEW_LINES) }
+    var showRawJson by remember(tool.callId) { mutableStateOf(false) }
+    var copied by remember(tool.callId) { mutableStateOf(false) }
+
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(1800L)
+            copied = false
+        }
     }
-    if (isDiff) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 26.dp, top = 4.dp, bottom = 6.dp)
-                .background(palette.paper2, RoundedCornerShape(4.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+
+    val primaryText = sections.output ?: sections.error ?: sections.formattedInput.orEmpty()
+    val allLines = remember(primaryText) { if (primaryText.isEmpty()) emptyList() else primaryText.lines() }
+    val totalLines = allLines.size
+    val visibleCount = shownLines.coerceAtMost(totalLines)
+    val remaining = (totalLines - visibleCount).coerceAtLeast(0)
+    val totalBytes = remember(primaryText) { primaryText.toByteArray(Charsets.UTF_8).size }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 26.dp, top = 4.dp, bottom = 6.dp)
+            .background(palette.paper2, RoundedCornerShape(6.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+    ) {
+        // Metadata + action bar: line/byte counts, truncation notice, raw JSON toggle, copy full (#124).
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            var plusIndex = 0
-            lines.forEachIndexed { idx, line ->
-                val isRemoved = line.startsWith("- ") || line.startsWith("-") && !line.startsWith("---")
-                val isAdded = line.startsWith("+ ") || line.startsWith("+") && !line.startsWith("+++")
-                val delayMs = if (isAdded) {
-                    val d = 550 + plusIndex * 300
-                    plusIndex += 1
-                    d
-                } else 0
+            Text(
+                buildString {
+                    append("$totalLines ${if (totalLines == 1) "line" else "lines"}")
+                    append(" · ${ToolPresentation.formatByteSize(totalBytes)}")
+                    if (sections.serverTruncated) append(" · server truncated")
+                },
+                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 10.sp, color = palette.ink3),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (sections.rawInput != null) {
+                Text(
+                    if (showRawJson) "formatted" else "json",
+                    style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 10.5.sp, color = palette.ink3),
+                    modifier = Modifier
+                        .wuClickable(reducedMotion = reducedMotion, onClick = { showRawJson = !showRawJson })
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                )
+            }
+            Text(
+                if (copied) "copied" else "copy full",
+                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 10.5.sp, color = palette.seal),
+                modifier = Modifier
+                    .wuClickable(
+                        reducedMotion = reducedMotion,
+                        onClick = {
+                            val cb = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("${tool.name} output", ToolPresentation.fullCopyText(tool))
+                            cb?.setPrimaryClip(clip)
+                            copied = true
+                        },
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .semantics { role = Role.Button; contentDescription = "Copy full available tool output" },
+            )
+        }
+
+        if (showRawJson && sections.rawInput != null) {
+            Text(
+                sections.rawInput,
+                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, lineHeight = 17.sp, color = palette.ink3),
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        } else if (sections.formattedInput != null && sections.output != null) {
+            Text(
+                sections.formattedInput,
+                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, lineHeight = 17.sp, color = palette.ink3),
+                maxLines = 6,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 6.dp),
+            )
+        }
+
+        val visibleLines = remember(allLines, visibleCount) { allLines.take(visibleCount) }
+        if (sections.isDiff) {
+            visibleLines.forEachIndexed { idx, line ->
+                val isRemoved = line.startsWith("- ") || (line.startsWith("-") && !line.startsWith("---"))
+                val isAdded = line.startsWith("+ ") || (line.startsWith("+") && !line.startsWith("+++"))
                 val style = when {
                     isRemoved -> TextStyle(
                         fontFamily = WuFonts.Mono,
                         fontSize = 11.5.sp,
-                        lineHeight = 20.sp,
+                        lineHeight = 19.sp,
                         color = palette.seal.copy(alpha = 0.8f),
                         textDecoration = TextDecoration.LineThrough,
                     )
                     isAdded -> TextStyle(
                         fontFamily = WuFonts.Mono,
                         fontSize = 11.5.sp,
-                        lineHeight = 20.sp,
+                        lineHeight = 19.sp,
                         color = palette.green,
                     )
                     else -> TextStyle(
                         fontFamily = WuFonts.Mono,
                         fontSize = 11.5.sp,
-                        lineHeight = 20.sp,
+                        lineHeight = 19.sp,
                         color = palette.ink3,
                     )
                 }
                 Text(
                     line,
                     style = style,
-                    modifier = if (isAdded) Modifier.wuRise(delayMs = delayMs, reducedMotion = reducedMotion, key = "diff-$idx-$line") else Modifier,
+                    modifier = if (isRunning && isAdded && idx < 16) {
+                        Modifier.wuRise(delayMs = 200 + idx * 60, reducedMotion = reducedMotion, key = "diff-${tool.callId}-$idx")
+                    } else Modifier,
                 )
             }
-        }
-    } else {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 26.dp, top = 2.dp, bottom = 6.dp),
-        ) {
-            lines.forEachIndexed { idx, line ->
+        } else {
+            visibleLines.forEach { line ->
                 val styled = buildAnnotatedString {
                     if (line.startsWith("✓")) {
                         withStyle(SpanStyle(color = palette.green)) { append("✓") }
@@ -1195,12 +1255,43 @@ private fun ToolDetailPanel(
                         lineHeight = 19.sp,
                         color = palette.ink3,
                     ),
-                    modifier = Modifier.wuRise(
-                        delayMs = 250 + idx * 500,
-                        reducedMotion = reducedMotion,
-                        key = "out-$idx-$line",
-                    ),
                 )
+            }
+        }
+
+        if (sections.error != null && sections.output != null) {
+            Text(
+                "error: ${sections.error}",
+                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.5.sp, lineHeight = 18.sp, color = palette.seal),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+
+        if (remaining > 0) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val nextStep = remaining.coerceAtMost(ToolPresentation.PAGE_INCREMENT_LINES)
+                Text(
+                    "Load $nextStep more ($remaining remaining)",
+                    style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.seal),
+                    modifier = Modifier
+                        .wuClickable(reducedMotion = reducedMotion, onClick = { shownLines += ToolPresentation.PAGE_INCREMENT_LINES })
+                        .padding(vertical = 4.dp)
+                        .semantics { role = Role.Button; contentDescription = "Load more tool output lines" },
+                )
+                if (remaining > ToolPresentation.PAGE_INCREMENT_LINES) {
+                    Text(
+                        "Show all",
+                        style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3),
+                        modifier = Modifier
+                            .wuClickable(reducedMotion = reducedMotion, onClick = { shownLines = totalLines })
+                            .padding(vertical = 4.dp)
+                            .semantics { role = Role.Button; contentDescription = "Show all tool output lines" },
+                    )
+                }
             }
         }
     }

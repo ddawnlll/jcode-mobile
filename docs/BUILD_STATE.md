@@ -13,7 +13,7 @@ Updated: 2026-11-21
 | Binary names | `jcode-adapter-v4` (preferred), `jcode-adapter-v3` and `jcode-adapter-v2` (aliases) |
 | Client | Ziran (native Kotlin + Jetpack Compose, `apps/android/`) |
 | Android package | `dev.ziran.android` |
-| Android versionCode | 71 (`minSdk 26`, `targetSdk 37`, `compileSdk 37`) |
+| Android versionCode | 74 (`versionName 0.7.4`, `minSdk 26`, `targetSdk 37`, `compileSdk 37`) |
 | Signed APK | `artifacts/ziran-0.7.1-android-release.apk` (`11,624,585` bytes / `11.09 MiB`) |
 | APK SHA-256 | `e1612a7071399c3f116b2718ec18aadd22c68f726d3653b2d9d4b188f4f62f6b` |
 | JCode | Pinned fork `0abff12c7f2b55ec03b38a42dedbcd5f4eff13f8` |

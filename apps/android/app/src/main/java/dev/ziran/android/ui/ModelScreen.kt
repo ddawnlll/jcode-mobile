@@ -72,6 +72,7 @@ fun ModelScreen(
     state: AppState,
     initialScope: String = "thread",
     onBack: () -> Unit = {},
+    onRetryModels: () -> Unit = {},
     onSelectThreadModel: (ModelRouteView) -> Unit = {},
     onSetThreadEffort: (String) -> Unit = {},
     onSelectDefaultModel: (ModelRouteView) -> Unit = {},
@@ -252,6 +253,18 @@ fun ModelScreen(
                 }
             }
 
+            if (state.modelActionPending || state.modelActionError != null) {
+                Text(
+                    text = if (state.modelActionPending) "Updating model settings…" else state.modelActionError.orEmpty(),
+                    style = TextStyle(
+                        fontFamily = WuFonts.Mono,
+                        fontSize = 11.sp,
+                        color = if (state.modelActionPending) palette.blue else palette.seal,
+                    ),
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
             Spacer(Modifier.height(8.dp))
 
             WuSearchField(
@@ -277,10 +290,38 @@ fun ModelScreen(
                 contentPadding = PaddingValues(bottom = 30.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                if (filteredSorted.isEmpty()) {
+                if (state.modelsError != null && routes.isEmpty()) {
+                    item(key = "models-error") {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                state.modelsError,
+                                style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, fontStyle = FontStyle.Italic, color = palette.seal),
+                            )
+                            Box(
+                                Modifier
+                                    .height(44.dp)
+                                    .background(palette.seal, RoundedCornerShape(8.dp))
+                                    .wuClickable(reducedMotion = reducedMotion, onClick = onRetryModels)
+                                    .padding(horizontal = 16.dp)
+                                    .semantics { role = Role.Button; contentDescription = "Retry loading models" },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("Retry", style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 12.sp, color = palette.onSeal))
+                            }
+                        }
+                    }
+                } else if (state.modelsLoading && routes.isEmpty()) {
+                    item(key = "models-loading") {
+                        Text(
+                            "Loading models from server…",
+                            style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, fontStyle = FontStyle.Italic, color = palette.ink3),
+                            modifier = Modifier.padding(vertical = 24.dp),
+                        )
+                    }
+                } else if (filteredSorted.isEmpty()) {
                     item(key = "empty-models") {
                         Text(
-                            "No model by that name on this server.",
+                            if (query.isNotBlank()) "No model by that name on this server." else "No models reported by this server.",
                             style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, fontStyle = FontStyle.Italic, color = palette.ink3),
                             modifier = Modifier.padding(vertical = 24.dp),
                         )

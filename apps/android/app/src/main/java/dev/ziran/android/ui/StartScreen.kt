@@ -482,9 +482,9 @@ private fun ServerHealthStatusLine(
                                 .size(6.dp)
                                 .background(if (probe.jcodeConnected) palette.green else palette.ink3, CircleShape),
                         )
-                        val jcodePart = if (probe.jcodeConnected) "jcode connected" else "jcode not running"
+                        val agentPart = if (probe.jcodeConnected) "agent ready" else "agent unavailable"
                         Text(
-                            "adapter ${probe.adapterVersion} · protocol ${probe.protocolVersion} · $jcodePart",
+                            "adapter ${probe.adapterVersion} · protocol ${probe.protocolVersion} · $agentPart",
                             style = TextStyle(
                                 fontFamily = WuFonts.Mono,
                                 fontSize = 11.sp,

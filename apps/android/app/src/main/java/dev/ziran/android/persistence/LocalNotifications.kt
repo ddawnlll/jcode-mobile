@@ -59,24 +59,33 @@ object LocalNotifications {
         title: String,
         body: String,
         onlyWhenClosed: Boolean = true,
+        serverId: String? = null,
+        notificationKey: String? = null,
     ): Boolean {
         if (onlyWhenClosed && !isBackgrounded(context)) return false
         if (!hasPermission(context)) return false
         ensureChannels(context)
-        val intent = Intent(Intent.ACTION_VIEW, "ziran://session/$sessionId".toUri())
+        val deepLinkUri = if (!serverId.isNullOrBlank()) {
+            "ziran://session/$sessionId?server=${android.net.Uri.encode(serverId)}".toUri()
+        } else {
+            "ziran://session/$sessionId".toUri()
+        }
+        val intent = Intent(Intent.ACTION_VIEW, deepLinkUri)
         intent.setPackage(context.packageName)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        val pending = PendingIntent.getActivity(context, sessionId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notifId = ((notificationKey ?: "${serverId.orEmpty()}|$sessionId|$channel").hashCode() and 0x7fffffff)
+        val pending = PendingIntent.getActivity(context, notifId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(context, channel)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setColor(0xFF2E4374.toInt())
             .setContentTitle(title)
             .setContentText(body)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setContentIntent(pending)
             .setAutoCancel(true)
             .build()
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify((sessionId.hashCode() and 0x7fffffff), notification)
+        manager.notify(notifId, notification)
         return true
     }
 }

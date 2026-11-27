@@ -4,7 +4,7 @@
   <img src="website/assets/media/ziran-plan-day.png" alt="Ziran 0.7.3 Plan screen on Android API 35 with flock painting and indigo agent seals" width="280" />
 </p>
 
-<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.3</code></sub></p>
+<p align="center"><sub><code>ZIRAN / WU WEI / 0.7.4</code></sub></p>
 
 <h1 align="center">Leave the desk. Keep the thread.</h1>
 
@@ -24,7 +24,7 @@
 <table>
   <tr>
     <td width="33%" align="center" valign="top">
-      <sub><code>ZIRAN ANDROID / 0.7.3 / 3.3 MiB R8</code></sub><br /><br />
+      <sub><code>ZIRAN ANDROID / 0.7.4 / 3.3 MiB R8</code></sub><br /><br />
       <a href="https://github.com/ddawnlll/jcode-mobile/releases/latest"><strong>Download the APK</strong></a><br />
       <sub>Native Kotlin + Compose (R8-shrunk). Debug-signed sideload.</sub>
     </td>
@@ -41,15 +41,15 @@
   </tr>
 </table>
 
-> **Ziran 0.7.3 ("Wu wei")** ships an **R8-optimized 3.3 MiB Android release APK**,
-> a native **Wu wei markdown renderer** (`WuMarkdown.kt`), **200+ thread scroll &
-> zero-recomposition animation optimizations**, **live steering** (`Steer`),
-> **Home / Settings / reworked Model / Threads search, sort & sub-agents**,
-> cutout-safe insets, and an independent agent-agnostic **Adapter v5 in Go**
-> (`adapter-v5/`) supporting **Pu** and **JCode** as equal backends over QUIC/UDP
-> with WebSocket fallback.
+> **Ziran 0.7.4 ("Wu wei")** ships an **R8-optimized 3.3 MiB Android release APK**
+> with **in-app GitHub auto-updating** (version check + SHA-256 verified APK install),
+> structured human-readable tool rows & full output pagination/copying, honest
+> offline/reconnecting/agent-agnostic Home states, durable per-session queues,
+> multi-thread background notifications, modal inset-safe Turn notices, and the
+> independent agent-agnostic **Adapter v5 in Go** (`adapter-v5/`) supporting
+> **Pu** and **JCode** as equal backends.
 
-## What Ziran 0.7.3 is
+## What Ziran 0.7.4 is
 
 Ziran is two processes:
 
@@ -121,18 +121,20 @@ Cancel. Only the explicit **Stop** control targets the current turn.
 ## Install the Android APK
 
 ```text
-ziran-0.7.3-android-release.apk (R8-optimized, recommended)
+ziran-0.7.4-android-release.apk (R8-optimized, recommended)
 3.3 MiB
-SHA-256 546bd746d1b243255f07b2b2aebf3ccfac6aaa7c19347bebad5c22a65441ef3f
+SHA-256 faf0008f887bdb06b852a3e4233815987ac2567e6f6c9dcbc428e5e846f43853
 package dev.ziran.android
-versionCode 73, versionName 0.7.3
+versionCode 74, versionName 0.7.4
 minSdk 26, targetSdk 37, compileSdk 37
 APK Signature Scheme v2 and v3, Android Debug certificate
 ```
 
 ```sh
-adb install -r ziran-0.7.3-android-release.apk
+adb install -r ziran-0.7.4-android-release.apk
 ```
+
+After installing `0.7.4`, future GitHub releases can be checked and installed directly inside **Settings → Updates** without leaving the app.
 
 Because Ziran uses its own package identifier (`dev.ziran.android`), it installs
 cleanly alongside older Stillness (`dev.jcode.stillness`) installs. Pair once
@@ -200,6 +202,7 @@ bun run marketing:test
 | Read | Why |
 | --- | --- |
 | [Getting started](docs/GETTING_STARTED.md) | Adapter v4, TLS, pairing, Ziran Android install, troubleshooting |
+| [Ziran 0.7.4 release notes](docs/V0_7_4_RELEASE_NOTES.md) | 0.7.4 scope: in-app GitHub auto-updater, structured tool UI & output pagination, reliability & insets (#115–#124) |
 | [Ziran 0.7.3 release notes](docs/V0_7_3_RELEASE_NOTES.md) | 0.7.3 scope: R8 release APK, Wu wei markdown, 200+ scroll perf, live steering, Adapter v5 |
 | [Adapter v5 design](docs/ADAPTER_V5_DESIGN.md) | Agent-agnostic Go gateway, QUIC/UDP + WS fallback, `agent.v1` SDK, Pu & JCode drivers |
 | [Adapter v5 benchmarks](docs/ADAPTER_V5_BENCHMARKS.md) | Memory, latency, wire-byte, and recovery measurements vs Adapter v4 |

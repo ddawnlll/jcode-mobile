@@ -126,6 +126,18 @@ class AdapterClient(
         openSocket()
     }
 
+    /** Cancel any pending backoff delay and open a fresh socket immediately. */
+    fun reconnectNow() {
+        synchronized(lock) {
+            manuallyClosed = false
+            reconnectJob?.cancel()
+            reconnectJob = null
+            if (socket != null) return
+            reconnect.reset()
+        }
+        openSocket()
+    }
+
     fun close() {
         val ws: WebSocket?
         synchronized(lock) {
@@ -266,7 +278,7 @@ class AdapterClient(
     private suspend fun sendHello() {
         val ws = currentSocket() ?: throw ConnectionLost("Adapter is not connected.")
         val id = "req_" + UUID.randomUUID().toString()
-        val hello = EnvelopeWriter.helloPayload("ziran-android", "0.7.3")
+        val hello = EnvelopeWriter.helloPayload("ziran-android", dev.ziran.android.BuildConfig.VERSION_NAME)
         val text = EnvelopeWriter.request(id, "client.hello", hello, MIN_PROTOCOL_VERSION)
         val reply = CompletableDeferred<Result<JsonObject>>()
         pending[id] = reply

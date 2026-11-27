@@ -87,6 +87,9 @@ fun HomeScreen(
     onOpenThread: (String) -> Unit,
     onPermission: (String) -> Unit,
     onNewThread: () -> Unit,
+    onReconnect: () -> Unit = {},
+    onOpenUpdate: () -> Unit = {},
+    onDismissUpdateBanner: () -> Unit = {},
     reducedMotion: Boolean = false,
 ) {
     val tree = remember(state.sessions, state.agents, state.activeSessionId) {
@@ -106,16 +109,32 @@ fun HomeScreen(
 
     val waitCount = waitingThreads.size + (if (state.live.permission != null) 1 else 0)
     val serverOnline = state.connection == "connected"
+    val isConnecting = state.connection == "connecting"
+    val hasCachedOrLive = state.hasAuthoritativeSessions || state.sessions.isNotEmpty()
+    val backendLabel = state.backendName?.takeIf { it.isNotBlank() } ?: "agent"
     val statusText = buildString {
-        if (!serverOnline) {
-            append("adapter offline")
-        } else if (!state.jcodeConnected) {
-            append("jcode not running")
-        } else {
-            append("jcode connected")
+        when {
+            !serverOnline && state.reconnecting -> append("reconnecting")
+            isConnecting -> append("connecting")
+            !serverOnline -> append("adapter offline")
+            state.backendReady == false -> append("$backendLabel unavailable")
+            state.backendReady == true -> append("$backendLabel ready")
+            else -> append("adapter connected")
         }
-        append(" · ${working.size} at work · ")
-        append(if (waitCount == 0) "none waiting" else "$waitCount waiting")
+        if (hasCachedOrLive) {
+            append(" · ${working.size} at work · ")
+            append(if (waitCount == 0) "none waiting" else "$waitCount waiting")
+            if (!serverOnline || state.savedOnPhone) append(" · saved on phone")
+        } else if (serverOnline && state.sessionsLoading) {
+            append(" · loading threads")
+        } else if (!serverOnline) {
+            append(" · state unknown")
+        }
+    }
+    val dotColor = when {
+        serverOnline && state.backendReady != false -> palette.green
+        isConnecting || state.reconnecting -> palette.blue
+        else -> palette.ink3
     }
 
     Box(Modifier.fillMaxSize().background(palette.paper)) {
@@ -150,7 +169,7 @@ fun HomeScreen(
                     Box(
                         Modifier
                             .size(6.dp)
-                            .background(if (serverOnline && state.jcodeConnected) palette.green else palette.ink3, CircleShape),
+                            .background(dotColor, CircleShape),
                     )
                     Text(
                         statusText,
@@ -167,133 +186,251 @@ fun HomeScreen(
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 148.dp),
                 modifier = Modifier.fillMaxWidth().weight(1f),
             ) {
-                item(key = "hdr-waiting") {
-                    HomeSectionLabel("waiting for you", palette)
-                }
-                if (state.live.permission != null) {
-                    val perm = state.live.permission
-                    item(key = "home-perm-${perm.requestId}") {
-                        HomePermissionCard(
-                            title = state.snapshot?.session?.title ?: perm.toolName,
-                            agent = state.snapshot?.session?.agentLabel ?: "crane",
-                            command = perm.description,
-                            palette = palette,
-                            reducedMotion = reducedMotion,
-                            onAllow = { onPermission("allow_once") },
-                            onDeny = { onPermission("deny") },
-                        )
-                    }
-                }
-                items(waitingThreads, key = { "wait-${it.session.sessionId}" }, contentType = { "thread-row" }) { item ->
-                    HomeThreadRow(
-                        session = item.session,
-                        note = "waiting for you",
-                        elapsedSinceMs = null,
-                        palette = palette,
-                        reducedMotion = reducedMotion,
-                        onClick = { onOpenThread(item.session.sessionId) },
-                        modifier = Modifier.animateItem(),
-                    )
-                }
-                if (state.live.permission == null && waitingThreads.isEmpty()) {
-                    item(key = "empty-waiting") {
-                        Text(
-                            "Nothing waiting for you right now.",
-                            style = TextStyle(
-                                fontFamily = WuFonts.Garamond,
-                                fontSize = 15.sp,
-                                fontStyle = FontStyle.Italic,
-                                color = palette.ink3,
-                            ),
-                            modifier = Modifier.padding(vertical = 8.dp),
-                        )
+                val updateRelease = state.update.release
+                val showUpdateBanner = state.update.status == "available" &&
+                    updateRelease != null &&
+                    state.update.bannerDismissedTag != updateRelease.tagName
+                if (showUpdateBanner && updateRelease != null) {
+                    item(key = "home-update-banner") {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                                .background(palette.paper2, RoundedCornerShape(10.dp))
+                                .border(1.dp, palette.line, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Ziran ${updateRelease.version} is available",
+                                    style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, color = palette.ink),
+                                )
+                                Text(
+                                    "Tap to install directly from GitHub.",
+                                    style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.ink3),
+                                )
+                            }
+                            Text(
+                                "update",
+                                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 12.sp, color = palette.seal),
+                                modifier = Modifier
+                                    .wuClickable(reducedMotion = reducedMotion, onClick = onOpenUpdate)
+                                    .padding(horizontal = 8.dp, vertical = 10.dp)
+                                    .semantics { role = Role.Button; contentDescription = "Install update ${updateRelease.version}" },
+                            )
+                            Text(
+                                "×",
+                                style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 15.sp, color = palette.ink3),
+                                modifier = Modifier
+                                    .wuClickable(reducedMotion = reducedMotion, onClick = onDismissUpdateBanner)
+                                    .padding(horizontal = 6.dp, vertical = 10.dp)
+                                    .semantics { role = Role.Button; contentDescription = "Dismiss update banner" },
+                            )
+                        }
                     }
                 }
 
-                item(key = "hdr-work") {
-                    HomeSectionLabel("at work", palette, topPaddingDp = 16)
-                }
-                if (working.isEmpty()) {
-                    item(key = "empty-work") {
-                        Text(
-                            "No agents working right now.",
-                            style = TextStyle(
-                                fontFamily = WuFonts.Garamond,
-                                fontSize = 15.sp,
-                                fontStyle = FontStyle.Italic,
-                                color = palette.ink3,
-                            ),
-                            modifier = Modifier.padding(vertical = 8.dp),
-                        )
-                    }
-                } else {
-                    items(working, key = { "work-${it.session.sessionId}" }, contentType = { "working-row" }) { item ->
-                        val isOpen = expandedParents[item.session.sessionId] ?: true
-                        Column(Modifier.fillMaxWidth().animateItem()) {
-                            HomeThreadRow(
-                                session = item.session,
-                                note = item.session.swarmStatus ?: "working",
-                                elapsedSinceMs = item.session.updatedAtMs ?: 0L,
-                                palette = palette,
-                                reducedMotion = reducedMotion,
-                                onClick = { onOpenThread(item.session.sessionId) },
+                if (!serverOnline) {
+                    item(key = "home-offline-card") {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                                .background(palette.paper2, RoundedCornerShape(10.dp))
+                                .border(1.dp, palette.line, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                when {
+                                    isConnecting || state.reconnecting -> "Reconnecting to adapter…"
+                                    state.connectionMessage != null -> state.connectionMessage
+                                    else -> "Adapter is offline"
+                                },
+                                style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 16.sp, color = palette.ink),
                             )
-                            HomeFlowHairline(palette = palette, reducedMotion = reducedMotion, modifier = Modifier.padding(start = 40.dp, bottom = 4.dp))
-                            if (item.subAgents.isNotEmpty()) {
-                                SubAgentGroupBlock(
-                                    subAgents = item.subAgents,
-                                    expanded = isOpen,
-                                    palette = palette,
-                                    reducedMotion = reducedMotion,
-                                    onToggle = { expandedParents[item.session.sessionId] = !isOpen },
-                                    onOpenSub = onOpenThread,
-                                )
+                            Text(
+                                if (hasCachedOrLive) {
+                                    "Showing last saved threads from this phone. Live agent state is unavailable until reconnected."
+                                } else {
+                                    "Remote thread and agent state is unknown until the adapter responds."
+                                },
+                                style = TextStyle(fontFamily = WuFonts.Garamond, fontSize = 13.5.sp, fontStyle = FontStyle.Italic, color = palette.ink3),
+                            )
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .height(44.dp)
+                                        .background(palette.seal, RoundedCornerShape(8.dp))
+                                        .wuClickable(reducedMotion = reducedMotion, onClick = onReconnect)
+                                        .padding(horizontal = 16.dp)
+                                        .semantics { role = Role.Button; contentDescription = "Reconnect to adapter" },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        if (isConnecting) "Connecting…" else "Reconnect",
+                                        style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 12.sp, color = palette.onSeal),
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                item(key = "hdr-recent") {
-                    HomeSectionLabel("recent", palette, topPaddingDp = 16)
-                }
-                if (recent.isEmpty()) {
-                    item(key = "empty-recent") {
+                if (hasCachedOrLive) {
+                    item(key = "hdr-waiting") {
+                        HomeSectionLabel("waiting for you", palette)
+                    }
+                    if (state.live.permission != null) {
+                        val perm = state.live.permission
+                        item(key = "home-perm-${perm.requestId}") {
+                            HomePermissionCard(
+                                title = state.snapshot?.session?.title ?: perm.toolName,
+                                agent = state.snapshot?.session?.agentLabel ?: "crane",
+                                command = perm.description,
+                                palette = palette,
+                                reducedMotion = reducedMotion,
+                                onAllow = { onPermission("allow_once") },
+                                onDeny = { onPermission("deny") },
+                            )
+                        }
+                    }
+                    items(waitingThreads, key = { "wait-${it.session.sessionId}" }, contentType = { "thread-row" }) { item ->
+                        HomeThreadRow(
+                            session = item.session,
+                            note = "waiting for you",
+                            elapsedSinceMs = null,
+                            palette = palette,
+                            reducedMotion = reducedMotion,
+                            onClick = { onOpenThread(item.session.sessionId) },
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+                    if (state.live.permission == null && waitingThreads.isEmpty() && state.hasAuthoritativeSessions && serverOnline) {
+                        item(key = "empty-waiting") {
+                            Text(
+                                "Nothing waiting for you right now.",
+                                style = TextStyle(
+                                    fontFamily = WuFonts.Garamond,
+                                    fontSize = 15.sp,
+                                    fontStyle = FontStyle.Italic,
+                                    color = palette.ink3,
+                                ),
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        }
+                    }
+
+                    item(key = "hdr-work") {
+                        HomeSectionLabel("at work", palette, topPaddingDp = 16)
+                    }
+                    if (working.isEmpty()) {
+                        if (state.hasAuthoritativeSessions && serverOnline) {
+                            item(key = "empty-work") {
+                                Text(
+                                    "No agents working right now.",
+                                    style = TextStyle(
+                                        fontFamily = WuFonts.Garamond,
+                                        fontSize = 15.sp,
+                                        fontStyle = FontStyle.Italic,
+                                        color = palette.ink3,
+                                    ),
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        items(working, key = { "work-${it.session.sessionId}" }, contentType = { "working-row" }) { item ->
+                            val isOpen = expandedParents[item.session.sessionId] ?: true
+                            Column(Modifier.fillMaxWidth().animateItem()) {
+                                HomeThreadRow(
+                                    session = item.session,
+                                    note = item.session.swarmStatus ?: "working",
+                                    elapsedSinceMs = item.session.updatedAtMs ?: 0L,
+                                    palette = palette,
+                                    reducedMotion = reducedMotion,
+                                    onClick = { onOpenThread(item.session.sessionId) },
+                                )
+                                HomeFlowHairline(palette = palette, reducedMotion = reducedMotion, modifier = Modifier.padding(start = 40.dp, bottom = 4.dp))
+                                if (item.subAgents.isNotEmpty()) {
+                                    SubAgentGroupBlock(
+                                        subAgents = item.subAgents,
+                                        expanded = isOpen,
+                                        palette = palette,
+                                        reducedMotion = reducedMotion,
+                                        onToggle = { expandedParents[item.session.sessionId] = !isOpen },
+                                        onOpenSub = onOpenThread,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item(key = "hdr-recent") {
+                        HomeSectionLabel("recent", palette, topPaddingDp = 16)
+                    }
+                    if (recent.isEmpty()) {
+                        if (state.hasAuthoritativeSessions && serverOnline) {
+                            item(key = "empty-recent") {
+                                Text(
+                                    "No recent threads yet.",
+                                    style = TextStyle(
+                                        fontFamily = WuFonts.Garamond,
+                                        fontSize = 15.sp,
+                                        fontStyle = FontStyle.Italic,
+                                        color = palette.ink3,
+                                    ),
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                )
+                            }
+                        }
+                    } else {
+                        items(recent, key = { "recent-${it.session.sessionId}" }, contentType = { "thread-row" }) { item ->
+                            val st = item.session.swarmStatus ?: item.session.status
+                            val isRest = sessionStatusRank(st) == 3
+                            HomeThreadRow(
+                                session = item.session,
+                                note = if (isRest) "resting" else "finished",
+                                elapsedSinceMs = null,
+                                palette = palette,
+                                reducedMotion = reducedMotion,
+                                dimmed = isRest,
+                                onClick = { onOpenThread(item.session.sessionId) },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
+                } else if (serverOnline && state.sessionsLoading) {
+                    item(key = "home-loading") {
                         Text(
-                            "No recent threads yet.",
+                            "Loading threads from adapter…",
                             style = TextStyle(
                                 fontFamily = WuFonts.Garamond,
                                 fontSize = 15.sp,
                                 fontStyle = FontStyle.Italic,
                                 color = palette.ink3,
                             ),
-                            modifier = Modifier.padding(vertical = 8.dp),
-                        )
-                    }
-                } else {
-                    items(recent, key = { "recent-${it.session.sessionId}" }, contentType = { "thread-row" }) { item ->
-                        val st = item.session.swarmStatus ?: item.session.status
-                        val isRest = sessionStatusRank(st) == 3
-                        HomeThreadRow(
-                            session = item.session,
-                            note = if (isRest) "resting" else "finished",
-                            elapsedSinceMs = null,
-                            palette = palette,
-                            reducedMotion = reducedMotion,
-                            dimmed = isRest,
-                            onClick = { onOpenThread(item.session.sessionId) },
-                            modifier = Modifier.animateItem(),
+                            modifier = Modifier.padding(vertical = 16.dp),
                         )
                     }
                 }
             }
         }
 
-        FloatingNewThreadSeal(
-            palette = palette,
-            reducedMotion = reducedMotion,
-            onClick = onNewThread,
-            modifier = Modifier.align(Alignment.BottomEnd),
-        )
+        // Hide the floating seal while the notification permission sheet is visible so they never overlap (#117).
+        if (!state.notificationsPrompt && serverOnline) {
+            FloatingNewThreadSeal(
+                palette = palette,
+                reducedMotion = reducedMotion,
+                onClick = onNewThread,
+                modifier = Modifier.align(Alignment.BottomEnd),
+            )
+        }
     }
 }
 

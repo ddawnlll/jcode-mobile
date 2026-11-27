@@ -70,15 +70,46 @@ data class PermissionRequest(val requestId: String, val toolName: String, val de
 data class Recovery(val continuation: String, val notice: String?)
 
 @Immutable
+data class UpdateReleaseInfo(
+    val version: String,
+    val tagName: String,
+    val title: String,
+    val notes: String,
+    val apkUrl: String,
+    val apkName: String,
+    val apkSizeBytes: Long,
+    val sha256Url: String? = null,
+    val htmlUrl: String = "",
+)
+
+@Immutable
+data class UpdateUiState(
+    val status: String = "idle", // idle | checking | up_to_date | available | downloading | ready_to_install | error
+    val release: UpdateReleaseInfo? = null,
+    val progressPercent: Int = 0,
+    val downloadedApkPath: String? = null,
+    val error: String? = null,
+    val lastCheckedAtMs: Long? = null,
+    val bannerDismissedTag: String? = null,
+)
+
+@Immutable
 data class AppState(
     val phase: String = "loading", // loading | unpaired | pairing | ready
     val pairingError: String? = null,
     val pairingStage: String = "idle",
     val pairingMessage: String = "",
     val connection: String = "offline", // connecting | connected | offline
+    val reconnecting: Boolean = false,
     val connectionMessage: String? = null,
     val jcodeConnected: Boolean = false,
+    val backendName: String? = null,
+    val backendReady: Boolean? = null,
+    val serverCapabilities: Set<String> = emptySet(),
     val savedOnPhone: Boolean = false,
+    val hasAuthoritativeSessions: Boolean = false,
+    val sessionsLoading: Boolean = false,
+    val lastSyncedAtMs: Long? = null,
     val sessions: List<SessionSummary> = emptyList(),
     val sessionsError: String? = null,
     val sessionRevision: Long = 0,
@@ -90,7 +121,12 @@ data class AppState(
     val operations: Map<String, OperationView> = emptyMap(),
     val models: List<ModelRouteView> = emptyList(),
     val runtime: RuntimeView? = null,
+    val modelsLoading: Boolean = false,
     val modelsError: String? = null,
+    val modelActionPending: Boolean = false,
+    val modelActionError: String? = null,
+    val creatingSession: Boolean = false,
+    val createSessionError: String? = null,
     val agents: List<SwarmAgentView>? = null,
     val plan: dev.ziran.android.protocol.PlanView? = null,
     val context: ContextView? = null,
@@ -106,6 +142,7 @@ data class AppState(
     val healthProbe: dev.ziran.android.protocol.HealthProbeResult = dev.ziran.android.protocol.HealthProbeResult.Idle,
     val queuedMessages: List<String> = emptyList(),
     val queuedNotice: String? = null,
+    val queuedError: String? = null,
     val serverName: String? = null,
     val adapterVersion: String? = null,
     val protocolVersion: Int? = null,
@@ -127,4 +164,6 @@ data class AppState(
     val notifyOnlyClosed: Boolean = true,
     /** True when the POST_NOTIFICATIONS reason should be on screen. */
     val notificationsPrompt: Boolean = false,
+    /** In-app GitHub release auto-update state. */
+    val update: UpdateUiState = UpdateUiState(),
 )

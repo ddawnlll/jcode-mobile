@@ -9,7 +9,7 @@ import dev.ziran.android.protocol.PairingPayload
 object DeepLinks {
     sealed interface Route {
         data class Pair(val server: String, val code: String) : Route
-        data class Session(val sessionId: String) : Route
+        data class Session(val sessionId: String, val serverId: String? = null) : Route
         object Unknown : Route
     }
 
@@ -27,8 +27,14 @@ object DeepLinks {
             }
         }
         if (uri.host == "session" && (uri.scheme == "ziran" || uri.scheme == "jcode")) {
-            val id = uri.path?.trim('/')?.ifEmpty { null }
-            return if (id != null) Route.Session(id) else Route.Unknown
+            val id = uri.path?.trim('/')?.ifEmpty { null } ?: return Route.Unknown
+            val serverId = uri.rawQuery
+                ?.split('&')
+                ?.firstOrNull { it.startsWith("server=") }
+                ?.substringAfter("server=")
+                ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+                ?.ifBlank { null }
+            return Route.Session(id, serverId)
         }
         return Route.Unknown
     }

@@ -67,6 +67,8 @@ fun SettingsScreen(
     onToggleNotifyWaiting: (Boolean) -> Unit,
     onToggleNotifyDone: (Boolean) -> Unit,
     onToggleNotifyOnlyClosed: (Boolean) -> Unit,
+    onCheckUpdates: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
     reducedMotion: Boolean = false,
 ) {
     val steerNotes = mapOf(
@@ -240,6 +242,45 @@ fun SettingsScreen(
                     reducedMotion = reducedMotion,
                     onToggle = { onToggleNotifyOnlyClosed(!state.notifyOnlyClosed) },
                 )
+
+                // Updates (GitHub Releases JSON API auto-updater)
+                SettingsLabel("updates", palette, topDp = 18)
+                val upd = state.update
+                val rel = upd.release
+                val updateStatusLabel = when (upd.status) {
+                    "checking" -> "checking GitHub…"
+                    "up_to_date" -> "up to date"
+                    "available" -> "v${rel?.version.orEmpty()} available"
+                    "downloading" -> "downloading ${upd.progressPercent}%"
+                    "ready_to_install" -> "ready to install"
+                    "error" -> "check failed"
+                    else -> "GitHub releases"
+                }
+                SettingsLinkRow(
+                    title = if (rel != null && (upd.status == "available" || upd.status == "ready_to_install")) {
+                        if (upd.status == "ready_to_install") "Install Ziran ${rel.version}" else "Download & install ${rel.version}"
+                    } else {
+                        "Check for updates"
+                    },
+                    value = updateStatusLabel,
+                    monoValue = true,
+                    palette = palette,
+                    reducedMotion = reducedMotion,
+                    onClick = {
+                        if (rel != null && (upd.status == "available" || upd.status == "ready_to_install")) {
+                            onInstallUpdate()
+                        } else if (upd.status != "checking" && upd.status != "downloading") {
+                            onCheckUpdates()
+                        }
+                    },
+                )
+                if (upd.error != null) {
+                    Text(
+                        upd.error,
+                        style = TextStyle(fontFamily = WuFonts.Mono, fontSize = 11.sp, color = palette.seal),
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
 
                 // About
                 SettingsLabel("about", palette, topDp = 18)
